@@ -1,0 +1,15 @@
+{
+  "name": "ledgerflow",
+  "version": "1.0.0",
+  "description": "LedgerFlow — Self-Hosted Double-Entry Accounting, Inventory & Indian GST ERP System",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test:backend": "npm --prefix backend test",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}

@@ -1,0 +1,497 @@
+import { DatabaseSync } from 'node:sqlite';
+import { GstEngine, LineTaxCalculationResult } from '../tax/gst-engine.js';
+import { DoubleEntryEngine, LedgerPostingLine } from '../accounting/double-entry.js';
+import { InventoryEngine } from '../inventory/valuation.js';
+
+export interface CreateVoucherLineInput {
+  itemId?: string;
+  ledgerId?: string;
+  godownId?: string;
+  quantity?: number;
+  ratePaise: number;
+  discountPercent?: number;
+  discountAmountPaise?: number;
+  gstRate?: number;
+  cessRate?: number;
+  isTaxInclusive?: boolean;
+}
+
+export interface CreateVoucherInput {
+  companyId: string;
+  fyId: string;
+  voucherType:
+    | 'SALES'
+    | 'PURCHASE'
+    | 'RECEIPT'
+    | 'PAYMENT'
+    | 'CONTRA'
+    | 'JOURNAL'
+    | 'CREDIT_NOTE'
+    | 'DEBIT_NOTE'
+    | 'SALES_RETURN'
+    | 'PURCHASE_RETURN'
+    | 'STOCK_JOURNAL';
+  voucherDate: string; // YYYY-MM-DD
+  voucherNumber?: string;
+  referenceNumber?: string;
+  partyId?: string;
+  narration?: string;
+  lines: CreateVoucherLineInput[];
+  // For financial vouchers (Receipt, Payment, Contra, Journal)
+  customLedgerLines?: LedgerPostingLine[];
+  // Bill allocation settlement
+  billAllocation?: {
+    referenceVoucherId?: string;
+    allocationType: 'NEW_REF' | 'AGAINST_REF' | 'ADVANCE' | 'ON_ACCOUNT';
+    dueDate?: string;
+  };
+  createdBy?: string;
+}
+
+export class PostingEngine {
+  /**
+   * Generates the next sequential voucher number
+   */
+  public static getNextVoucherNumber(
+    db: DatabaseSync,
+    companyId: string,
+    fyId: string,
+    voucherType: string
+  ): string {
+    const prefixes: Record<string, string> = {
+      SALES: 'INV',
+      PURCHASE: 'PUR',
+      RECEIPT: 'REC',
+      PAYMENT: 'PAY',
+      CONTRA: 'CON',
+      JOURNAL: 'JNL',
+      CREDIT_NOTE: 'CRN',
+      DEBIT_NOTE: 'DBN',
+      SALES_RETURN: 'SLR',
+      PURCHASE_RETURN: 'PRR',
+      STOCK_JOURNAL: 'STK'
+    };
+    const prefix = prefixes[voucherType] || 'VCH';
+
+    const row = db.prepare(`
+      SELECT voucher_number FROM vouchers
+      WHERE company_id = ? AND fy_id = ? AND voucher_type = ?
+      ORDER BY rowid DESC LIMIT 1
+    `).get(companyId, fyId, voucherType) as { voucher_number: string } | undefined;
+
+    if (!row) {
+      return `${prefix}-2026-0001`;
+    }
+
+    const parts = row.voucher_number.split('-');
+    const lastNumStr = parts[parts.length - 1];
+    const lastNum = parseInt(lastNumStr, 10);
+    if (isNaN(lastNum)) {
+      return `${prefix}-2026-${Date.now().toString().slice(-4)}`;
+    }
+    const nextNum = (lastNum + 1).toString().padStart(4, '0');
+    return `${prefix}-2026-${nextNum}`;
+  }
+
+  /**
+   * Atomic Posting Function
+   * Guarantees rollback on any error and enforces accounting invariants
+   */
+  public static postVoucher(db: DatabaseSync, input: CreateVoucherInput): {
+    voucherId: string;
+    voucherNumber: string;
+    totalAmountPaise: number;
+  } {
+    // 1. Basic Validations
+    const fy = db.prepare('SELECT status, start_date, end_date FROM financial_years WHERE fy_id = ?')
+      .get(input.fyId) as { status: string; start_date: string; end_date: string } | undefined;
+
+    if (!fy) throw new Error(`Financial Year '${input.fyId}' not found.`);
+    if (fy.status !== 'OPEN') throw new Error(`Financial Year status is ${fy.status}. Posting prohibited.`);
+    if (input.voucherDate < fy.start_date || input.voucherDate > fy.end_date) {
+      throw new Error(`Voucher date ${input.voucherDate} is outside the active Financial Year (${fy.start_date} to ${fy.end_date}).`);
+    }
+
+    // Company state for GST Place of Supply
+    const company = db.prepare('SELECT state_code, company_name FROM companies WHERE company_id = ?')
+      .get(input.companyId) as { state_code: string; company_name: string } | undefined;
+    if (!company) throw new Error(`Company '${input.companyId}' not found.`);
+
+    let placeOfSupplyStateCode = company.state_code;
+    let partyLedgerId: string | null = null;
+
+    if (input.partyId) {
+      const party = db.prepare(`
+        SELECT p.ledger_id, pa.state_code
+        FROM parties p
+        LEFT JOIN party_addresses pa ON p.party_id = pa.party_id
+        WHERE p.party_id = ?
+      `).get(input.partyId) as { ledger_id: string; state_code?: string } | undefined;
+
+      if (!party) throw new Error(`Party with ID '${input.partyId}' not found.`);
+      partyLedgerId = party.ledger_id;
+      if (party.state_code) {
+        placeOfSupplyStateCode = party.state_code;
+      }
+    }
+
+    const voucherId = 'vch_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
+    const voucherNumber = input.voucherNumber || this.getNextVoucherNumber(db, input.companyId, input.fyId, input.voucherType);
+
+    // 2. Perform Calculations Based on Voucher Type
+    const processedLines: Array<{
+      lineInput: CreateVoucherLineInput;
+      taxResult: LineTaxCalculationResult;
+    }> = [];
+
+    const taxResults: LineTaxCalculationResult[] = [];
+    const stockMovements: Array<{
+      itemId: string;
+      godownId: string;
+      movementType: 'IN' | 'OUT';
+      quantity: number;
+      ratePaise: number;
+      valuePaise: number;
+    }> = [];
+
+    let cogsAmountPaise = 0;
+
+    for (const line of input.lines) {
+      let gstRate = line.gstRate ?? 18;
+      let cessRate = line.cessRate ?? 0;
+
+      // If item provided, retrieve item's default GST rate if not explicitly passed
+      if (line.itemId) {
+        const item = db.prepare('SELECT gst_rate, cess_rate, item_name FROM stock_items WHERE item_id = ?')
+          .get(line.itemId) as { gst_rate: number; cess_rate: number; item_name: string } | undefined;
+        if (item && line.gstRate === undefined) {
+          gstRate = item.gst_rate;
+          cessRate = item.cess_rate;
+        }
+      }
+
+      const taxRes = GstEngine.calculateLineTax({
+        quantity: line.quantity || 1,
+        ratePaise: line.ratePaise,
+        discountPercent: line.discountPercent,
+        discountAmountPaise: line.discountAmountPaise,
+        isTaxInclusive: line.isTaxInclusive,
+        gstRate,
+        cessRate,
+        sellerStateCode: company.state_code,
+        placeOfSupplyStateCode
+      });
+
+      taxResults.push(taxRes);
+      processedLines.push({ lineInput: line, taxResult: taxRes });
+
+      // Determine godown (default to primary godown if omitted)
+      let resolvedGodownId = line.godownId;
+      if (!resolvedGodownId && line.itemId) {
+        const defaultGodown = db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? ORDER BY is_default DESC LIMIT 1').get(input.companyId) as { godown_id: string } | undefined;
+        resolvedGodownId = defaultGodown?.godown_id || 'godown_main';
+      }
+
+      // Calculate Stock Movements
+      if (line.itemId && resolvedGodownId && (line.quantity || 0) > 0) {
+        const qty = Number(line.quantity);
+
+        if (input.voucherType === 'SALES' || input.voucherType === 'PURCHASE_RETURN') {
+          // Validate stock and cost at Weighted Average
+          const stockSummary = InventoryEngine.getItemStockSummary(db, line.itemId, input.voucherDate);
+          const unitCost = stockSummary.weightedAverageRatePaise || line.ratePaise;
+          const costValue = Math.round(qty * unitCost);
+          cogsAmountPaise += costValue;
+
+          stockMovements.push({
+            itemId: line.itemId,
+            godownId: resolvedGodownId,
+            movementType: 'OUT',
+            quantity: qty,
+            ratePaise: unitCost,
+            valuePaise: costValue
+          });
+        } else if (input.voucherType === 'PURCHASE' || input.voucherType === 'SALES_RETURN') {
+          const costValue = Math.round(qty * line.ratePaise);
+          stockMovements.push({
+            itemId: line.itemId,
+            godownId: resolvedGodownId,
+            movementType: 'IN',
+            quantity: qty,
+            ratePaise: line.ratePaise,
+            valuePaise: costValue
+          });
+        }
+      }
+    }
+
+    const voucherTotals = GstEngine.calculateVoucherTotals(taxResults);
+
+    let finalVoucherTotal = voucherTotals.totalAmountPaise;
+    if (finalVoucherTotal === 0 && input.customLedgerLines && input.customLedgerLines.length > 0) {
+      finalVoucherTotal = input.customLedgerLines.reduce((sum, l) => sum + (l.debitPaise || 0), 0);
+    }
+
+    // 3. Assemble Accounting Lines
+    let ledgerLines: LedgerPostingLine[] = [];
+
+    if (input.customLedgerLines && input.customLedgerLines.length > 0) {
+      ledgerLines = input.customLedgerLines;
+    } else if (input.voucherType === 'SALES') {
+      if (!partyLedgerId) throw new Error('Party (Customer) is mandatory for Sales voucher.');
+      ledgerLines = DoubleEntryEngine.buildSalesEntries({
+        customerLedgerId: partyLedgerId,
+        salesLedgerId: 'led_sales',
+        taxableAmountPaise: voucherTotals.taxableAmountPaise,
+        cgstAmountPaise: voucherTotals.cgstAmountPaise,
+        sgstAmountPaise: voucherTotals.sgstAmountPaise,
+        igstAmountPaise: voucherTotals.igstAmountPaise,
+        roundOffPaise: voucherTotals.roundOffPaise,
+        totalAmountPaise: voucherTotals.totalAmountPaise,
+        outputCgstLedgerId: 'led_output_cgst',
+        outputSgstLedgerId: 'led_output_sgst',
+        outputIgstLedgerId: 'led_output_igst',
+        roundOffLedgerId: 'led_round_off',
+        cogsAmountPaise,
+        cogsLedgerId: 'led_cogs',
+        inventoryLedgerId: 'led_inventory'
+      });
+    } else if (input.voucherType === 'PURCHASE') {
+      if (!partyLedgerId) throw new Error('Party (Supplier) is mandatory for Purchase voucher.');
+      ledgerLines = DoubleEntryEngine.buildPurchaseEntries({
+        supplierLedgerId: partyLedgerId,
+        purchaseLedgerId: 'led_purchase',
+        taxableAmountPaise: voucherTotals.taxableAmountPaise,
+        cgstAmountPaise: voucherTotals.cgstAmountPaise,
+        sgstAmountPaise: voucherTotals.sgstAmountPaise,
+        igstAmountPaise: voucherTotals.igstAmountPaise,
+        roundOffPaise: voucherTotals.roundOffPaise,
+        totalAmountPaise: voucherTotals.totalAmountPaise,
+        inputCgstLedgerId: 'led_input_cgst',
+        inputSgstLedgerId: 'led_input_sgst',
+        inputIgstLedgerId: 'led_input_igst',
+        roundOffLedgerId: 'led_round_off'
+      });
+    }
+
+    // 4. Validate Fundamental Double-Entry Invariant
+    if (ledgerLines.length > 0) {
+      const balanceCheck = DoubleEntryEngine.validateBalancedEntries(ledgerLines);
+      if (!balanceCheck.isValid) {
+        throw new Error(balanceCheck.errorMessage);
+      }
+    }
+
+    // 5. ATOMIC DATABASE TRANSACTION
+    db.exec('BEGIN TRANSACTION;');
+    try {
+      // A. Insert Voucher Header
+      db.prepare(`
+        INSERT INTO vouchers (
+          voucher_id, company_id, fy_id, voucher_type, voucher_number,
+          voucher_date, reference_number, party_id, narration, status,
+          taxable_amount_paise, cgst_amount_paise, sgst_amount_paise, igst_amount_paise,
+          round_off_paise, total_amount_paise, created_by
+        ) VALUES (
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, 'POSTED',
+          ?, ?, ?, ?,
+          ?, ?, ?
+        )
+      `).run(
+        voucherId, input.companyId, input.fyId, input.voucherType, voucherNumber,
+        input.voucherDate, input.referenceNumber || null, input.partyId || null, input.narration || null,
+        voucherTotals.taxableAmountPaise, voucherTotals.cgstAmountPaise, voucherTotals.sgstAmountPaise, voucherTotals.igstAmountPaise,
+        voucherTotals.roundOffPaise, finalVoucherTotal, input.createdBy || 'admin'
+      );
+
+      // B. Insert Voucher Lines
+      let lineNum = 1;
+      for (const pl of processedLines) {
+        const lineId = 'ln_' + Date.now().toString(36) + (lineNum++);
+        const lineGodownId = pl.lineInput.godownId || (pl.lineInput.itemId ? (db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? ORDER BY is_default DESC LIMIT 1').get(input.companyId) as any)?.godown_id || 'godown_main' : null);
+        db.prepare(`
+          INSERT INTO voucher_lines (
+            line_id, voucher_id, line_number, item_id, ledger_id, godown_id,
+            quantity, rate_paise, discount_percent, discount_amount_paise,
+            taxable_amount_paise, gst_rate, cgst_amount_paise, sgst_amount_paise,
+            igst_amount_paise, total_amount_paise
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?
+          )
+        `).run(
+          lineId, voucherId, lineNum, pl.lineInput.itemId || null, pl.lineInput.ledgerId || null, lineGodownId,
+          pl.lineInput.quantity || 0, pl.lineInput.ratePaise, pl.lineInput.discountPercent || 0, pl.taxResult.discountAmountPaise,
+          pl.taxResult.taxableAmountPaise, pl.taxResult.cgstRate + pl.taxResult.sgstRate + pl.taxResult.igstRate,
+          pl.taxResult.cgstAmountPaise, pl.taxResult.sgstAmountPaise, pl.taxResult.igstAmountPaise, pl.taxResult.totalAmountPaise
+        );
+      }
+
+      // C. Insert Ledger Entries
+      for (const le of ledgerLines) {
+        const entryId = 'le_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+        db.prepare(`
+          INSERT INTO ledger_entries (
+            entry_id, voucher_id, ledger_id, entry_date, debit_paise, credit_paise, particulars
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          entryId, voucherId, le.ledgerId, input.voucherDate,
+          le.debitPaise, le.creditPaise, le.particulars || null
+        );
+      }
+
+      // D. Insert Stock Entries
+      for (const se of stockMovements) {
+        const stockEntryId = 'se_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+        db.prepare(`
+          INSERT INTO stock_entries (
+            stock_entry_id, voucher_id, item_id, godown_id, entry_date,
+            movement_type, quantity, rate_paise, value_paise
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          stockEntryId, voucherId, se.itemId, se.godownId, input.voucherDate,
+          se.movementType, se.quantity, se.ratePaise, se.valuePaise
+        );
+      }
+
+      // E. Insert Statutory Tax Entries
+      if (voucherTotals.cgstAmountPaise > 0) {
+        const taxType = input.voucherType === 'PURCHASE' ? 'INPUT_CGST' : 'OUTPUT_CGST';
+        db.prepare(`
+          INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          'te_' + Date.now().toString(36) + '1', voucherId, taxType, 9.00,
+          voucherTotals.taxableAmountPaise, voucherTotals.cgstAmountPaise, placeOfSupplyStateCode
+        );
+      }
+
+      if (voucherTotals.sgstAmountPaise > 0) {
+        const taxType = input.voucherType === 'PURCHASE' ? 'INPUT_SGST' : 'OUTPUT_SGST';
+        db.prepare(`
+          INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          'te_' + Date.now().toString(36) + '2', voucherId, taxType, 9.00,
+          voucherTotals.taxableAmountPaise, voucherTotals.sgstAmountPaise, placeOfSupplyStateCode
+        );
+      }
+
+      if (voucherTotals.igstAmountPaise > 0) {
+        const taxType = input.voucherType === 'PURCHASE' ? 'INPUT_IGST' : 'OUTPUT_IGST';
+        db.prepare(`
+          INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          'te_' + Date.now().toString(36) + '3', voucherId, taxType, 18.00,
+          voucherTotals.taxableAmountPaise, voucherTotals.igstAmountPaise, placeOfSupplyStateCode
+        );
+      }
+
+      // F. Bill-Wise Allocations
+      if (partyLedgerId && finalVoucherTotal > 0) {
+        const allocId = 'ba_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+        const allocType = input.billAllocation?.allocationType || 'NEW_REF';
+        let refVoucher = voucherId;
+
+        if (allocType === 'AGAINST_REF' && input.billAllocation?.referenceVoucherId) {
+          const refExists = db.prepare(`SELECT voucher_id FROM vouchers WHERE voucher_id = ?`).get(input.billAllocation.referenceVoucherId);
+          if (refExists) {
+            refVoucher = input.billAllocation.referenceVoucherId;
+          }
+        }
+
+        db.prepare(`
+          INSERT INTO bill_allocations (
+            allocation_id, voucher_id, ledger_id, reference_voucher_id,
+            allocation_type, amount_paise, due_date
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          allocId, voucherId, partyLedgerId, refVoucher,
+          allocType, finalVoucherTotal, input.billAllocation?.dueDate || null
+        );
+      }
+
+      // G. Audit Log Entry
+      db.prepare(`
+        INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
+        VALUES (?, ?, ?, ?, 'VOUCHER', ?, ?)
+      `).run(
+        'aud_' + Date.now().toString(36),
+        input.companyId,
+        input.createdBy || 'admin',
+        `POST_${input.voucherType}`,
+        voucherId,
+        JSON.stringify({
+          voucherNumber,
+          totalAmountPaise: finalVoucherTotal,
+          linesCount: input.lines.length
+        })
+      );
+
+      db.exec('COMMIT;');
+
+      return {
+        voucherId,
+        voucherNumber,
+        totalAmountPaise: finalVoucherTotal
+      };
+    } catch (err: any) {
+      db.exec('ROLLBACK;');
+      throw new Error(`Posting transaction failed and was rolled back: ${err.message}`);
+    }
+  }
+
+  /**
+   * Cancel an existing posted voucher with complete audit trail
+   */
+  public static cancelVoucher(
+    db: DatabaseSync,
+    voucherId: string,
+    cancelledBy: string,
+    reason: string
+  ): void {
+    const vch = db.prepare('SELECT status, voucher_number, company_id FROM vouchers WHERE voucher_id = ?')
+      .get(voucherId) as { status: string; voucher_number: string; company_id: string } | undefined;
+
+    if (!vch) throw new Error(`Voucher with ID '${voucherId}' does not exist.`);
+    if (vch.status === 'CANCELLED') throw new Error(`Voucher '${vch.voucher_number}' is already cancelled.`);
+
+    db.exec('BEGIN TRANSACTION;');
+    try {
+      // 1. Mark voucher header as CANCELLED
+      db.prepare(`
+        UPDATE vouchers
+        SET status = 'CANCELLED', cancelled_by = ?, cancelled_at = CURRENT_TIMESTAMP, cancellation_reason = ?
+        WHERE voucher_id = ?
+      `).run(cancelledBy, reason, voucherId);
+
+      // 2. Remove downstream accounting, inventory, and tax effects
+      // Note: We remove the derived postings so reports immediately reverse effects
+      db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(voucherId);
+      db.prepare('DELETE FROM stock_entries WHERE voucher_id = ?').run(voucherId);
+      db.prepare('DELETE FROM tax_entries WHERE voucher_id = ?').run(voucherId);
+      db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ?').run(voucherId);
+
+      // 3. Record Audit Log
+      db.prepare(`
+        INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
+        VALUES (?, ?, ?, 'CANCEL_VOUCHER', 'VOUCHER', ?, ?)
+      `).run(
+        'aud_' + Date.now().toString(36),
+        vch.company_id,
+        cancelledBy,
+        voucherId,
+        JSON.stringify({ voucherNumber: vch.voucher_number, reason })
+      );
+
+      db.exec('COMMIT;');
+    } catch (err: any) {
+      db.exec('ROLLBACK;');
+      throw new Error(`Cancellation failed: ${err.message}`);
+    }
+  }
+}
