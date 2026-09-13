@@ -64,6 +64,14 @@ function getDatabase(customPath) {
     }
     catch { }
     try {
+        db.exec('ALTER TABLE stock_items ADD COLUMN serial_numbers TEXT;');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE stock_items ADD COLUMN has_serial_no INTEGER DEFAULT 0;');
+    }
+    catch { }
+    try {
         db.exec(`
       CREATE TABLE IF NOT EXISTS user_businesses (
         user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,

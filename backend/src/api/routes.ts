@@ -312,6 +312,98 @@ export function createApiRouter(db: DatabaseSync): Router {
     }
   });
 
+  // Permanently delete company and all isolated accounting records with password verification
+  router.post('/companies/:id/delete', (req: Request, res: Response) => {
+    try {
+      const user = getUserFromToken(req);
+      if (!user?.userId) {
+        return res.status(401).json({ error: 'Authentication required to delete company.' });
+      }
+
+      const { password } = req.body;
+      if (!password) {
+        return res.status(400).json({ error: 'Account password is required to verify company deletion.' });
+      }
+
+      // 1. Verify user password against database
+      const dbUser = db.prepare('SELECT user_id, password_hash FROM users WHERE user_id = ?').get(user.userId) as any;
+      if (!dbUser || !bcrypt.compareSync(password, dbUser.password_hash)) {
+        return res.status(401).json({ error: 'Incorrect account password. Company deletion rejected.' });
+      }
+
+      const targetCompanyId = req.params.id;
+
+      // 2. Verify access / ownership
+      const userBiz = db.prepare('SELECT role FROM user_businesses WHERE user_id = ? AND company_id = ?').get(user.userId, targetCompanyId) as any;
+      if (!userBiz) {
+        return res.status(403).json({ error: 'You do not have permission to delete this company.' });
+      }
+
+      // 3. Atomic cascade deletion of all company data
+      db.exec('BEGIN TRANSACTION;');
+      try {
+        // A. Delete stock entries
+        db.prepare(`
+          DELETE FROM stock_entries WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)
+          OR item_id IN (SELECT item_id FROM stock_items WHERE company_id = ?)
+        `).run(targetCompanyId, targetCompanyId);
+
+        // B. Delete voucher lines
+        db.prepare('DELETE FROM voucher_lines WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)').run(targetCompanyId);
+
+        // C. Delete ledger entries
+        db.prepare('DELETE FROM ledger_entries WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)').run(targetCompanyId);
+
+        // D. Delete vouchers
+        db.prepare('DELETE FROM vouchers WHERE company_id = ?').run(targetCompanyId);
+
+        // E. Delete stock items
+        db.prepare('DELETE FROM stock_items WHERE company_id = ?').run(targetCompanyId);
+
+        // F. Delete parties and addresses
+        db.prepare('DELETE FROM party_addresses WHERE party_id IN (SELECT party_id FROM parties WHERE company_id = ?)').run(targetCompanyId);
+        db.prepare('DELETE FROM parties WHERE company_id = ?').run(targetCompanyId);
+
+        // G. Delete godowns and units
+        db.prepare('DELETE FROM godowns WHERE company_id = ?').run(targetCompanyId);
+        db.prepare('DELETE FROM units WHERE company_id = ?').run(targetCompanyId);
+
+        // H. Delete financial years and ledgers
+        db.prepare('DELETE FROM financial_years WHERE company_id = ?').run(targetCompanyId);
+        db.prepare('DELETE FROM ledgers WHERE company_id = ?').run(targetCompanyId);
+
+        // I. Delete user_businesses association & company
+        db.prepare('DELETE FROM user_businesses WHERE company_id = ?').run(targetCompanyId);
+        db.prepare('DELETE FROM companies WHERE company_id = ?').run(targetCompanyId);
+
+        db.exec('COMMIT;');
+      } catch (delErr: any) {
+        db.exec('ROLLBACK;');
+        throw delErr;
+      }
+
+      // 4. Return remaining businesses
+      const remainingBusinesses = db.prepare(`
+        SELECT c.*, ub.role
+        FROM companies c
+        JOIN user_businesses ub ON c.company_id = ub.company_id
+        WHERE ub.user_id = ?
+        ORDER BY c.created_at ASC
+      `).all(user.userId) as any[];
+
+      const nextActiveId = remainingBusinesses.length > 0 ? remainingBusinesses[0].company_id : null;
+
+      res.json({
+        success: true,
+        message: 'Company and all associated data permanently deleted.',
+        remainingBusinesses,
+        nextActiveCompanyId: nextActiveId
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.get('/financial-years', (req: Request, res: Response) => {
     try {
       const user = getUserFromToken(req);
@@ -674,58 +766,116 @@ export function createApiRouter(db: DatabaseSync): Router {
         return res.status(400).json({ error: 'Item name is required.' });
       }
 
-      const existing = db.prepare('SELECT item_id, item_name FROM stock_items WHERE company_id = ? AND LOWER(item_name) = LOWER(?)')
-        .get(targetCompanyId, b.itemName.trim()) as { item_id: string; item_name: string } | undefined;
+      // Check if an item with the same name or same SKU already exists
+      const existing = db.prepare(`
+        SELECT item_id, item_name, serial_numbers, purchase_rate_paise, selling_rate_paise
+        FROM stock_items
+        WHERE company_id = ? AND (LOWER(item_name) = LOWER(?) OR (sku IS NOT NULL AND sku != '' AND LOWER(sku) = LOWER(?)))
+        LIMIT 1
+      `).get(targetCompanyId, b.itemName.trim(), (b.sku || '').trim()) as any;
+
+      // Resolve godown ID
+      let godownId = b.godownId;
+      if (!godownId || godownId === 'godown_main') {
+        const defGodown = db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? LIMIT 1').get(targetCompanyId) as any;
+        godownId = defGodown?.godown_id || `${targetCompanyId}_godown_main`;
+      }
+
+      const qty = Number(b.quantityToAdd ?? b.openingQty ?? 0);
+      const rate = Number(b.purchaseRatePaise ?? b.openingRatePaise ?? 0);
+      const sellRate = Number(b.sellingRatePaise || 0);
 
       if (existing) {
-        return res.status(400).json({
-          error: `A stock item named '${b.itemName}' already exists. To increase or add stock quantity, record a Purchase Voucher (Alt+V -> Purchase) or edit the existing item.`
+        // ---------------- STOCK UPDATION (NO DUPLICATE) ----------------
+        // Combine serial numbers if provided
+        let updatedSerials = existing.serial_numbers || '';
+        if (b.serialNumbers && b.serialNumbers.trim()) {
+          updatedSerials = updatedSerials
+            ? `${updatedSerials}, ${b.serialNumbers.trim()}`
+            : b.serialNumbers.trim();
+        }
+
+        db.prepare(`
+          UPDATE stock_items SET
+            hsn_sac = COALESCE(?, hsn_sac),
+            gst_rate = COALESCE(?, gst_rate),
+            purchase_rate_paise = CASE WHEN ? > 0 THEN ? ELSE purchase_rate_paise END,
+            selling_rate_paise = CASE WHEN ? > 0 THEN ? ELSE selling_rate_paise END,
+            reorder_level = COALESCE(?, reorder_level),
+            serial_numbers = ?,
+            has_serial_no = CASE WHEN ? = 1 OR ? IS NOT NULL THEN 1 ELSE has_serial_no END
+          WHERE item_id = ?
+        `).run(
+          b.hsnSac || null,
+          b.gstRate || null,
+          rate, rate,
+          sellRate, sellRate,
+          b.reorderLevel || null,
+          updatedSerials || null,
+          b.hasSerialNo ? 1 : 0,
+          b.serialNumbers || null,
+          existing.item_id
+        );
+
+        // Record stock movement if quantity was added
+        if (qty > 0) {
+          const valPaise = Math.round(qty * rate);
+          const entryId = 'se_upd_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
+          db.prepare(`
+            INSERT INTO stock_entries (stock_entry_id, voucher_id, item_id, godown_id, entry_date, movement_type, quantity, rate_paise, value_paise)
+            VALUES (?, 'vch_stock_upd', ?, ?, ?, 'IN', ?, ?, ?)
+          `).run(
+            entryId,
+            existing.item_id,
+            godownId,
+            new Date().toISOString().split('T')[0],
+            qty,
+            rate,
+            valPaise
+          );
+        }
+
+        return res.status(200).json({
+          itemId: existing.item_id,
+          itemName: existing.item_name,
+          updated: true,
+          message: `Stock updated successfully for '${existing.item_name}'. ${qty > 0 ? `Added ${qty} units.` : 'Details updated.'}`
         });
       }
 
-      // Resolve default unit and godown for this company if needed
+      // ---------------- NEW STOCK ITEM CREATION ----------------
       let unitId = b.unitId;
       if (!unitId || unitId === 'unit_nos') {
         const defUnit = db.prepare('SELECT unit_id FROM units WHERE company_id = ? LIMIT 1').get(targetCompanyId) as any;
         unitId = defUnit?.unit_id || b.unitId || 'unit_nos';
       }
 
-      let godownId = b.godownId;
-      if (!godownId || godownId === 'godown_main') {
-        const defGodown = db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? LIMIT 1').get(targetCompanyId) as any;
-        godownId = defGodown?.godown_id || 'godown_main';
-      }
-
-      const itemId = 'item_' + Date.now().toString(36);
+      const itemId = 'item_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
       db.prepare(`
         INSERT INTO stock_items (
           item_id, company_id, item_name, item_code, sku, hsn_sac,
           unit_id, gst_rate, cess_rate, purchase_rate_paise, selling_rate_paise,
-          opening_qty, opening_rate_paise, reorder_level
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          opening_qty, opening_rate_paise, reorder_level, serial_numbers, has_serial_no
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         itemId, targetCompanyId, b.itemName.trim(), b.itemCode || null, b.sku || null, b.hsnSac || '9999',
         unitId, b.gstRate || 18, b.cessRate || 0,
-        b.purchaseRatePaise || 0, b.sellingRatePaise || 0,
-        b.openingQty || 0, b.openingRatePaise || 0, b.reorderLevel || 0
+        rate, sellRate,
+        qty, rate, b.reorderLevel || 0,
+        b.serialNumbers || null, b.hasSerialNo ? 1 : 0
       );
 
-      // If opening stock provided, record initial stock entry
-      if (b.openingQty > 0) {
-        const openingVal = Math.round(b.openingQty * (b.openingRatePaise || 0));
+      // If initial stock provided, record initial stock entry
+      if (qty > 0) {
+        const openingVal = Math.round(qty * rate);
         db.prepare(`
           INSERT INTO stock_entries (stock_entry_id, voucher_id, item_id, godown_id, entry_date, movement_type, quantity, rate_paise, value_paise)
-          VALUES (?, 'vch_opening', ?, ?, '2026-04-01', 'IN', ?, ?, ?)
-        `).run('se_opn_' + itemId, itemId, godownId, b.openingQty, b.openingRatePaise || 0, openingVal);
+          VALUES (?, 'vch_opening', ?, ?, ?, 'IN', ?, ?, ?)
+        `).run('se_opn_' + itemId, itemId, godownId, new Date().toISOString().split('T')[0], qty, rate, openingVal);
       }
 
-      res.status(201).json({ itemId, itemName: b.itemName });
+      res.status(201).json({ itemId, itemName: b.itemName, updated: false, message: `Created stock item '${b.itemName}'.` });
     } catch (err: any) {
-      if (err.message && err.message.includes('UNIQUE constraint failed')) {
-        return res.status(400).json({
-          error: `A stock item named '${req.body?.itemName}' already exists. Please choose a distinct name or edit the existing item.`
-        });
-      }
       res.status(500).json({ error: err.message });
     }
   });

@@ -213,6 +213,29 @@ export const api = {
     if (!res.ok) throw new Error(await res.text());
   },
 
+  async deleteCompany(companyId: string, password: string): Promise<{ success: boolean; remainingBusinesses: Company[]; nextActiveCompanyId: string | null }> {
+    const res = await fetch(`${API_BASE}/companies/${encodeURIComponent(companyId)}/delete`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ password })
+    });
+    if (!res.ok) {
+      let msg = 'Failed to delete company';
+      try {
+        const d = await res.json();
+        msg = d.error || msg;
+      } catch {
+        msg = await res.text();
+      }
+      throw new Error(msg);
+    }
+    const result = await res.json();
+    if (result.nextActiveCompanyId) {
+      authStorage.setActiveCompanyId(result.nextActiveCompanyId);
+    }
+    return result;
+  },
+
   async getFinancialYears(companyId?: string): Promise<FinancialYear[]> {
     const targetCompId = companyId || authStorage.getActiveCompanyId() || '';
     const res = await fetch(`${API_BASE}/financial-years?companyId=${encodeURIComponent(targetCompId)}`, {

@@ -22,7 +22,20 @@ class PostingEngine {
             PURCHASE_RETURN: 'PRR',
             STOCK_JOURNAL: 'STK'
         };
-        const prefix = prefixes[voucherType] || 'VCH';
+        let prefix = prefixes[voucherType] || 'VCH';
+        // For Sales Invoices, use company name initials/acronym (e.g., Dream Tech Solutions -> DTS)
+        if (voucherType === 'SALES') {
+            const comp = db.prepare('SELECT company_name FROM companies WHERE company_id = ?').get(companyId);
+            if (comp && comp.company_name) {
+                const words = comp.company_name.trim().split(/[\s_-]+/).filter(w => w.length > 0);
+                if (words.length > 1) {
+                    prefix = words.map(w => w[0].toUpperCase()).join('');
+                }
+                else if (words.length === 1) {
+                    prefix = words[0].substring(0, 3).toUpperCase();
+                }
+            }
+        }
         const row = db.prepare(`
       SELECT voucher_number FROM vouchers
       WHERE company_id = ? AND fy_id = ? AND voucher_type = ?
@@ -30,17 +43,17 @@ class PostingEngine {
     `).get(companyId, fyId, voucherType);
         let nextCounter = 1;
         if (row && row.voucher_number) {
-            const parts = row.voucher_number.split('-');
+            const parts = row.voucher_number.split(/[-/]/);
             const lastNumStr = parts[parts.length - 1];
             const parsed = parseInt(lastNumStr, 10);
             if (!isNaN(parsed)) {
                 nextCounter = parsed + 1;
             }
         }
-        let candidate = `${prefix}-2026-${nextCounter.toString().padStart(4, '0')}`;
+        let candidate = `${prefix}-${nextCounter.toString().padStart(4, '0')}`;
         while (db.prepare('SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ?').get(companyId, fyId, voucherType, candidate)) {
             nextCounter++;
-            candidate = `${prefix}-2026-${nextCounter.toString().padStart(4, '0')}`;
+            candidate = `${prefix}-${nextCounter.toString().padStart(4, '0')}`;
         }
         return candidate;
     }

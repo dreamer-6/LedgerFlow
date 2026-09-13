@@ -452,7 +452,26 @@ export const App: React.FC = () => {
           {/* 6. System: Company Settings */}
           {activeTab === 'settings' && (
             <div key="settings" className="view-container-animated">
-              <SettingsView company={company} onCompanyUpdated={loadCompanyData} />
+              <SettingsView 
+                company={company} 
+                onCompanyUpdated={loadCompanyData} 
+                onCompanyDeleted={async () => {
+                  try {
+                    const list = await api.getBusinesses();
+                    setBusinesses(list);
+                    if (list.length > 0) {
+                      authStorage.setActiveCompanyId(list[0].company_id);
+                      await loadCompanyData();
+                    } else {
+                      authStorage.setActiveCompanyId('');
+                      setCompany(null);
+                    }
+                    setActiveTab('dashboard');
+                  } catch (e) {
+                    window.location.reload();
+                  }
+                }}
+              />
             </div>
           )}
         </main>

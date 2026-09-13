@@ -12,6 +12,8 @@ export interface InvoicePrintModalProps {
   onClose: () => void;
 }
 
+export type PaperFormat = 'A4' | 'A5_LANDSCAPE' | 'A5_PORTRAIT' | 'THERMAL';
+
 export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
   voucherId,
   liveVoucherData,
@@ -20,7 +22,18 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
 }) => {
   const [data, setData] = useState<any>(liveVoucherData || null);
   const [loading, setLoading] = useState<boolean>(!liveVoucherData && !!voucherId);
-  const [format, setFormat] = useState<'A4' | 'THERMAL'>('A4');
+  const [format, setFormat] = useState<PaperFormat>('A4');
+
+  // Handle Escape key to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   useEffect(() => {
     if (liveVoucherData) {
@@ -66,7 +79,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(18, 27, 46, 0.75)',
+          background: 'rgba(5, 5, 5, 0.85)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -75,7 +88,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
           fontFamily: 'var(--font-sans)'
         }}
       >
-        <div style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)', padding: '24px 32px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+        <div style={{ background: 'var(--surface)', color: 'var(--text-primary)', padding: '24px 32px', borderRadius: '8px', border: '1px solid var(--border)' }}>
           Rendering Invoice Print Preview...
         </div>
       </div>
@@ -84,14 +97,32 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
 
   const { voucher, lines } = data;
   const isPurchase = voucher.voucher_type === 'PURCHASE';
+  const hasGstin = !isPurchase
+    ? !!(company?.gstin && company.gstin.trim() && company.gstin !== 'URP')
+    : !!(voucher.party_gstin && voucher.party_gstin.trim() && voucher.party_gstin !== 'Unregistered');
+
+  const getContainerWidth = () => {
+    switch (format) {
+      case 'A4':
+        return '820px';
+      case 'A5_LANDSCAPE':
+        return '820px';
+      case 'A5_PORTRAIT':
+        return '580px';
+      case 'THERMAL':
+        return '380px';
+      default:
+        return '820px';
+    }
+  };
 
   return (
     <div
       style={{
         position: 'fixed',
         inset: 0,
-        backgroundColor: 'rgba(18, 27, 46, 0.75)',
-        backdropFilter: 'blur(4px)',
+        backgroundColor: 'rgba(5, 5, 5, 0.85)',
+        backdropFilter: 'blur(6px)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -102,11 +133,44 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
         overflowX: 'auto'
       }}
     >
+      {/* Dynamic Print Stylesheet for exact paper dimensions */}
+      <style>{`
+        @media print {
+          body {
+            background: #FFFFFF !important;
+            color: #000000 !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          @page {
+            size: ${
+              format === 'A4'
+                ? 'A4 portrait'
+                : format === 'A5_LANDSCAPE'
+                ? 'A5 landscape'
+                : format === 'A5_PORTRAIT'
+                ? 'A5 portrait'
+                : '80mm auto'
+            };
+            margin: ${format === 'THERMAL' ? '2mm' : '8mm'};
+          }
+          #printable-tax-invoice {
+            width: 100% !important;
+            max-width: 100% !important;
+            min-height: auto !important;
+            box-shadow: none !important;
+            border: none !important;
+            padding: ${format === 'A5_LANDSCAPE' || format === 'A5_PORTRAIT' ? '12px 16px' : '20px 24px'} !important;
+          }
+        }
+      `}</style>
+
       {/* Top Action Toolbar (Hidden during print) */}
       <div
         className="no-print"
         style={{
-          width: format === 'A4' ? '820px' : '380px',
+          width: getContainerWidth(),
           maxWidth: '100%',
           display: 'flex',
           justifyContent: 'space-between',
@@ -114,89 +178,83 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
           flexWrap: 'wrap',
           gap: '10px',
           marginBottom: '16px',
-          backgroundColor: '#FFFFFF',
+          backgroundColor: 'var(--surface)',
           padding: '10px 18px',
           borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-          border: '1px solid var(--border-subtle)'
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+          border: '1px solid var(--border)'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '13.5px' }}>
-            Print Preview: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--primary-accent)' }}>{voucher.voucher_number}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '13px' }}>
+            Preview: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--purple)' }}>{voucher.voucher_number}</span>
           </span>
-          <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-subtle)', padding: '2px', borderRadius: '5px' }}>
-            <button
-              onClick={() => setFormat('A4')}
-              style={{
-                padding: '4px 8px',
-                fontSize: '11px',
-                borderRadius: '4px',
-                background: format === 'A4' ? '#FFFFFF' : 'transparent',
-                color: format === 'A4' ? 'var(--primary-accent)' : 'var(--text-secondary)',
-                boxShadow: format === 'A4' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
-              }}
-            >
-              <FileText size={12} />
-              <span>A4 Standard</span>
-            </button>
-            <button
-              onClick={() => setFormat('THERMAL')}
-              style={{
-                padding: '4px 8px',
-                fontSize: '11px',
-                borderRadius: '4px',
-                background: format === 'THERMAL' ? '#FFFFFF' : 'transparent',
-                color: format === 'THERMAL' ? 'var(--primary-accent)' : 'var(--text-secondary)',
-                boxShadow: format === 'THERMAL' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
-              }}
-            >
-              <Receipt size={12} />
-              <span>Thermal POS</span>
-            </button>
+          {/* Format / Paper Size Pills */}
+          <div style={{ display: 'flex', gap: '4px', background: 'var(--surface-elevated)', padding: '3px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+            {[
+              { id: 'A4', label: 'A4 Standard' },
+              { id: 'A5_LANDSCAPE', label: 'A5 Landscape' },
+              { id: 'A5_PORTRAIT', label: 'A5 Portrait' },
+              { id: 'THERMAL', label: 'Thermal POS' }
+            ].map((fmt) => (
+              <button
+                key={fmt.id}
+                type="button"
+                onClick={() => setFormat(fmt.id as PaperFormat)}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  fontWeight: format === fmt.id ? 700 : 500,
+                  borderRadius: '4px',
+                  background: format === fmt.id ? 'var(--surface)' : 'transparent',
+                  color: format === fmt.id ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  border: format === fmt.id ? '1px solid var(--border)' : '1px solid transparent',
+                  cursor: 'pointer'
+                }}
+              >
+                {fmt.label}
+              </button>
+            ))}
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn-primary" onClick={() => window.print()} style={{ height: '34px' }}>
+          <button className="btn-primary" onClick={() => window.print()} style={{ height: '34px', padding: '0 14px' }}>
             <Printer size={14} />
-            <span>Print Invoice</span>
+            <span>Print</span>
           </button>
-          <button className="btn-secondary" onClick={onClose} style={{ height: '34px' }}>
+          <button className="btn-secondary" onClick={onClose} style={{ height: '34px', padding: '0 12px' }} title="Close Preview (Esc)">
             <X size={14} />
             <span>Close (Esc)</span>
           </button>
         </div>
       </div>
 
-      {/* A4 White Printable Document */}
-      {format === 'A4' ? (
+      {/* Printable Document (A4 / A5) */}
+      {format !== 'THERMAL' ? (
         <div
           id="printable-tax-invoice"
           style={{
-            width: '820px',
-            minHeight: '1050px',
+            width: getContainerWidth(),
+            minHeight: format === 'A4' ? '1050px' : format === 'A5_PORTRAIT' ? '740px' : '520px',
             backgroundColor: '#FFFFFF',
             color: '#121B2E',
-            padding: '36px 40px',
+            padding: format === 'A5_LANDSCAPE' ? '24px 28px' : format === 'A5_PORTRAIT' ? '24px 20px' : '36px 40px',
             borderRadius: '6px',
-            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.18)',
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4)',
             fontFamily: 'var(--font-sans)',
-            fontSize: '12px',
-            lineHeight: '1.45',
-            border: '1px solid #E2E8F0'
+            fontSize: format === 'A5_LANDSCAPE' ? '11px' : '12px',
+            lineHeight: '1.4',
+            border: '1px solid #CBD5E1'
           }}
         >
-          {/* Document Title */}
-          <div style={{ textAlign: 'center', borderBottom: '2px solid #121B2E', paddingBottom: '8px', marginBottom: '16px' }}>
-            <div style={{ fontSize: '10px', letterSpacing: '0.12em', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-              Tax Invoice
-            </div>
-            <span style={{ fontSize: '16px', fontWeight: 700, letterSpacing: '0.02em', textTransform: 'uppercase', color: '#121B2E' }}>
-              {isPurchase ? (voucher.party_name || 'PURCHASE TAX INVOICE') : (company?.company_name || 'TAX INVOICE')}
+          {/* Document Title Banner: NO duplicate company name in heading! */}
+          <div style={{ textAlign: 'center', borderBottom: '2px solid #121B2E', paddingBottom: '8px', marginBottom: '14px' }}>
+            <span style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#121B2E' }}>
+              {isPurchase ? 'PURCHASE VOUCHER / BILL' : 'TAX INVOICE'}
             </span>
-            <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px' }}>
-              {isPurchase ? '(Purchase Bill Entry / Inward Supply)' : '(Original for Recipient)'}
+            <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>
+              {isPurchase ? '(Purchase Bill Entry / Inward Supply)' : '(Original for Recipient / Issued under Rule 46 CGST Rules)'}
             </div>
           </div>
 
@@ -215,12 +273,19 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
               <div style={{ color: '#555F73', fontSize: '11.5px' }}>
                 State: {isPurchase ? (voucher.state || 'Tamil Nadu') : (company?.state || 'Tamil Nadu')} (Code: {isPurchase ? (voucher.state_code || '33') : (company?.state_code || '33')})
               </div>
-              <div style={{ fontWeight: 600, marginTop: '4px', fontSize: '12px' }}>
-                GSTIN: <span style={{ fontFamily: 'var(--font-mono)' }}>{isPurchase ? (voucher.party_gstin || 'Unregistered') : (company?.gstin || '33AAAAA0000A1Z5')}</span>
-              </div>
+              {/* Only show GSTIN if company or party has a valid GSTIN; never show fake default */}
+              {hasGstin ? (
+                <div style={{ fontWeight: 600, marginTop: '4px', fontSize: '12px' }}>
+                  GSTIN: <span style={{ fontFamily: 'var(--font-mono)' }}>{isPurchase ? voucher.party_gstin : company?.gstin}</span>
+                </div>
+              ) : (
+                <div style={{ color: '#64748B', marginTop: '4px', fontSize: '11px', fontStyle: 'italic' }}>
+                  GSTIN: Unregistered (No GST Registered)
+                </div>
+              )}
               {company?.phone && !isPurchase && (
                 <div style={{ fontSize: '11.5px', color: '#555F73' }}>
-                  Phone: <strong>{company.phone}</strong> | Email: {company.email || ''}
+                  Phone: <strong>{company.phone}</strong> {company.email && `| Email: ${company.email}`}
                 </div>
               )}
             </div>
@@ -459,9 +524,14 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
         >
           <div style={{ textAlign: 'center', marginBottom: '12px', borderBottom: '1px dashed #94A3B8', paddingBottom: '8px' }}>
             <div style={{ fontSize: '14px', fontWeight: 700 }}>{company?.company_name || 'TAX INVOICE'}</div>
-            <div style={{ fontSize: '10px' }}>{company?.address_line1 || 'Chennai, Tamil Nadu'}</div>
-            <div style={{ fontSize: '10px' }}>GSTIN: {company?.gstin || '33AAAAA0000A1Z5'}</div>
-            <div style={{ fontSize: '11px', fontWeight: 700, marginTop: '4px' }}>TAX INVOICE</div>
+            {hasGstin ? (
+              <div style={{ fontSize: '10px' }}>GSTIN: {isPurchase ? voucher.party_gstin : company?.gstin}</div>
+            ) : (
+              <div style={{ fontSize: '10px', color: '#64748B' }}>GSTIN: Unregistered</div>
+            )}
+            <div style={{ fontSize: '11px', fontWeight: 700, marginTop: '4px' }}>
+              {isPurchase ? 'PURCHASE VOUCHER' : 'TAX INVOICE'}
+            </div>
           </div>
 
           <div style={{ marginBottom: '10px', fontSize: '10.5px' }}>

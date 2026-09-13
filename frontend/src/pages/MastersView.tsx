@@ -51,6 +51,9 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
   const [iGst, setIGst] = useState(18);
   const [iCost, setICost] = useState(0);
   const [iSell, setISell] = useState(0);
+  const [iQtyToAdd, setIQtyToAdd] = useState(0);
+  const [iHasSerialNo, setIHasSerialNo] = useState(false);
+  const [iSerialNumbers, setISerialNumbers] = useState('');
 
   // Company Form State
   const [compName, setCompName] = useState('');
@@ -202,6 +205,9 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
     setIGst(18);
     setICost(0);
     setISell(0);
+    setIQtyToAdd(0);
+    setIHasSerialNo(false);
+    setISerialNumbers('');
     setShowItemModal(true);
   };
 
@@ -214,6 +220,9 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
     setIGst(item.gst_rate ?? 18);
     setICost((item.purchase_rate_paise || 0) / 100);
     setISell((item.selling_rate_paise || 0) / 100);
+    setIQtyToAdd(0);
+    setIHasSerialNo(Boolean(item.has_serial_no));
+    setISerialNumbers(item.serial_numbers || '');
     setShowItemModal(true);
   };
 
@@ -229,7 +238,10 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
           unitId: iUnit,
           gstRate: iGst,
           purchaseRatePaise: Math.round(iCost * 100),
-          sellingRatePaise: Math.round(iSell * 100)
+          sellingRatePaise: Math.round(iSell * 100),
+          quantity: Number(iQtyToAdd) || 0,
+          hasSerialNo: iHasSerialNo ? 1 : 0,
+          serialNumbers: iSerialNumbers.trim()
         });
       } else {
         await api.createStockItem({
@@ -240,8 +252,11 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
           gstRate: iGst,
           purchaseRatePaise: Math.round(iCost * 100),
           sellingRatePaise: Math.round(iSell * 100),
-          openingQty: 0,
-          openingValuationPaise: 0,
+          quantity: Number(iQtyToAdd) || 0,
+          hasSerialNo: iHasSerialNo ? 1 : 0,
+          serialNumbers: iSerialNumbers.trim(),
+          openingQty: Number(iQtyToAdd) || 0,
+          openingValuationPaise: Math.round((Number(iQtyToAdd) || 0) * (Number(iCost) || 0) * 100),
           reorderLevel: 5
         });
       }
@@ -599,7 +614,29 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
                   .map((item) => (
                     <tr key={item.item_id}>
                       <td>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.item_name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.item_name}</span>
+                          {Boolean(item.has_serial_no) && (
+                            <span 
+                              style={{ 
+                                fontSize: '10px', 
+                                background: 'rgba(86, 133, 245, 0.15)', 
+                                color: 'var(--blue)', 
+                                padding: '2px 6px', 
+                                borderRadius: '4px', 
+                                fontWeight: 700 
+                              }}
+                              title={item.serial_numbers ? `S/N: ${item.serial_numbers}` : 'Serial Tracked'}
+                            >
+                              S/N Tracked
+                            </span>
+                          )}
+                        </div>
+                        {item.serial_numbers && (
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px', maxWidth: '280px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            S/N: {item.serial_numbers}
+                          </div>
+                        )}
                       </td>
                       <td className="tabular-nums">{item.hsn_sac}</td>
                       <td>{item.unit_symbol || 'Nos'}</td>
@@ -1115,6 +1152,72 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
                       style={{ width: '100%', padding: '8px 10px' }}
                     />
                   </div>
+                </div>
+
+                {/* Stock Quantity to Add / Inward */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                      {editingItem ? 'Add Stock Quantity (Inward)' : 'Initial / Opening Stock Qty'}
+                    </label>
+                    <input
+                      type="number"
+                      value={iQtyToAdd}
+                      onChange={(e) => setIQtyToAdd(Number(e.target.value))}
+                      placeholder="0"
+                      min="0"
+                      style={{ width: '100%', padding: '8px 10px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                      Unit of Measure
+                    </label>
+                    <select
+                      value={iUnit}
+                      onChange={(e) => setIUnit(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px' }}
+                    >
+                      {units.map((u) => (
+                        <option key={u.unit_id} value={u.unit_id}>
+                          {u.unit_name} ({u.symbol})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Serial Number Tracking Toggle & Input */}
+                <div style={{ background: 'var(--surface-hover)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <input
+                      type="checkbox"
+                      checked={iHasSerialNo}
+                      onChange={(e) => setIHasSerialNo(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span>Track Individual Serial Numbers (S/N)</span>
+                  </label>
+
+                  {iHasSerialNo && (
+                    <div style={{ marginTop: '10px' }}>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                        Serial Numbers (Comma or newline separated)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={iSerialNumbers}
+                        onChange={(e) => setISerialNumbers(e.target.value)}
+                        placeholder="e.g. SN-9012, SN-9013, SN-9014"
+                        style={{ width: '100%', padding: '6px 8px', fontSize: '12px', resize: 'vertical' }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Smart Stock Updation Notice */}
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.4, background: 'rgba(86, 133, 245, 0.08)', border: '1px solid rgba(86, 133, 245, 0.2)', padding: '8px 12px', borderRadius: 'var(--radius-sm)' }}>
+                  💡 <strong>Smart Stock Updation:</strong> If an item with the same name exists, saving will automatically update rates and inward quantity without duplicate creation.
                 </div>
               </div>
 

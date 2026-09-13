@@ -33,8 +33,15 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
   currentDate,
   onPostSuccess
 }) => {
+  const getInitialVoucherNumber = () => {
+    if (!company?.company_name) return 'DTS-0001';
+    const words = company.company_name.trim().split(/[\s_-]+/).filter((w: string) => w.length > 0);
+    const pfx = words.length > 1 ? words.map((w: string) => w[0].toUpperCase()).join('') : words[0]?.substring(0, 3).toUpperCase() || 'DTS';
+    return `${pfx}-0001`;
+  };
+
   const [voucherType, setVoucherType] = useState<string>(initialType);
-  const [voucherNumber, setVoucherNumber] = useState<string>('INV-2026-0001');
+  const [voucherNumber, setVoucherNumber] = useState<string>(getInitialVoucherNumber);
   const [voucherDate, setVoucherDate] = useState<string>(currentDate || new Date().toISOString().split('T')[0]);
   const [supplierInvoiceDate, setSupplierInvoiceDate] = useState<string>(currentDate || new Date().toISOString().split('T')[0]);
 
@@ -1021,8 +1028,8 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                 </div>
               </div>
 
-              {/* Spreadsheet Table */}
-              <div style={{ overflowX: 'auto', flex: 1, minHeight: '280px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+              {/* Spreadsheet Table (Desktop View) */}
+              <div className="voucher-table-desktop" style={{ overflowX: 'auto', flex: 1, minHeight: '280px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
                 <table className="voucher-grid-table" style={{ width: '100%', minWidth: '1380px' }}>
                   <thead>
                     <tr>
@@ -1215,6 +1222,213 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                 </table>
               </div>
 
+              {/* Mobile Touch Cards View (Responsive < 860px) */}
+              <div className="voucher-cards-mobile">
+                {lines.map((row, idx) => {
+                  const qty = Number(row.quantity) || 0;
+                  const gst = Number(row.gstRate) || 18;
+                  const discPercent = Number(row.discountPercent) || 0;
+
+                  let lineTaxable = 0;
+                  let lineTotal = 0;
+
+                  if (taxMode === 'EXCLUSIVE') {
+                    const r = Number(row.rate) || 0;
+                    const gross = qty * r;
+                    const disc = gross * (discPercent / 100);
+                    lineTaxable = gross - disc;
+                    const tax = lineTaxable * (gst / 100);
+                    lineTotal = lineTaxable + tax;
+                  } else {
+                    const rIncl = Number(row.rateInclTax || row.rate) || 0;
+                    const gross = qty * rIncl;
+                    const disc = gross * (discPercent / 100);
+                    lineTotal = gross - disc;
+                    lineTaxable = lineTotal / (1 + gst / 100);
+                  }
+
+                  return (
+                    <div 
+                      key={idx} 
+                      style={{ 
+                        background: 'var(--surface)', 
+                        border: '1px solid var(--border)', 
+                        borderRadius: 'var(--radius-lg)', 
+                        padding: '14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--primary-accent)' }}>
+                          ITEM #{idx + 1}
+                        </span>
+                        {lines.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeLine(idx)}
+                            style={{
+                              background: 'rgba(255, 119, 126, 0.1)',
+                              border: '1px solid rgba(255, 119, 126, 0.25)',
+                              color: 'var(--danger)',
+                              borderRadius: '6px',
+                              padding: '4px 8px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '11px'
+                            }}
+                          >
+                            <Trash2 size={12} />
+                            <span>Remove</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Stock Item Selector */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                          STOCK ITEM *
+                        </label>
+                        <select
+                          value={row.itemId}
+                          onChange={(e) => updateLine(idx, 'itemId', e.target.value)}
+                          style={{ width: '100%', height: '36px', fontSize: '13px', fontWeight: 600 }}
+                        >
+                          <option value="">-- Select Stock Item --</option>
+                          {stockItems.map((stk) => (
+                            <option key={stk.item_id} value={stk.item_id}>
+                              {stk.item_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Line Remarks / S/N */}
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                          SERIAL / NOTES / WARRANTY
+                        </label>
+                        <input
+                          type="text"
+                          value={row.description || ''}
+                          onChange={(e) => updateLine(idx, 'description', e.target.value)}
+                          placeholder="e.g. SN-8921, 1 Yr Warranty"
+                          style={{ width: '100%', height: '32px', fontSize: '12px' }}
+                        />
+                      </div>
+
+                      {/* Qty, Unit, HSN */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.8fr 1fr', gap: '8px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                            QTY
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={row.quantity}
+                            onChange={(e) => updateLine(idx, 'quantity', e.target.value)}
+                            style={{ width: '100%', height: '34px', textAlign: 'right', fontWeight: 600 }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                            UNIT
+                          </label>
+                          <div style={{ height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-elevated)', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>
+                            {row.unit || 'nos'}
+                          </div>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                            HSN / SAC
+                          </label>
+                          <input
+                            type="text"
+                            value={row.hsnSac || ''}
+                            onChange={(e) => updateLine(idx, 'hsnSac', e.target.value)}
+                            style={{ width: '100%', height: '34px', textAlign: 'center', fontSize: '12px' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Rates: Excl and Incl */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                            RATE EXCL. (₹) {taxMode === 'EXCLUSIVE' && '●'}
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={row.rate}
+                            onChange={(e) => updateLine(idx, 'rate', e.target.value)}
+                            style={{ width: '100%', height: '34px', textAlign: 'right', fontWeight: 600 }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                            RATE INCL. (₹) {taxMode === 'INCLUSIVE' && '●'}
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={row.rateInclTax}
+                            onChange={(e) => updateLine(idx, 'rateInclTax', e.target.value)}
+                            style={{ width: '100%', height: '34px', textAlign: 'right', fontWeight: 600 }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Discount and GST Rate */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                            DISCOUNT %
+                          </label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={row.discountPercent}
+                            onChange={(e) => updateLine(idx, 'discountPercent', e.target.value)}
+                            style={{ width: '100%', height: '34px', textAlign: 'right' }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                            GST %
+                          </label>
+                          <select
+                            value={row.gstRate || 18}
+                            onChange={(e) => updateLine(idx, 'gstRate', Number(e.target.value))}
+                            style={{ width: '100%', height: '34px' }}
+                          >
+                            <option value={0}>0% (Nil)</option>
+                            <option value={5}>5%</option>
+                            <option value={12}>12%</option>
+                            <option value={18}>18%</option>
+                            <option value={28}>28%</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Card Summary Bar */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px dashed var(--border-subtle)', marginTop: '2px' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          Taxable: <strong style={{ color: 'var(--text-primary)' }}>₹{lineTaxable.toFixed(2)}</strong>
+                        </span>
+                        <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--green)' }}>
+                          Line Total: ₹{lineTotal.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
               {/* Add Line Button & Inline Bottom Summary when sidebar collapsed */}
               <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <button
@@ -1264,87 +1478,165 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
               <h3 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px' }}>
                 Accounting Ledger Postings (Double Entry)
               </h3>
-              <table className="ledger-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '60px' }}>Type</th>
-                    <th>Account Ledger</th>
-                    <th style={{ width: '140px', textAlign: 'right' }}>Amount (₹)</th>
-                    <th>Particulars</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ledgerLines.map((row, idx) => (
-                    <tr key={idx}>
-                      <td>
-                        <select
-                          value={row.type}
-                          onChange={(e) => {
-                            const updated = [...ledgerLines];
-                            updated[idx].type = e.target.value;
-                            setLedgerLines(updated);
-                          }}
-                          style={{ padding: '4px 6px', fontWeight: 700 }}
-                        >
-                          <option value="DR">Dr</option>
-                          <option value="CR">Cr</option>
-                        </select>
-                      </td>
-                      <td>
-                        <select
-                          value={row.ledgerId}
-                          onChange={(e) => {
-                            const updated = [...ledgerLines];
-                            updated[idx].ledgerId = e.target.value;
-                            setLedgerLines(updated);
-                          }}
-                          style={{ width: '100%' }}
-                        >
-                          <option value="">-- Select Account Ledger --</option>
-                          {ledgers.map((l) => (
-                            <option key={l.ledger_id} value={l.ledger_id}>
-                              {l.ledger_name} ({l.group_name})
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={row.amount}
-                          onChange={(e) => {
-                            const updated = [...ledgerLines];
-                            updated[idx].amount = Number(e.target.value);
-                            setLedgerLines(updated);
-                          }}
-                          style={{ width: '100%', textAlign: 'right' }}
-                          className="tabular-nums"
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="text"
-                          value={row.particulars}
-                          onChange={(e) => {
-                            const updated = [...ledgerLines];
-                            updated[idx].particulars = e.target.value;
-                            setLedgerLines(updated);
-                          }}
-                          placeholder="Reference note"
-                          style={{ width: '100%' }}
-                        />
-                      </td>
+              <div className="voucher-table-desktop">
+                <table className="ledger-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '60px' }}>Type</th>
+                      <th>Account Ledger</th>
+                      <th style={{ width: '140px', textAlign: 'right' }}>Amount (₹)</th>
+                      <th>Particulars</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {ledgerLines.map((row, idx) => (
+                      <tr key={idx}>
+                        <td>
+                          <select
+                            value={row.type}
+                            onChange={(e) => {
+                              const updated = [...ledgerLines];
+                              updated[idx].type = e.target.value;
+                              setLedgerLines(updated);
+                            }}
+                            style={{ padding: '4px 6px', fontWeight: 700 }}
+                          >
+                            <option value="DR">Dr</option>
+                            <option value="CR">Cr</option>
+                          </select>
+                        </td>
+                        <td>
+                          <select
+                            value={row.ledgerId}
+                            onChange={(e) => {
+                              const updated = [...ledgerLines];
+                              updated[idx].ledgerId = e.target.value;
+                              setLedgerLines(updated);
+                            }}
+                            style={{ width: '100%' }}
+                          >
+                            <option value="">-- Select Account Ledger --</option>
+                            {ledgers.map((l) => (
+                              <option key={l.ledger_id} value={l.ledger_id}>
+                                {l.ledger_name} ({l.group_name})
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={row.amount}
+                            onChange={(e) => {
+                              const updated = [...ledgerLines];
+                              updated[idx].amount = Number(e.target.value);
+                              setLedgerLines(updated);
+                            }}
+                            style={{ width: '100%', textAlign: 'right' }}
+                            className="tabular-nums"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            value={row.particulars}
+                            onChange={(e) => {
+                              const updated = [...ledgerLines];
+                              updated[idx].particulars = e.target.value;
+                              setLedgerLines(updated);
+                            }}
+                            placeholder="Reference note"
+                            style={{ width: '100%' }}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Touch Cards View for Financial Vouchers */}
+              <div className="voucher-cards-mobile">
+                {ledgerLines.map((row, idx) => (
+                  <div 
+                    key={idx}
+                    style={{
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <select
+                        value={row.type}
+                        onChange={(e) => {
+                          const updated = [...ledgerLines];
+                          updated[idx].type = e.target.value;
+                          setLedgerLines(updated);
+                        }}
+                        style={{ width: '80px', height: '34px', fontWeight: 700 }}
+                      >
+                        <option value="DR">Dr</option>
+                        <option value="CR">Cr</option>
+                      </select>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Amount (₹)"
+                        value={row.amount}
+                        onChange={(e) => {
+                          const updated = [...ledgerLines];
+                          updated[idx].amount = Number(e.target.value);
+                          setLedgerLines(updated);
+                        }}
+                        style={{ flex: 1, height: '34px', textAlign: 'right', fontWeight: 600 }}
+                      />
+                    </div>
+                    <div>
+                      <select
+                        value={row.ledgerId}
+                        onChange={(e) => {
+                          const updated = [...ledgerLines];
+                          updated[idx].ledgerId = e.target.value;
+                          setLedgerLines(updated);
+                        }}
+                        style={{ width: '100%', height: '34px' }}
+                      >
+                        <option value="">-- Select Account Ledger --</option>
+                        {ledgers.map((l) => (
+                          <option key={l.ledger_id} value={l.ledger_id}>
+                            {l.ledger_name} ({l.group_name})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        value={row.particulars}
+                        onChange={(e) => {
+                          const updated = [...ledgerLines];
+                          updated[idx].particulars = e.target.value;
+                          setLedgerLines(updated);
+                        }}
+                        placeholder="Reference note / particulars"
+                        style={{ width: '100%', height: '32px', fontSize: '12px' }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {/* Voucher Footer: Narration, Payment Details, Terms */}
           <div className="ledger-card" style={{ padding: '16px 18px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '16px' }}>
+            <div className="voucher-footer-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
                   Narration & Notes

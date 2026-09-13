@@ -759,6 +759,13 @@ kbd {
   grid-template-columns: 1fr;
 }
 
+.voucher-cards-mobile {
+  display: none;
+}
+.voucher-table-desktop {
+  display: block;
+}
+
 /* Breakpoint: Small Desktop / Tablet (<= 1180px) */
 @media screen and (max-width: 1180px) {
   .dashboard-kpi-grid {
@@ -816,13 +823,35 @@ kbd {
     grid-template-columns: 1fr;
   }
 
+  .voucher-table-desktop {
+    display: none !important;
+  }
+
+  .voucher-cards-mobile {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .voucher-main-layout {
+    grid-template-columns: 1fr !important;
+  }
+
   .voucher-meta-grid-sales,
   .voucher-meta-grid-purchase {
     grid-template-columns: 1fr 1fr;
   }
 
-  .voucher-subrow-grid {
-    grid-template-columns: 1fr;
+  .voucher-subrow-grid,
+  .voucher-footer-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .voucher-dock-bar {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
   }
 
   .navbar-company-details {
@@ -843,7 +872,7 @@ kbd {
 
   .voucher-meta-grid-sales,
   .voucher-meta-grid-purchase {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
   }
 
   .navbar-search-box {

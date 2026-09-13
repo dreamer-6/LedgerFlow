@@ -41,6 +41,8 @@ export function getDatabase(customPath?: string): DatabaseSync {
   try { db.exec('ALTER TABLE parties ADD COLUMN bank_name TEXT;'); } catch {}
   try { db.exec('ALTER TABLE users ADD COLUMN email TEXT;'); } catch {}
   try { db.exec('ALTER TABLE companies ADD COLUMN owner_user_id TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE stock_items ADD COLUMN serial_numbers TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE stock_items ADD COLUMN has_serial_no INTEGER DEFAULT 0;'); } catch {}
   try {
     db.exec(`
       CREATE TABLE IF NOT EXISTS user_businesses (

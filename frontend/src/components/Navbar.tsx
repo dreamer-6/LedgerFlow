@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Company, FinancialYear, UserSession } from '../api/client';
 import { Logo } from './Logo';
 import {
@@ -10,7 +10,12 @@ import {
   Menu,
   CheckCircle2,
   ChevronDown,
-  LogOut
+  LogOut,
+  ShieldCheck,
+  AlertCircle,
+  X,
+  FileText,
+  Boxes
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -44,6 +49,22 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('ledgerflow-theme') as 'light' | 'dark') || 'light';
   });
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notificationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+    if (showNotifications) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNotifications]);
 
   const formatDateDisplay = (dateStr?: string) => {
     if (!dateStr) return 'Current Date';
@@ -303,35 +324,231 @@ export const Navbar: React.FC<NavbarProps> = ({
           {theme === 'dark' ? <Sun size={15} color="#F59E0B" /> : <Moon size={15} color="#64748B" />}
         </button>
 
-        {/* Notification Icon */}
-        <div
-          style={{
-            position: 'relative',
-            width: '32px',
-            height: '32px',
-            borderRadius: '8px',
-            backgroundColor: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--text-secondary)',
-            cursor: 'pointer'
-          }}
-          title="Notifications"
-        >
-          <Bell size={15} />
-          <span
+        {/* Notification Icon & Dropdown Popover */}
+        <div ref={notificationRef} style={{ position: 'relative' }}>
+          <button
+            type="button"
+            onClick={() => setShowNotifications(!showNotifications)}
             style={{
-              position: 'absolute',
-              top: '7px',
-              right: '7px',
-              width: '5px',
-              height: '5px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--primary-accent)'
+              position: 'relative',
+              width: '32px',
+              height: '32px',
+              borderRadius: '8px',
+              backgroundColor: showNotifications ? 'var(--surface-hover)' : 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: showNotifications ? 'var(--text-primary)' : 'var(--text-secondary)',
+              cursor: 'pointer'
             }}
-          />
+            title="System & Compliance Alerts"
+          >
+            <Bell size={15} />
+            <span
+              style={{
+                position: 'absolute',
+                top: '7px',
+                right: '7px',
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--green)',
+                boxShadow: '0 0 6px var(--green)'
+              }}
+            />
+          </button>
+
+          {/* Interactive Notifications Popover */}
+          {showNotifications && (
+            <div
+              className="ledger-card"
+              style={{
+                position: 'absolute',
+                top: '42px',
+                right: 0,
+                width: '320px',
+                padding: '0',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+                border: '1px solid var(--border)',
+                zIndex: 100,
+                overflow: 'hidden',
+                animation: 'fadeIn 0.15s ease-out'
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 16px',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  background: 'var(--surface-hover)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Bell size={14} color="var(--primary-accent)" />
+                  <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    System Alerts & Health
+                  </span>
+                </div>
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                    background: 'rgba(32, 217, 163, 0.15)',
+                    color: 'var(--green)'
+                  }}
+                >
+                  All Systems Normal
+                </span>
+              </div>
+
+              <div style={{ maxHeight: '340px', overflowY: 'auto', padding: '8px 0' }}>
+                {/* 1. FY Status */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '10px',
+                    padding: '10px 16px',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.15s'
+                  }}
+                  onClick={() => {
+                    if (onOpenFyModal) onOpenFyModal();
+                    setShowNotifications(false);
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <div style={{ marginTop: '2px' }}>
+                    <Calendar size={15} color="var(--green)" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {activeFy?.name || 'Active Financial Year'}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Working Date: {formatDateDisplay(currentDate)}. Posting engine synchronized.
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Statutory / GST Readiness */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '10px',
+                    padding: '10px 16px',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.15s'
+                  }}
+                  onClick={() => {
+                    setActiveTab('settings');
+                    setShowNotifications(false);
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <div style={{ marginTop: '2px' }}>
+                    <ShieldCheck size={15} color="var(--cyan)" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      GST & Statutory Readiness
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      {company?.gstin ? `GSTIN: ${company.gstin}` : 'Operating in Unregistered / Standard Mode'}.
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Stock & Inventory Management */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '10px',
+                    padding: '10px 16px',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.15s'
+                  }}
+                  onClick={() => {
+                    setActiveTab('masters');
+                    setShowNotifications(false);
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--surface-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <div style={{ marginTop: '2px' }}>
+                    <Boxes size={15} color="var(--purple)" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      Stock Updation & Serial Tracking
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Duplicate item prevention & inward stock aggregation active.
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. SQLite ACID Engine */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '10px',
+                    padding: '10px 16px'
+                  }}
+                >
+                  <div style={{ marginTop: '2px' }}>
+                    <FileText size={15} color="var(--orange)" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      Double-Entry Audit Engine
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Immutable ledger posting with foreign-key referential integrity.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: '8px 16px',
+                  borderTop: '1px solid var(--border-subtle)',
+                  background: 'var(--surface-hover)',
+                  display: 'flex',
+                  justifyContent: 'center'
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('settings');
+                    setShowNotifications(false);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--blue)',
+                    fontSize: '11.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Configure Enterprise Settings →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* User Profile & Sign Out */}

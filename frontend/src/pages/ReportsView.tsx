@@ -651,126 +651,219 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           )}
 
           {/* 4. Profit & Loss */}
-          {activeSubTab === 'pnl' && (
-            <div style={{ padding: '20px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                <div>
-                  <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
-                    Expenses & Cost of Sales
-                  </h4>
-                  <table className="ledger-table">
-                    <tbody>
-                      <tr>
-                        <td>Opening Stock Valuation</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">₹1,20,000.00</td>
-                      </tr>
-                      <tr>
-                        <td>Purchase Accounts</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">₹{formatPaise(reportData?.totalExpensePaise || 2400000)}</td>
-                      </tr>
-                      <tr>
-                        <td>Direct Expenses</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">₹12,450.00</td>
-                      </tr>
-                      <tr style={{ fontWeight: 700, borderTop: '1px solid var(--border-subtle)' }}>
-                        <td>Gross Profit c/o</td>
-                        <td style={{ textAlign: 'right', color: 'var(--success-emerald)' }} className="tabular-nums">
-                          ₹{formatPaise(reportData?.netProfitPaise || 845000)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+          {activeSubTab === 'pnl' && (() => {
+            const incomeLedgers = reportData?.incomeLedgers || [];
+            const expenseLedgers = reportData?.expenseLedgers || [];
+            const grossProfitPaise = reportData?.grossProfitPaise || 0;
+            const netProfitPaise = reportData?.netProfitPaise || 0;
+            const tradingIncomePaise = reportData?.tradingIncomePaise || 0;
+            const tradingExpensePaise = reportData?.tradingExpensePaise || 0;
+            const totalIncomePaise = (reportData?.tradingIncomePaise || 0) + (reportData?.indirectIncomePaise || 0);
+            const totalExpensePaise = (reportData?.tradingExpensePaise || 0) + (reportData?.indirectExpensePaise || 0);
 
-                <div>
-                  <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
-                    Income & Sales Revenue
-                  </h4>
-                  <table className="ledger-table">
-                    <tbody>
-                      <tr>
-                        <td>Sales Accounts</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">₹{formatPaise(reportData?.totalIncomePaise || 3245000)}</td>
-                      </tr>
-                      <tr>
-                        <td>Closing Stock Valuation</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">₹3,12,600.00</td>
-                      </tr>
-                      <tr>
-                        <td>Other Operating Income</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">₹0.00</td>
-                      </tr>
-                      <tr style={{ fontWeight: 700, borderTop: '1px solid var(--border-subtle)' }}>
-                        <td>Total Revenue</td>
-                        <td style={{ textAlign: 'right', color: 'var(--primary-accent)' }} className="tabular-nums">
-                          ₹{formatPaise((reportData?.totalIncomePaise || 3245000) + 31260000)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+            return (
+              <div style={{ padding: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+                  {/* Expenses Side */}
+                  <div>
+                    <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                      Expenses & Outflows (Dr)
+                    </h4>
+                    <table className="ledger-table">
+                      <thead>
+                        <tr>
+                          <th>Particulars</th>
+                          <th style={{ textAlign: 'right', width: '140px' }}>Amount (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {expenseLedgers.length > 0 ? (
+                          expenseLedgers.map((item: any, i: number) => (
+                            <tr key={i}>
+                              <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{item.ledgerName}</td>
+                              <td style={{ textAlign: 'right' }} className="tabular-nums">
+                                ₹{formatPaise(item.amountPaise)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td style={{ color: 'var(--text-muted)' }}>No expense entries recorded</td>
+                            <td style={{ textAlign: 'right' }} className="tabular-nums">₹0.00</td>
+                          </tr>
+                        )}
+                        <tr style={{ borderTop: '1px solid var(--border-subtle)', fontWeight: 600 }}>
+                          <td>Total Operating Expenses</td>
+                          <td style={{ textAlign: 'right' }} className="tabular-nums">₹{formatPaise(totalExpensePaise)}</td>
+                        </tr>
+                        <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 700 }}>
+                          <td style={{ color: netProfitPaise >= 0 ? 'var(--green)' : 'var(--coral)' }}>
+                            {netProfitPaise >= 0 ? 'Net Profit' : 'Net Loss'}
+                          </td>
+                          <td style={{ textAlign: 'right', color: netProfitPaise >= 0 ? 'var(--green)' : 'var(--coral)' }} className="tabular-nums">
+                            ₹{formatPaise(Math.abs(netProfitPaise))}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Income Side */}
+                  <div>
+                    <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                      Income & Revenue (Cr)
+                    </h4>
+                    <table className="ledger-table">
+                      <thead>
+                        <tr>
+                          <th>Particulars</th>
+                          <th style={{ textAlign: 'right', width: '140px' }}>Amount (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {incomeLedgers.length > 0 ? (
+                          incomeLedgers.map((item: any, i: number) => (
+                            <tr key={i}>
+                              <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{item.ledgerName}</td>
+                              <td style={{ textAlign: 'right' }} className="tabular-nums">
+                                ₹{formatPaise(item.amountPaise)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td style={{ color: 'var(--text-muted)' }}>No income entries recorded</td>
+                            <td style={{ textAlign: 'right' }} className="tabular-nums">₹0.00</td>
+                          </tr>
+                        )}
+                        <tr style={{ borderTop: '1px solid var(--border-subtle)', fontWeight: 600 }}>
+                          <td>Total Revenue Turnover</td>
+                          <td style={{ textAlign: 'right' }} className="tabular-nums">₹{formatPaise(totalIncomePaise)}</td>
+                        </tr>
+                        <tr style={{ borderTop: '1px solid var(--border)', fontWeight: 700 }}>
+                          <td style={{ color: 'var(--primary-accent)' }}>Gross Margin</td>
+                          <td style={{ textAlign: 'right', color: 'var(--primary-accent)' }} className="tabular-nums">
+                            ₹{formatPaise(grossProfitPaise)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 5. Balance Sheet */}
-          {activeSubTab === 'balance_sheet' && (
-            <div style={{ padding: '20px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                <div>
-                  <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
-                    Liabilities & Capital
-                  </h4>
-                  <table className="ledger-table">
-                    <tbody>
-                      <tr>
-                        <td>Capital Account</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">₹5,00,000.00</td>
-                      </tr>
-                      <tr>
-                        <td>Current Liabilities (Creditors)</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">₹62,300.00</td>
-                      </tr>
-                      <tr>
-                        <td>Duties & Taxes (GST Payable)</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">₹8,804.74</td>
-                      </tr>
-                      <tr style={{ fontWeight: 700, borderTop: '1px solid var(--border-subtle)' }}>
-                        <td>Total Liabilities</td>
-                        <td style={{ textAlign: 'right', color: 'var(--primary-accent)' }} className="tabular-nums">₹5,71,104.74</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+          {activeSubTab === 'balance_sheet' && (() => {
+            const assets = reportData?.assets || [];
+            const liabilities = reportData?.liabilities || [];
+            const equity = reportData?.equity || [];
+            const totalAssetsPaise = reportData?.totalAssetsPaise || 0;
+            const totalLiabEquityPaise = reportData?.totalLiabilitiesEquityPaise || 0;
+            const netProfitPaise = reportData?.netProfitPaise || 0;
 
-                <div>
-                  <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
-                    Assets & Stock
-                  </h4>
-                  <table className="ledger-table">
-                    <tbody>
-                      <tr>
-                        <td>Closing Stock Valuation</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">₹3,12,600.00</td>
-                      </tr>
-                      <tr>
-                        <td>Sundry Debtors (Receivables)</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">₹1,28,450.00</td>
-                      </tr>
-                      <tr>
-                        <td>Cash & Bank Balances</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">₹1,30,054.74</td>
-                      </tr>
-                      <tr style={{ fontWeight: 700, borderTop: '1px solid var(--border-subtle)' }}>
-                        <td>Total Assets</td>
-                        <td style={{ textAlign: 'right', color: 'var(--primary-accent)' }} className="tabular-nums">₹5,71,104.74</td>
-                      </tr>
-                    </tbody>
-                  </table>
+            return (
+              <div style={{ padding: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+                  {/* Liabilities & Equity */}
+                  <div>
+                    <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                      Capital, Equity & Liabilities
+                    </h4>
+                    <table className="ledger-table">
+                      <thead>
+                        <tr>
+                          <th>Liabilities & Capital</th>
+                          <th style={{ textAlign: 'right', width: '140px' }}>Amount (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {equity.length > 0 ? (
+                          equity.map((item: any, i: number) => (
+                            <tr key={`eq-${i}`}>
+                              <td>{item.ledgerName}</td>
+                              <td style={{ textAlign: 'right' }} className="tabular-nums">₹{formatPaise(item.amountPaise)}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td>Capital Account</td>
+                            <td style={{ textAlign: 'right' }} className="tabular-nums">₹0.00</td>
+                          </tr>
+                        )}
+                        {netProfitPaise !== 0 && (
+                          <tr>
+                            <td style={{ fontStyle: 'italic', color: netProfitPaise >= 0 ? 'var(--green)' : 'var(--coral)' }}>
+                              Profit & Loss A/c (Current Period)
+                            </td>
+                            <td style={{ textAlign: 'right', color: netProfitPaise >= 0 ? 'var(--green)' : 'var(--coral)' }} className="tabular-nums">
+                              ₹{formatPaise(netProfitPaise)}
+                            </td>
+                          </tr>
+                        )}
+                        {liabilities.length > 0 ? (
+                          liabilities.map((item: any, i: number) => (
+                            <tr key={`li-${i}`}>
+                              <td>{item.ledgerName}</td>
+                              <td style={{ textAlign: 'right' }} className="tabular-nums">₹{formatPaise(item.amountPaise)}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td>Current Liabilities (Creditors & Taxes)</td>
+                            <td style={{ textAlign: 'right' }} className="tabular-nums">₹0.00</td>
+                          </tr>
+                        )}
+                        <tr style={{ fontWeight: 700, borderTop: '1px solid var(--border-subtle)' }}>
+                          <td>Total Liabilities & Equity</td>
+                          <td style={{ textAlign: 'right', color: 'var(--primary-accent)' }} className="tabular-nums">
+                            ₹{formatPaise(totalLiabEquityPaise)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Assets */}
+                  <div>
+                    <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                      Assets & Stock Valuation
+                    </h4>
+                    <table className="ledger-table">
+                      <thead>
+                        <tr>
+                          <th>Assets</th>
+                          <th style={{ textAlign: 'right', width: '140px' }}>Amount (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assets.length > 0 ? (
+                          assets.map((item: any, i: number) => (
+                            <tr key={`as-${i}`}>
+                              <td>{item.ledgerName}</td>
+                              <td style={{ textAlign: 'right' }} className="tabular-nums">₹{formatPaise(item.amountPaise)}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td>Current Assets, Bank & Stock</td>
+                            <td style={{ textAlign: 'right' }} className="tabular-nums">₹0.00</td>
+                          </tr>
+                        )}
+                        <tr style={{ fontWeight: 700, borderTop: '1px solid var(--border-subtle)' }}>
+                          <td>Total Assets</td>
+                          <td style={{ textAlign: 'right', color: 'var(--primary-accent)' }} className="tabular-nums">
+                            ₹{formatPaise(totalAssetsPaise)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 6. Stock Summary */}
           {activeSubTab === 'stock_summary' && (() => {
