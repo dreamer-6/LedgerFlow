@@ -166,7 +166,7 @@ export function createApiRouter(db: DatabaseSync): Router {
   router.post('/masters/parties', (req: Request, res: Response) => {
     try {
       const {
-        companyId, partyName, partyType, gstin, pan, phone, email, contactPerson,
+        companyId, partyName, partyType, gstin, pan, phone, email, contactPerson, bankName,
         addressLine1, addressLine2, city, state, stateCode, pincode, openingBalancePaise
       } = req.body;
 
@@ -194,9 +194,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
       // 2. Create Party
       db.prepare(`
-        INSERT INTO parties (party_id, company_id, ledger_id, party_type, party_name, gstin, pan, phone, email, contact_person)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(partyId, companyId, ledgerId, partyType, partyName.trim(), gstin || null, derivedPan || null, phone || null, email || null, contactPerson || null);
+        INSERT INTO parties (party_id, company_id, ledger_id, party_type, party_name, gstin, pan, phone, email, contact_person, bank_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(partyId, companyId, ledgerId, partyType, partyName.trim(), gstin || null, derivedPan || null, phone || null, email || null, contactPerson || null, bankName || null);
 
       // 3. Create Address
       db.prepare(`
@@ -215,6 +215,128 @@ export function createApiRouter(db: DatabaseSync): Router {
 
       db.exec('COMMIT;');
       res.status(201).json({ partyId, partyName: partyName.trim(), ledgerId });
+    } catch (err: any) {
+      db.exec('ROLLBACK;');
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.put('/masters/parties/:id', (req: Request, res: Response) => {
+    try {
+      const partyId = req.params.id;
+      const {
+        partyName, partyType, gstin, pan, phone, email, contactPerson, bankName,
+        addressLine1, addressLine2, city, state, stateCode, pincode, openingBalancePaise
+      } = req.body;
+
+      const party = db.prepare('SELECT * FROM parties WHERE party_id = ?').get(partyId) as any;
+      if (!party) {
+        return res.status(404).json({ error: 'Party not found.' });
+      }
+
+      db.exec('BEGIN TRANSACTION;');
+
+      db.prepare(`
+        UPDATE parties SET
+          party_name = COALESCE(?, party_name),
+          party_type = COALESCE(?, party_type),
+          gstin = ?,
+          pan = ?,
+          phone = ?,
+          email = ?,
+          contact_person = ?,
+          bank_name = ?
+        WHERE party_id = ?
+      `).run(
+        partyName ? partyName.trim() : null,
+        partyType || null,
+        gstin || null,
+        pan || null,
+        phone || null,
+        email || null,
+        contactPerson || null,
+        bankName || null,
+        partyId
+      );
+
+      if (partyName && party.ledger_id) {
+        db.prepare(`
+          UPDATE ledgers SET
+            ledger_name = ?,
+            opening_balance_paise = COALESCE(?, opening_balance_paise)
+          WHERE ledger_id = ?
+        `).run(partyName.trim(), openingBalancePaise ?? null, party.ledger_id);
+      }
+
+      const existingAddr = db.prepare('SELECT address_id FROM party_addresses WHERE party_id = ? LIMIT 1').get(partyId) as any;
+      if (existingAddr) {
+        db.prepare(`
+          UPDATE party_addresses SET
+            address_line1 = COALESCE(?, address_line1),
+            address_line2 = ?,
+            city = COALESCE(?, city),
+            state = COALESCE(?, state),
+            state_code = COALESCE(?, state_code),
+            pincode = COALESCE(?, pincode)
+          WHERE address_id = ?
+        `).run(
+          addressLine1 || null,
+          addressLine2 || null,
+          city || null,
+          state || null,
+          stateCode || null,
+          pincode || null,
+          existingAddr.address_id
+        );
+      } else if (addressLine1 || city || state) {
+        db.prepare(`
+          INSERT INTO party_addresses (address_id, party_id, address_type, address_line1, address_line2, city, state, state_code, pincode, is_default)
+          VALUES (?, ?, 'BOTH', ?, ?, ?, ?, ?, ?, 1)
+        `).run(
+          'addr_' + Date.now().toString(36),
+          partyId,
+          addressLine1 || 'Main Business Address',
+          addressLine2 || null,
+          city || '',
+          state || 'Tamil Nadu',
+          stateCode || '33',
+          pincode || ''
+        );
+      }
+
+      db.exec('COMMIT;');
+      res.json({ success: true, message: 'Party updated successfully.' });
+    } catch (err: any) {
+      db.exec('ROLLBACK;');
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.delete('/masters/parties/:id', (req: Request, res: Response) => {
+    try {
+      const partyId = req.params.id;
+      const party = db.prepare('SELECT * FROM parties WHERE party_id = ?').get(partyId) as any;
+      if (!party) {
+        return res.status(404).json({ error: 'Party not found.' });
+      }
+
+      const voucherCount = (db.prepare('SELECT COUNT(*) as cnt FROM vouchers WHERE party_id = ?').get(partyId) as any)?.cnt || 0;
+      if (voucherCount > 0) {
+        return res.status(400).json({ error: `Cannot delete party '${party.party_name}' because they have ${voucherCount} recorded voucher(s).` });
+      }
+
+      db.exec('BEGIN TRANSACTION;');
+      db.prepare('DELETE FROM party_addresses WHERE party_id = ?').run(partyId);
+      db.prepare('DELETE FROM parties WHERE party_id = ?').run(partyId);
+      if (party.ledger_id) {
+        const leCount = (db.prepare('SELECT COUNT(*) as cnt FROM ledger_entries WHERE ledger_id = ?').get(party.ledger_id) as any)?.cnt || 0;
+        if (leCount === 0) {
+          db.prepare('DELETE FROM ledgers WHERE ledger_id = ?').run(party.ledger_id);
+        }
+      }
+      db.exec('COMMIT;');
+
+      res.json({ success: true, message: 'Party deleted successfully.' });
     } catch (err: any) {
       db.exec('ROLLBACK;');
       res.status(500).json({ error: err.message });
@@ -306,6 +428,25 @@ export function createApiRouter(db: DatabaseSync): Router {
       res.json({ success: true, message: 'Stock item updated successfully.' });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.delete('/masters/items/:id', (req: Request, res: Response) => {
+    try {
+      const itemId = req.params.id;
+      // Check if item has existing voucher line references
+      const lineCount = (db.prepare('SELECT COUNT(*) as cnt FROM voucher_lines WHERE item_id = ?').get(itemId) as any)?.cnt || 0;
+      if (lineCount > 0) {
+        // Soft delete / deactivate
+        db.prepare('UPDATE stock_items SET is_active = 0 WHERE item_id = ?').run(itemId);
+      } else {
+        // Safe hard delete
+        db.prepare('DELETE FROM stock_entries WHERE item_id = ?').run(itemId);
+        db.prepare('DELETE FROM stock_items WHERE item_id = ?').run(itemId);
+      }
+      res.json({ success: true, message: 'Stock item removed successfully.' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
@@ -482,12 +623,35 @@ export function createApiRouter(db: DatabaseSync): Router {
         ORDER BY v.voucher_date DESC, v.created_at DESC LIMIT 5
       `).all(companyId);
 
+      // Stock Alerts (Items where current stock <= reorder_level)
+      const stockAlerts = stockSummary
+        .filter((item: any) => item.currentStock <= (item.reorderLevel ?? 5))
+        .slice(0, 5)
+        .map((item: any) => ({
+          name: item.itemName,
+          qty: `${item.currentStock} Units`,
+          status: item.currentStock === 0 ? 'critical' : 'warning'
+        }));
+
+      // Monthly Trend (Actual posted vouchers)
+      const trendData = db.prepare(`
+        SELECT 
+          substr(voucher_date, 1, 7) as month,
+          voucher_type,
+          COALESCE(SUM(total_amount_paise), 0) as total
+        FROM vouchers
+        WHERE company_id = ? AND status = 'POSTED' AND voucher_type IN ('SALES', 'PURCHASE')
+        GROUP BY substr(voucher_date, 1, 7), voucher_type
+      `).all(companyId) as { month: string; voucher_type: string; total: number }[];
+
       res.json({
         todaySalesPaise: todaySales.total,
         receivablesPaise: Math.max(0, receivables.balance),
         payablesPaise: Math.max(0, payables.balance),
         cashBankPaise: Math.max(0, cashBank.balance),
         stockValuePaise: totalStockValPaise,
+        stockAlerts,
+        trendData,
         recentVouchers
       });
     } catch (err: any) {
@@ -601,5 +765,37 @@ export function createApiRouter(db: DatabaseSync): Router {
     }
   });
 
+  router.post('/utilities/reset-data', (req: Request, res: Response) => {
+    try {
+      db.exec('PRAGMA foreign_keys = OFF;');
+      db.exec('DELETE FROM bill_allocations;');
+      db.exec('DELETE FROM tax_entries;');
+      db.exec('DELETE FROM stock_entries;');
+      db.exec('DELETE FROM ledger_entries;');
+      db.exec('DELETE FROM voucher_lines;');
+      db.exec('DELETE FROM vouchers;');
+      db.exec('DELETE FROM party_addresses;');
+      db.exec('DELETE FROM parties;');
+      db.exec('DELETE FROM stock_items;');
+      db.exec('DELETE FROM ledgers WHERE is_party = 1;');
+      db.exec('PRAGMA foreign_keys = ON;');
+
+      res.json({
+        success: true,
+        message: 'All dummy transaction and master data wiped cleanly.',
+        counts: {
+          vouchers: (db.prepare('SELECT COUNT(*) as c FROM vouchers').get() as any).c,
+          parties: (db.prepare('SELECT COUNT(*) as c FROM parties').get() as any).c,
+          stock_items: (db.prepare('SELECT COUNT(*) as c FROM stock_items').get() as any).c,
+          ledger_entries: (db.prepare('SELECT COUNT(*) as c FROM ledger_entries').get() as any).c,
+          core_ledgers: (db.prepare('SELECT COUNT(*) as c FROM ledgers').get() as any).c
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return router;
 }
+

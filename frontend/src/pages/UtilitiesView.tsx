@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
-import { DatabaseBackup, ShieldCheck, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Database, ShieldCheck, CheckCircle2, RefreshCw, FileText } from 'lucide-react';
 
 export const UtilitiesView: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
@@ -29,7 +29,7 @@ export const UtilitiesView: React.FC = () => {
     setBackupMsg(null);
     try {
       const res = await api.triggerBackup();
-      setBackupMsg(`Safe Online Backup successfully written to: ${res.backupFile}`);
+      setBackupMsg(`Safe Online Backup written to: ${res.backupFile}`);
       loadAuditLogs();
     } catch (err: any) {
       alert('Backup failed: ' + err.message);
@@ -39,121 +39,164 @@ export const UtilitiesView: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ padding: '24px 28px', maxWidth: '1200px', margin: '0 auto' }}>
       <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)' }}>
-          System Utilities, Backups & Audit Trail
+        <h1 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>
+          Backup & Statutory Audit Trail
         </h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
-          Statutory compliance, live immutable audit logs, and non-blocking database snapshot backups.
+        <p style={{ color: 'var(--text-secondary)', fontSize: '12.5px', marginTop: '2px' }}>
+          Immutable tamper-evident double-entry audit logging and non-blocking database snapshot backups.
         </p>
       </div>
 
       {/* Backup Card */}
-      <div style={{
-        backgroundColor: 'var(--bg-card)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: '8px',
-        padding: '20px',
-        marginBottom: '24px'
-      }}>
+      <div className="ledger-card" style={{ padding: '20px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-              Database Safe Online Snapshot (VACUUM INTO)
-            </h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Creates a clean, crash-consistent copy of the active SQLite database without pausing active writes or locking users.
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Database size={16} color="var(--primary-accent)" />
+              <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Database Snapshot Backup
+              </h3>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '4px' }}>
+              Creates an isolated, consistent, byte-for-byte SQLite database archive in the system backup directory.
             </p>
           </div>
-
           <button
             className="btn-primary"
             onClick={handleBackup}
             disabled={isBackingUp}
-            style={{ padding: '8px 18px', fontSize: '13px' }}
+            style={{ padding: '8px 16px' }}
           >
-            <DatabaseBackup size={16} />
-            <span>{isBackingUp ? 'Creating Snapshot...' : 'Trigger Verified Backup'}</span>
+            {isBackingUp ? 'Backing Up...' : 'Trigger Backup'}
           </button>
         </div>
 
         {backupMsg && (
-          <div style={{
-            marginTop: '16px',
-            padding: '12px 16px',
-            backgroundColor: 'rgba(16, 185, 129, 0.12)',
-            border: '1px solid var(--accent-emerald)',
-            borderRadius: '6px',
-            color: 'var(--accent-emerald)',
-            fontSize: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <CheckCircle2 size={16} />
+          <div
+            style={{
+              marginTop: '14px',
+              padding: '10px 14px',
+              backgroundColor: 'var(--success-bg)',
+              color: 'var(--success-emerald)',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+              borderRadius: '6px',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <CheckCircle2 size={14} />
             <span>{backupMsg}</span>
           </div>
         )}
       </div>
 
-      {/* Audit Log Card */}
-      <div style={{
-        backgroundColor: 'var(--bg-card)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: '8px',
-        padding: '20px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+      {/* Immutable Audit Log Table */}
+      <div className="ledger-card" style={{ overflow: 'hidden' }}>
+        <div
+          style={{
+            padding: '14px 18px',
+            borderBottom: '1px solid var(--border-subtle)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ShieldCheck size={18} color="var(--accent-blue)" />
-            <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-              Immutable Transaction Audit Trail
+            <ShieldCheck size={16} color="var(--success-emerald)" />
+            <h3 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              Immutable Audit Logs (MCA / Tax Compliance)
             </h3>
           </div>
-
-          <button className="btn-secondary" onClick={loadAuditLogs} style={{ padding: '4px 10px', fontSize: '11px' }}>
-            <RefreshCw size={12} /> Refresh
+          <button className="btn-quiet" onClick={loadAuditLogs} style={{ gap: '4px' }}>
+            <RefreshCw size={13} /> Refresh
           </button>
         </div>
 
-        <table className="acc-table">
+        <table className="ledger-table">
           <thead>
             <tr>
-              <th>Timestamp</th>
-              <th>Action</th>
-              <th>Entity</th>
-              <th>User</th>
-              <th>Snapshot / Details</th>
+              <th style={{ width: '170px' }}>Timestamp</th>
+              <th style={{ width: '130px' }}>Action</th>
+              <th style={{ width: '130px' }}>Entity</th>
+              <th>Details</th>
+              <th style={{ width: '110px' }}>User</th>
             </tr>
           </thead>
           <tbody>
-            {loadingLogs ? (
-              <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px' }}>Loading audit logs...</td></tr>
-            ) : logs.length === 0 ? (
-              <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px' }}>No audit trail recorded yet.</td></tr>
-            ) : (
-              logs.map((log: any) => (
-                <tr key={log.log_id}>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                    {log.created_at}
+            {logs && logs.length > 0 ? (
+              logs.map((log) => (
+                <tr key={log.audit_id}>
+                  <td className="tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+                    {new Date(log.created_at).toLocaleString('en-IN')}
                   </td>
                   <td>
-                    <span className="badge" style={{ background: 'var(--bg-secondary)', color: 'var(--accent-cyan)' }}>
-                      {log.action}
+                    <span
+                      className={`badge-status ${
+                        log.action_type === 'CREATE' ? 'badge-success' : log.action_type === 'UPDATE' ? 'badge-warning' : 'badge-info'
+                      }`}
+                    >
+                      {log.action_type}
                     </span>
                   </td>
-                  <td>{log.entity_name} #{log.entity_id}</td>
-                  <td style={{ fontWeight: 600 }}>{log.user_id}</td>
-                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {log.details || '-'}
+                  <td style={{ fontWeight: 600 }}>{log.entity_name}</td>
+                  <td style={{ color: 'var(--text-secondary)' }}>
+                    {log.details ? JSON.stringify(log.details) : `Entity ID: ${log.entity_id}`}
+                  </td>
+                  <td>
+                    <span style={{ fontWeight: 600 }}>{log.user_id || 'admin'}</span>
                   </td>
                 </tr>
               ))
+            ) : (
+              <tr>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                  No audit log entries found.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Fresh Start / Reset Data Card */}
+      <div className="ledger-card" style={{ padding: '20px', marginTop: '24px', border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--danger-red)' }}>
+                Fresh Start — Clear All Dummy / Transaction Data
+              </h3>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '4px' }}>
+              Wipes all vouchers, transaction entries, sample parties, and sample items while preserving your standard Chart of Accounts, company info, and units so you can enter your clean live data manually.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={async () => {
+              const confirmMsg = prompt('Type "RESET" to confirm clearing all transaction and master data:');
+              if (confirmMsg === 'RESET') {
+                try {
+                  const res = await api.resetData();
+                  alert(`Data wiped successfully!\nRemaining vouchers: ${res.counts.vouchers}\nRemaining parties: ${res.counts.parties}\nCore ledgers intact: ${res.counts.core_ledgers}`);
+                  loadAuditLogs();
+                } catch (e: any) {
+                  alert('Reset failed: ' + e.message);
+                }
+              }
+            }}
+            style={{ color: 'var(--danger-red)', borderColor: 'rgba(239, 68, 68, 0.3)', padding: '8px 16px' }}
+          >
+            Clear All Data
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
+

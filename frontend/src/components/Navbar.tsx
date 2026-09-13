@@ -1,24 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { Company, FinancialYear } from '../api/client';
-import { Building2, Calendar, Zap, Sun, Moon } from 'lucide-react';
+import { Logo } from './Logo';
+import {
+  Search,
+  Calendar,
+  Sun,
+  Moon,
+  Bell,
+  Menu
+} from 'lucide-react';
 
 interface NavbarProps {
   company: Company | null;
   activeFy: FinancialYear | null;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onOpenNewVoucher: () => void;
+  onOpenSearch?: () => void;
+  onToggleSidebar?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   company,
   activeFy,
-  activeTab,
   setActiveTab,
-  onOpenNewVoucher
+  onOpenSearch,
+  onToggleSidebar
 }) => {
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    return (localStorage.getItem('ledgerflow-theme') as 'dark' | 'light') || 'dark';
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('ledgerflow-theme') as 'light' | 'dark') || 'light';
   });
 
   useEffect(() => {
@@ -36,135 +45,232 @@ export const Navbar: React.FC<NavbarProps> = ({
     if (meta) meta.setAttribute('content', nextTheme);
   };
 
-  const todayStr = new Date().toLocaleDateString('en-IN', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
-  });
+  const todayStr = '12 Sep 2026';
 
   return (
-    <header style={{
-      height: '54px',
-      backgroundColor: 'var(--header-bg)',
-      backdropFilter: 'blur(12px)',
-      WebkitBackdropFilter: 'blur(12px)',
-      borderBottom: '1px solid var(--border-subtle)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '0 20px',
-      position: 'sticky',
-      top: 0,
-      zIndex: 50
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
-          onClick={() => setActiveTab('dashboard')}
-          title="Go to Dashboard"
+    <header
+      style={{
+        height: '58px',
+        backgroundColor: 'var(--header-bg)',
+        borderBottom: '1px solid var(--border-subtle)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 16px',
+        position: 'sticky',
+        top: 0,
+        zIndex: 50
+      }}
+    >
+      {/* Left: Mobile Toggle | Logo | Company & GSTIN */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <button
+          type="button"
+          className="mobile-nav-toggle"
+          onClick={onToggleSidebar}
+          aria-label="Toggle Navigation Menu"
         >
-          <div style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '7px',
-            background: 'linear-gradient(135deg, #0284c7 0%, #06b6d4 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            fontWeight: 800,
-            fontSize: '15px',
-            boxShadow: '0 2px 8px rgba(6, 182, 212, 0.35)'
-          }}>
-            LF
-          </div>
-          <div>
-            <span style={{ fontWeight: 700, fontSize: '15px', letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
-              LedgerFlow
-            </span>
-            <span style={{ fontSize: '9.5px', color: 'var(--accent-blue)', display: 'block', lineHeight: 1, fontWeight: 700, letterSpacing: '0.04em' }}>
-              ACCOUNTING & ERP OS
-            </span>
-          </div>
+          <Menu size={20} />
+        </button>
+
+        <div
+          style={{ cursor: 'pointer' }}
+          onClick={() => setActiveTab('dashboard')}
+          title="Dashboard"
+        >
+          <Logo size="md" showSubtitle={true} />
         </div>
 
-        <div style={{ height: '22px', width: '1px', backgroundColor: 'var(--border-strong)' }} />
+        <div
+          className="navbar-company-details"
+          style={{
+            height: '24px',
+            width: '1px',
+            backgroundColor: 'var(--border-subtle)'
+          }}
+        />
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px' }}>
-          <Building2 size={15} color="var(--text-muted)" />
-          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-            {company?.company_name || 'Apex Technologies'}
+        <div className="navbar-company-details" style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+          <span
+            style={{
+              fontWeight: 700,
+              fontSize: '13px',
+              color: 'var(--text-primary)',
+              letterSpacing: '-0.01em'
+            }}
+          >
+            {company?.company_name || 'DREAM TECH SOLUTIONS'}
           </span>
-          <span style={{ color: 'var(--text-muted)', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
-            GSTIN: {company?.gstin || '33AAAAA0000A1Z5'}
+          <span
+            style={{
+              color: 'var(--text-secondary)',
+              fontSize: '11px',
+              fontFamily: 'var(--font-mono)'
+            }}
+          >
+            GSTIN: {company?.gstin || '33AAAAAAAAA1Z5'}
           </span>
         </div>
       </div>
 
+      {/* Center: Global Search Field */}
+      <div className="navbar-search-box" style={{ flex: 1, maxWidth: '440px', margin: '0 24px' }}>
+        <div
+          onClick={onOpenSearch}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            backgroundColor: 'var(--bg-app)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: '6px',
+            padding: '7px 12px',
+            cursor: 'pointer',
+            transition: 'border-color 0.15s ease'
+          }}
+        >
+          <Search size={14} color="var(--text-muted)" />
+          <span
+            style={{
+              fontSize: '12.5px',
+              color: 'var(--text-muted)',
+              flex: 1
+            }}
+          >
+            Search invoice, party, item, voucher…
+          </span>
+          <kbd>Ctrl + K</kbd>
+        </div>
+      </div>
+
+      {/* Right: Calendar | FY | Theme | Notifications | User Avatar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-        {/* Date Display */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+        {/* Calendar */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '12px',
+            color: 'var(--text-secondary)'
+          }}
+        >
           <Calendar size={13} color="var(--text-muted)" />
-          <span>{todayStr}</span>
+          <span style={{ fontWeight: 500 }}>{todayStr}</span>
         </div>
 
-        {/* Financial Year Badge */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          background: 'rgba(56, 189, 248, 0.1)',
-          border: '1px solid rgba(56, 189, 248, 0.25)',
-          padding: '3px 8px',
-          borderRadius: '5px',
-          fontSize: '11px',
-          color: 'var(--accent-blue)',
-          fontWeight: 600
-        }}>
-          <span>FY: {activeFy?.name || '2026-2027'}</span>
-          <span style={{
-            fontSize: '9px',
-            background: 'var(--accent-emerald)',
-            color: '#fff',
-            padding: '1px 4px',
-            borderRadius: '3px',
-            fontWeight: 700
-          }}>
+        {/* Financial Year Pill */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            backgroundColor: 'var(--bg-subtle)',
+            border: '1px solid var(--border-subtle)',
+            padding: '3px 8px',
+            borderRadius: '5px',
+            fontSize: '11px',
+            color: 'var(--text-primary)',
+            fontWeight: 600
+          }}
+        >
+          <span>FY {activeFy?.name ? activeFy.name.replace('2026-2027', '2026-27') : '2026-27'}</span>
+          <span
+            style={{
+              fontSize: '9px',
+              backgroundColor: 'var(--success-bg)',
+              color: 'var(--success-emerald)',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+              padding: '1px 5px',
+              borderRadius: '3px',
+              fontWeight: 700
+            }}
+          >
             OPEN
           </span>
         </div>
 
-        {/* Theme Switcher Toggle */}
+        {/* Theme Toggle */}
         <button
-          className="theme-toggle-btn"
           onClick={toggleTheme}
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '6px',
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--text-secondary)'
+          }}
           title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
-          aria-label="Toggle Theme"
         >
-          {theme === 'dark' ? (
-            <>
-              <Sun size={14} color="#f59e0b" />
-              <span style={{ fontWeight: 600 }}>Light</span>
-            </>
-          ) : (
-            <>
-              <Moon size={14} color="#6366f1" />
-              <span style={{ fontWeight: 600 }}>Dark</span>
-            </>
-          )}
+          {theme === 'dark' ? <Sun size={15} color="#F59E0B" /> : <Moon size={15} color="#64748B" />}
         </button>
 
-        {/* New Voucher Button */}
-        <button
-          className="btn-primary"
-          onClick={onOpenNewVoucher}
-          style={{ padding: '6px 13px', fontSize: '12px', gap: '6px' }}
+        {/* Notification Icon */}
+        <div
+          style={{
+            position: 'relative',
+            width: '32px',
+            height: '32px',
+            borderRadius: '6px',
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer'
+          }}
+          title="Notifications"
         >
-          <Zap size={14} />
-          <span>New Voucher</span>
-          <kbd style={{ background: 'rgba(0,0,0,0.25)', borderColor: 'rgba(255,255,255,0.2)', color: '#fff' }}>Alt+V</kbd>
-        </button>
+          <Bell size={15} />
+          <span
+            style={{
+              position: 'absolute',
+              top: '6px',
+              right: '6px',
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--primary-accent)'
+            }}
+          />
+        </div>
+
+        {/* User Avatar + Admin */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            paddingLeft: '4px',
+            borderLeft: '1px solid var(--border-subtle)'
+          }}
+        >
+          <div
+            style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '6px',
+              backgroundColor: 'var(--primary-navy)',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '0.02em'
+            }}
+          >
+            DT
+          </div>
+          <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-primary)' }}>
+            Admin
+          </span>
+        </div>
       </div>
     </header>
   );

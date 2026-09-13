@@ -7,6 +7,7 @@ export interface CreateVoucherLineInput {
   itemId?: string;
   ledgerId?: string;
   godownId?: string;
+  description?: string;
   quantity?: number;
   ratePaise: number;
   discountPercent?: number;
@@ -34,6 +35,9 @@ export interface CreateVoucherInput {
   voucherDate: string; // YYYY-MM-DD
   voucherNumber?: string;
   referenceNumber?: string;
+  referenceDate?: string;
+  paymentMode?: string;
+  termsConditions?: string;
   partyId?: string;
   narration?: string;
   lines: CreateVoucherLineInput[];
@@ -79,18 +83,27 @@ export class PostingEngine {
       ORDER BY rowid DESC LIMIT 1
     `).get(companyId, fyId, voucherType) as { voucher_number: string } | undefined;
 
-    if (!row) {
-      return `${prefix}-2026-0001`;
+    let nextCounter = 1;
+    if (row && row.voucher_number) {
+      const parts = row.voucher_number.split('-');
+      const lastNumStr = parts[parts.length - 1];
+      const parsed = parseInt(lastNumStr, 10);
+      if (!isNaN(parsed)) {
+        nextCounter = parsed + 1;
+      }
     }
 
-    const parts = row.voucher_number.split('-');
-    const lastNumStr = parts[parts.length - 1];
-    const lastNum = parseInt(lastNumStr, 10);
-    if (isNaN(lastNum)) {
-      return `${prefix}-2026-${Date.now().toString().slice(-4)}`;
+    let candidate = `${prefix}-2026-${nextCounter.toString().padStart(4, '0')}`;
+    while (
+      db.prepare(
+        'SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ?'
+      ).get(companyId, fyId, voucherType, candidate)
+    ) {
+      nextCounter++;
+      candidate = `${prefix}-2026-${nextCounter.toString().padStart(4, '0')}`;
     }
-    const nextNum = (lastNum + 1).toString().padStart(4, '0');
-    return `${prefix}-2026-${nextNum}`;
+
+    return candidate;
   }
 
   /**
@@ -136,7 +149,18 @@ export class PostingEngine {
     }
 
     const voucherId = 'vch_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
-    const voucherNumber = input.voucherNumber || this.getNextVoucherNumber(db, input.companyId, input.fyId, input.voucherType);
+    const fyIdToUse = input.fyId || (input as any).financialYearId || 'fy_2026_27';
+    let voucherNumber = input.voucherNumber?.trim();
+    if (voucherNumber) {
+      const alreadyExists = db.prepare(
+        'SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ?'
+      ).get(input.companyId, fyIdToUse, input.voucherType, voucherNumber);
+      if (alreadyExists) {
+        voucherNumber = this.getNextVoucherNumber(db, input.companyId, fyIdToUse, input.voucherType);
+      }
+    } else {
+      voucherNumber = this.getNextVoucherNumber(db, input.companyId, fyIdToUse, input.voucherType);
+    }
 
     // 2. Perform Calculations Based on Voucher Type
     const processedLines: Array<{
@@ -283,24 +307,33 @@ export class PostingEngine {
     }
 
     // 5. ATOMIC DATABASE TRANSACTION
+    const fyId = input.fyId || (input as any).financialYearId || 'fy_2026_27';
+    const referenceNumber = input.referenceNumber || (input as any).referenceNo || (input as any).supplierInvoiceNo || null;
+    const referenceDate = input.referenceDate || (input as any).supplierInvoiceDate || null;
+    const paymentMode = input.paymentMode || (input as any).paymentTerms || null;
+    const termsConditions = input.termsConditions || (input as any).termsAndConditions || null;
+
     db.exec('BEGIN TRANSACTION;');
     try {
       // A. Insert Voucher Header
       db.prepare(`
         INSERT INTO vouchers (
           voucher_id, company_id, fy_id, voucher_type, voucher_number,
-          voucher_date, reference_number, party_id, narration, status,
+          voucher_date, reference_number, reference_date, payment_mode, terms_conditions,
+          party_id, narration, status,
           taxable_amount_paise, cgst_amount_paise, sgst_amount_paise, igst_amount_paise,
           round_off_paise, total_amount_paise, created_by
         ) VALUES (
           ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, 'POSTED',
+          ?, ?, ?, ?, ?,
+          ?, ?, 'POSTED',
           ?, ?, ?, ?,
           ?, ?, ?
         )
       `).run(
-        voucherId, input.companyId, input.fyId, input.voucherType, voucherNumber,
-        input.voucherDate, input.referenceNumber || null, input.partyId || null, input.narration || null,
+        voucherId, input.companyId, fyId, input.voucherType, voucherNumber,
+        input.voucherDate, referenceNumber, referenceDate, paymentMode, termsConditions,
+        input.partyId || null, input.narration || null,
         voucherTotals.taxableAmountPaise, voucherTotals.cgstAmountPaise, voucherTotals.sgstAmountPaise, voucherTotals.igstAmountPaise,
         voucherTotals.roundOffPaise, finalVoucherTotal, input.createdBy || 'admin'
       );
@@ -312,18 +345,18 @@ export class PostingEngine {
         const lineGodownId = pl.lineInput.godownId || (pl.lineInput.itemId ? (db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? ORDER BY is_default DESC LIMIT 1').get(input.companyId) as any)?.godown_id || 'godown_main' : null);
         db.prepare(`
           INSERT INTO voucher_lines (
-            line_id, voucher_id, line_number, item_id, ledger_id, godown_id,
+            line_id, voucher_id, line_number, item_id, ledger_id, godown_id, description,
             quantity, rate_paise, discount_percent, discount_amount_paise,
             taxable_amount_paise, gst_rate, cgst_amount_paise, sgst_amount_paise,
             igst_amount_paise, total_amount_paise
           ) VALUES (
-            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
             ?, ?, ?, ?,
             ?, ?
           )
         `).run(
-          lineId, voucherId, lineNum, pl.lineInput.itemId || null, pl.lineInput.ledgerId || null, lineGodownId,
+          lineId, voucherId, lineNum, pl.lineInput.itemId || null, pl.lineInput.ledgerId || null, lineGodownId, pl.lineInput.description || null,
           pl.lineInput.quantity || 0, pl.lineInput.ratePaise, pl.lineInput.discountPercent || 0, pl.taxResult.discountAmountPaise,
           pl.taxResult.taxableAmountPaise, pl.taxResult.cgstRate + pl.taxResult.sgstRate + pl.taxResult.igstRate,
           pl.taxResult.cgstAmountPaise, pl.taxResult.sgstAmountPaise, pl.taxResult.igstAmountPaise, pl.taxResult.totalAmountPaise

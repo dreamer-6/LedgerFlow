@@ -23,6 +23,37 @@ const fyId = 'fy_2026_27';
 
 console.log('✓ Database schema and chart of accounts seeded successfully in memory.');
 
+// Test-only fixtures for testing workflows in-memory
+testDb.prepare(`
+  INSERT INTO ledgers (ledger_id, company_id, group_id, ledger_name, opening_balance_paise)
+  VALUES ('led_cust_sample_01', ?, 'grp_debtors', 'Customer A (Sample TN)', 0)
+`).run(companyId);
+
+testDb.prepare(`
+  INSERT INTO parties (party_id, company_id, ledger_id, party_name, party_type, gstin)
+  VALUES ('party_cust_01', ?, 'led_cust_sample_01', 'Customer A (Sample TN)', 'CUSTOMER', '33AAACA1111A1Z1')
+`).run(companyId);
+
+testDb.prepare(`
+  INSERT INTO party_addresses (address_id, party_id, address_line1, city, state, state_code, pincode)
+  VALUES ('addr_cust_01', 'party_cust_01', '123 GST Road', 'Chennai', 'Tamil Nadu', '33', '600001')
+`).run();
+
+testDb.prepare(`
+  INSERT INTO stock_items (item_id, company_id, item_name, hsn_sac, unit_id, gst_rate, purchase_rate_paise, selling_rate_paise, opening_qty, opening_rate_paise)
+  VALUES ('item_laptop_01', ?, 'ThinkPad Laptop T14', '84713010', 'unit_nos', 18, 4000000, 5000000, 10, 4000000)
+`).run(companyId);
+
+testDb.prepare(`
+  INSERT INTO vouchers (voucher_id, company_id, fy_id, voucher_type, voucher_number, voucher_date, total_amount_paise, status)
+  VALUES ('v_open_test', ?, ?, 'JOURNAL', 'OPEN-01', '2026-04-01', 40000000, 'POSTED')
+`).run(companyId, fyId);
+
+testDb.prepare(`
+  INSERT INTO stock_entries (stock_entry_id, voucher_id, item_id, godown_id, entry_date, movement_type, quantity, rate_paise, value_paise)
+  VALUES ('stk_open_test', 'v_open_test', 'item_laptop_01', 'godown_main', '2026-04-01', 'IN', 10, 4000000, 40000000)
+`).run();
+
 // ---------------- TEST 1: STATUTORY GST CALCULATION ----------------
 console.log('\n[Test 1] Statutory GST Engine: Intra-State (9% + 9%)');
 const intraRes = GstEngine.calculateLineTax({

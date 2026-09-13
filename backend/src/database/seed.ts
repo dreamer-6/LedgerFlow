@@ -106,10 +106,10 @@ export function seedInitialData(db: DatabaseSync) {
   // 6. Create Standard Core Ledgers
   const standardLedgers = [
     // Cash & Bank
-    { id: 'led_cash', group: 'grp_cash', name: 'Cash', code: '1001', bal: 2500000, type: 'DR' }, // ₹25,000 opening
-    { id: 'led_sbi_bank', group: 'grp_bank', name: 'SBI Current Account', code: '1002', bal: 10000000, type: 'DR' }, // ₹1,00,000 opening
+    { id: 'led_cash', group: 'grp_cash', name: 'Cash', code: '1001', bal: 0, type: 'DR' },
+    { id: 'led_sbi_bank', group: 'grp_bank', name: 'Bank Account', code: '1002', bal: 0, type: 'DR' },
     // Capital
-    { id: 'led_capital', group: 'grp_capital', name: 'Proprietor Capital', code: '3001', bal: 12500000, type: 'CR' }, // ₹1,25,000 opening
+    { id: 'led_capital', group: 'grp_capital', name: 'Proprietor Capital', code: '3001', bal: 0, type: 'CR' },
     // Trading
     { id: 'led_sales', group: 'grp_sales', name: 'Sales Account', code: '4001', bal: 0, type: 'CR' },
     { id: 'led_sales_return', group: 'grp_sales', name: 'Sales Return Account', code: '4002', bal: 0, type: 'DR' },
@@ -147,72 +147,6 @@ export function seedInitialData(db: DatabaseSync) {
     INSERT OR IGNORE INTO users (user_id, username, password_hash, full_name, role)
     VALUES ('usr_admin', 'admin', ?, 'System Administrator', 'ADMIN')
   `).run(passwordHash);
-
-  // 8. Seed a Sample Customer and Supplier for immediate business readiness
-  const sampleCustomerLedger = 'led_cust_sample_01';
-  db.prepare(`
-    INSERT OR IGNORE INTO ledgers (ledger_id, company_id, group_id, ledger_name, opening_balance_paise, opening_balance_type, is_party)
-    VALUES (?, ?, 'grp_debtors', 'Customer A (Chennai)', 0, 'DR', 1)
-  `).run(sampleCustomerLedger, companyId);
-
-  db.prepare(`
-    INSERT OR IGNORE INTO parties (party_id, company_id, ledger_id, party_type, party_name, gstin, pan, phone, email, contact_person)
-    VALUES ('party_cust_01', ?, ?, 'CUSTOMER', 'Customer A (Chennai)', '33ABCDE1234F1Z5', 'ABCDE1234F', '+91 94440 11223', 'customer.a@example.com', 'Aravind Kumar')
-  `).run(companyId, sampleCustomerLedger);
-
-  db.prepare(`
-    INSERT OR IGNORE INTO party_addresses (address_id, party_id, address_type, address_line1, city, state, state_code, pincode, is_default)
-    VALUES ('addr_cust_01', 'party_cust_01', 'BOTH', '54, TTK Road, Alwarpet', 'Chennai', 'Tamil Nadu', '33', '600018', 1)
-  `).run();
-
-  const sampleSupplierLedger = 'led_supp_sample_01';
-  db.prepare(`
-    INSERT OR IGNORE INTO ledgers (ledger_id, company_id, group_id, ledger_name, opening_balance_paise, opening_balance_type, is_party)
-    VALUES (?, ?, 'grp_creditors', 'Supplier A (Bangalore)', 0, 'CR', 1)
-  `).run(sampleSupplierLedger, companyId);
-
-  db.prepare(`
-    INSERT OR IGNORE INTO parties (party_id, company_id, ledger_id, party_type, party_name, gstin, pan, phone, email, contact_person)
-    VALUES ('party_supp_01', ?, ?, 'SUPPLIER', 'Supplier A (Bangalore)', '29XYZAB9876C1Z3', 'XYZAB9876C', '+91 98880 99887', 'orders@suppliera.in', 'Rajesh Sharma')
-  `).run(companyId, sampleSupplierLedger);
-
-  db.prepare(`
-    INSERT OR IGNORE INTO party_addresses (address_id, party_id, address_type, address_line1, city, state, state_code, pincode, is_default)
-    VALUES ('addr_supp_01', 'party_supp_01', 'BOTH', '12, Industrial Layout, Peenya', 'Bengaluru', 'Karnataka', '29', '560058', 1)
-  `).run();
-
-  // 9. Seed Sample Stock Items
-  db.prepare(`
-    INSERT OR IGNORE INTO stock_items (
-      item_id, company_id, item_name, item_code, sku, hsn_sac,
-      unit_id, gst_rate, cess_rate, purchase_rate_paise, selling_rate_paise,
-      opening_qty, opening_rate_paise, reorder_level
-    ) VALUES (
-      'item_laptop_01', ?, 'ThinkPad Business Laptop', 'LAP-001', 'TP-E14-G4', '84713010',
-      'unit_nos', 18.00, 0.00, 4000000, 5000000,
-      10, 4000000, 2
-    )
-  `).run(companyId);
-
-  // Seed initial stock entry for the opening quantity (10 units @ 40,000 = 4,00,000)
-  const existingStockEntry = db.prepare('SELECT stock_entry_id FROM stock_entries WHERE item_id = ?').get('item_laptop_01');
-  if (!existingStockEntry) {
-    // Generate dummy opening voucher or direct opening movement
-    const openingVoucherId = 'vch_opening_stock_01';
-    db.prepare(`
-      INSERT OR IGNORE INTO vouchers (
-        voucher_id, company_id, fy_id, voucher_type, voucher_number,
-        voucher_date, narration, status, total_amount_paise, created_by
-      ) VALUES (?, ?, ?, 'STOCK_JOURNAL', 'OPN-STK-001', '2026-04-01', 'Opening Stock Entry', 'POSTED', 40000000, 'system')
-    `).run(openingVoucherId, companyId, fyId);
-
-    db.prepare(`
-      INSERT OR IGNORE INTO stock_entries (
-        stock_entry_id, voucher_id, item_id, godown_id, entry_date,
-        movement_type, quantity, rate_paise, value_paise
-      ) VALUES ('se_opn_01', ?, 'item_laptop_01', 'godown_main', '2026-04-01', 'IN', 10, 4000000, 40000000)
-    `).run(openingVoucherId);
-  }
 
   return companyId;
 }

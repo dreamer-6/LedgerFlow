@@ -9,19 +9,38 @@ import { MastersView } from './pages/MastersView';
 import { UtilitiesView } from './pages/UtilitiesView';
 import { SettingsView } from './pages/SettingsView';
 import { InvoicePrintModal } from './pages/InvoicePrintModal';
+import {
+  Search,
+  LayoutDashboard,
+  ReceiptText,
+  Boxes,
+  Clock,
+  BookOpen,
+  Scale,
+  TrendingUp,
+  FileSpreadsheet,
+  Layers,
+  Percent,
+  X
+} from 'lucide-react';
 
 export const App: React.FC = () => {
   const [company, setCompany] = useState<Company | null>(null);
   const [activeFy, setActiveFy] = useState<FinancialYear | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Tab State
+  // Tab & View States
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [reportSubTab, setReportSubTab] = useState<string>('daybook');
   const [voucherInitialType, setVoucherInitialType] = useState<string>('SALES');
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
-  // Print Preview Modal State
+  // Print Preview Modal
   const [activePrintVoucherId, setActivePrintVoucherId] = useState<string | null>(null);
+
+  // Global Search Modal State (Ctrl + K)
+  const [showSearchModal, setShowSearchModal] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const loadCompanyData = async () => {
     try {
@@ -40,38 +59,107 @@ export const App: React.FC = () => {
     loadCompanyData();
   }, []);
 
-  // Global Keyboard Shortcuts (Alt+V, Alt+1..5, Esc)
+  // Global Keyboard Navigation Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Global Search: Ctrl + K or Cmd + K
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowSearchModal((prev) => !prev);
+        return;
+      }
+
+      // Escape: Close modals
+      if (e.key === 'Escape') {
+        if (showSearchModal) {
+          setShowSearchModal(false);
+          return;
+        }
+        if (activePrintVoucherId) {
+          setActivePrintVoucherId(null);
+          return;
+        }
+      }
+
+      // Tally Prime Function Key Navigation (F4-F9)
+      if (e.key === 'F8') {
+        e.preventDefault();
+        setVoucherInitialType('SALES');
+        setActiveTab('vouchers');
+        return;
+      }
+      if (e.key === 'F9') {
+        e.preventDefault();
+        setVoucherInitialType('PURCHASE');
+        setActiveTab('vouchers');
+        return;
+      }
+      if (e.key === 'F6') {
+        e.preventDefault();
+        setVoucherInitialType('RECEIPT');
+        setActiveTab('vouchers');
+        return;
+      }
+      if (e.key === 'F5') {
+        e.preventDefault();
+        setVoucherInitialType('PAYMENT');
+        setActiveTab('vouchers');
+        return;
+      }
+      if (e.key === 'F4') {
+        e.preventDefault();
+        setVoucherInitialType('CONTRA');
+        setActiveTab('vouchers');
+        return;
+      }
+      if (e.key === 'F7') {
+        e.preventDefault();
+        setVoucherInitialType('JOURNAL');
+        setActiveTab('vouchers');
+        return;
+      }
+
+      // Alt Key Shortcuts
       if (e.altKey) {
-        if (e.key.toLowerCase() === 'v') {
+        const k = e.key.toLowerCase();
+        if (k === '1') {
+          e.preventDefault();
+          setActiveTab('dashboard');
+        } else if (k === '2') {
+          e.preventDefault();
+          setActiveTab('vouchers');
+        } else if (k === '3') {
+          e.preventDefault();
+          setActiveTab('masters');
+        } else if (k === '4') {
+          e.preventDefault();
+          setActiveTab('reports');
+        } else if (k === '5') {
+          e.preventDefault();
+          setActiveTab('utilities');
+        } else if (k === 's') {
           e.preventDefault();
           setVoucherInitialType('SALES');
           setActiveTab('vouchers');
-        } else if (e.key === '1') {
+        } else if (k === 'p') {
           e.preventDefault();
-          setActiveTab('dashboard');
-        } else if (e.key === '2') {
-          e.preventDefault();
+          setVoucherInitialType('PURCHASE');
           setActiveTab('vouchers');
-        } else if (e.key === '3') {
+        } else if (k === 'r') {
           e.preventDefault();
-          setActiveTab('masters');
-        } else if (e.key === '4') {
+          setVoucherInitialType('RECEIPT');
+          setActiveTab('vouchers');
+        } else if (k === 'y') {
           e.preventDefault();
-          setActiveTab('reports');
-        } else if (e.key === '5') {
-          e.preventDefault();
-          setActiveTab('utilities');
+          setVoucherInitialType('PAYMENT');
+          setActiveTab('vouchers');
         }
-      } else if (e.key === 'Escape' && activePrintVoucherId) {
-        setActivePrintVoucherId(null);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activePrintVoucherId]);
+  }, [showSearchModal, activePrintVoucherId]);
 
   const handleOpenNewVoucher = (type: string = 'SALES') => {
     setVoucherInitialType(type);
@@ -79,59 +167,116 @@ export const App: React.FC = () => {
   };
 
   const handleVoucherPostSuccess = (voucherId: string) => {
-    // Open print preview immediately after posting
     setActivePrintVoucherId(voucherId);
+  };
+
+  // Quick navigation items for search palette
+  const searchNavItems = [
+    { label: 'Dashboard', tab: 'dashboard', category: 'Module', icon: <LayoutDashboard size={14} />, hotkey: 'Alt+1' },
+    { label: 'Sales Invoice Voucher', tab: 'vouchers', vType: 'SALES', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+S' },
+    { label: 'Purchase Voucher', tab: 'vouchers', vType: 'PURCHASE', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+P' },
+    { label: 'Receipt Voucher', tab: 'vouchers', vType: 'RECEIPT', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+R' },
+    { label: 'Payment Voucher', tab: 'vouchers', vType: 'PAYMENT', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+Y' },
+    { label: 'Party Masters (Customers & Suppliers)', tab: 'masters', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+3' },
+    { label: 'Stock Items & Inventory', tab: 'masters', category: 'Master', icon: <Boxes size={14} /> },
+    { label: 'Day Book Report', tab: 'reports', subTab: 'daybook', category: 'Report', icon: <Clock size={14} /> },
+    { label: 'Ledger Statement', tab: 'reports', subTab: 'ledger', category: 'Report', icon: <BookOpen size={14} /> },
+    { label: 'Trial Balance', tab: 'reports', subTab: 'trial_balance', category: 'Report', icon: <Scale size={14} /> },
+    { label: 'Profit & Loss Statement', tab: 'reports', subTab: 'pnl', category: 'Report', icon: <TrendingUp size={14} /> },
+    { label: 'Balance Sheet', tab: 'reports', subTab: 'balance_sheet', category: 'Report', icon: <FileSpreadsheet size={14} /> },
+    { label: 'Stock Summary Report', tab: 'reports', subTab: 'stock_summary', category: 'Report', icon: <Layers size={14} /> },
+    { label: 'GST Tax Returns Summary', tab: 'reports', subTab: 'gst', category: 'Report', icon: <Percent size={14} /> },
+    { label: 'Backup & Audit Trail', tab: 'utilities', category: 'System', icon: <Boxes size={14} />, hotkey: 'Alt+5' },
+    { label: 'Company Settings', tab: 'settings', category: 'System', icon: <Boxes size={14} /> }
+  ];
+
+  const filteredSearchItems = searchNavItems.filter((item) =>
+    item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleSelectSearchItem = (item: any) => {
+    if (item.vType) {
+      setVoucherInitialType(item.vType);
+    }
+    if (item.subTab) {
+      setReportSubTab(item.subTab);
+    }
+    setActiveTab(item.tab);
+    setShowSearchModal(false);
+    setSearchQuery('');
   };
 
   if (loading) {
     return (
-      <div style={{
-        height: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'var(--bg-primary)',
-        color: 'var(--text-secondary)'
-      }}>
-        Initializing LedgerFlow Accounting Engine...
+      <div
+        style={{
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'var(--bg-app)',
+          color: 'var(--text-secondary)',
+          gap: '12px'
+        }}
+      >
+        <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
+          LedgerFlow™
+        </div>
+        <div style={{ fontSize: '12px' }}>
+          Loading double-entry accounting engine...
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--bg-primary)' }}>
-      {/* Top Navigation */}
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--bg-app)' }}>
+      {/* Top Bar Header */}
       <Navbar
         company={company}
         activeFy={activeFy}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        onOpenNewVoucher={() => handleOpenNewVoucher('SALES')}
+        onOpenSearch={() => setShowSearchModal(true)}
+        onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
       />
 
-      <div style={{ display: 'flex', flex: 1 }}>
-        {/* Left Sidebar */}
+      {/* Main Layout: Left Sidebar + Content Area */}
+      <div style={{ display: 'flex', flex: 1, height: 'calc(100vh - 58px)', overflow: 'hidden', position: 'relative' }}>
+        {/* Compact Left Sidebar */}
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           reportSubTab={reportSubTab}
           setReportSubTab={setReportSubTab}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
         />
 
-        {/* Main Content Area */}
-        <main style={{ flex: 1, overflowY: 'auto', height: 'calc(100vh - 52px)' }}>
+        {/* Scrollable Main Content */}
+        <main
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            height: 'calc(100vh - 58px)'
+          }}
+        >
+          {/* 1. Dashboard View */}
           {activeTab === 'dashboard' && (
             <DashboardView
               companyId={company?.company_id || ''}
               onOpenNewVoucher={handleOpenNewVoucher}
-              onViewVoucher={id => setActivePrintVoucherId(id)}
-              onNavigateReports={sub => {
+              onViewVoucher={(id) => setActivePrintVoucherId(id)}
+              onNavigateReports={(sub) => {
                 setReportSubTab(sub);
                 setActiveTab('reports');
               }}
             />
           )}
 
+          {/* 2. Voucher Entry View */}
           {activeTab === 'vouchers' && (
             <VoucherEntryView
               company={company}
@@ -141,36 +286,143 @@ export const App: React.FC = () => {
             />
           )}
 
+          {/* 3. Masters View */}
           {activeTab === 'masters' && (
-            <MastersView company={company} />
+            <MastersView company={company} onCompanyUpdated={loadCompanyData} />
           )}
 
+          {/* 4. Reports View */}
           {activeTab === 'reports' && (
             <ReportsView
               companyId={company?.company_id || ''}
               activeSubTab={reportSubTab}
               setActiveSubTab={setReportSubTab}
-              onViewVoucher={id => setActivePrintVoucherId(id)}
+              onViewVoucher={(id) => setActivePrintVoucherId(id)}
             />
           )}
 
+          {/* 5. System: Utilities (Backup & Audit) */}
           {activeTab === 'utilities' && (
             <UtilitiesView />
           )}
 
+          {/* 6. System: Company Settings */}
           {activeTab === 'settings' && (
             <SettingsView company={company} onCompanyUpdated={loadCompanyData} />
           )}
         </main>
       </div>
 
-      {/* Tax Invoice Print Modal */}
+      {/* Printable Invoice Modal */}
       {activePrintVoucherId && (
         <InvoicePrintModal
           voucherId={activePrintVoucherId}
           company={company}
           onClose={() => setActivePrintVoucherId(null)}
         />
+      )}
+
+      {/* Global Search Palette Modal (Ctrl + K) */}
+      {showSearchModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'var(--modal-overlay)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            paddingTop: '100px',
+            zIndex: 120
+          }}
+          onClick={() => setShowSearchModal(false)}
+        >
+          <div
+            className="ledger-card"
+            style={{
+              width: '560px',
+              overflow: 'hidden',
+              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Search Input */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '12px 16px',
+                borderBottom: '1px solid var(--border-subtle)'
+              }}
+            >
+              <Search size={16} color="var(--text-muted)" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search invoice, party, item, voucher, or report…"
+                style={{
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  width: '100%',
+                  fontSize: '14px',
+                  padding: 0
+                }}
+                autoFocus
+              />
+              <kbd>Esc</kbd>
+            </div>
+
+            {/* Results List */}
+            <div style={{ maxHeight: '340px', overflowY: 'auto', padding: '6px 0' }}>
+              {filteredSearchItems.map((item, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => handleSelectSearchItem(item)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '9px 16px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    color: 'var(--text-primary)',
+                    transition: 'background-color 0.1s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ color: 'var(--primary-accent)' }}>{item.icon}</span>
+                    <span>{item.label}</span>
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        color: 'var(--text-muted)',
+                        backgroundColor: 'var(--bg-subtle)',
+                        padding: '1px 5px',
+                        borderRadius: '3px'
+                      }}
+                    >
+                      {item.category}
+                    </span>
+                  </div>
+                  {item.hotkey && <kbd>{item.hotkey}</kbd>}
+                </div>
+              ))}
+              {filteredSearchItems.length === 0 && (
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12.5px' }}>
+                  No matching voucher, master, or report found.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

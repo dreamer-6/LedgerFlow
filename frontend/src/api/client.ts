@@ -74,7 +74,52 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(party)
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) {
+      let msg = 'Failed to create party';
+      try {
+        const data = await res.json();
+        msg = data.error || msg;
+      } catch {
+        msg = await res.text();
+      }
+      throw new Error(msg);
+    }
+    return res.json();
+  },
+
+  async updateParty(id: string, party: any) {
+    const res = await fetch(`${API_BASE}/masters/parties/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(party)
+    });
+    if (!res.ok) {
+      let msg = 'Failed to update party';
+      try {
+        const data = await res.json();
+        msg = data.error || msg;
+      } catch {
+        msg = await res.text();
+      }
+      throw new Error(msg);
+    }
+    return res.json();
+  },
+
+  async deleteParty(id: string) {
+    const res = await fetch(`${API_BASE}/masters/parties/${id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      let msg = 'Failed to delete party';
+      try {
+        const data = await res.json();
+        msg = data.error || msg;
+      } catch {
+        msg = await res.text();
+      }
+      throw new Error(msg);
+    }
     return res.json();
   },
 
@@ -119,6 +164,14 @@ export const api = {
       }
       throw new Error(msg);
     }
+    return res.json();
+  },
+
+  async deleteStockItem(id: string) {
+    const res = await fetch(`${API_BASE}/masters/items/${id}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
@@ -238,5 +291,12 @@ export const api = {
     const res = await fetch(`${API_BASE}/utilities/audit-logs`);
     if (!res.ok) throw new Error(await res.text());
     return res.json();
+  },
+
+  async resetData() {
+    const res = await fetch(`${API_BASE}/utilities/reset-data`, { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
   }
 };
+

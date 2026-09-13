@@ -32,6 +32,13 @@ export function getDatabase(customPath?: string): DatabaseSync {
     db.exec(schemaSql);
   }
 
+  // Safe incremental column migrations
+  try { db.exec('ALTER TABLE vouchers ADD COLUMN reference_date DATE;'); } catch {}
+  try { db.exec('ALTER TABLE vouchers ADD COLUMN payment_mode TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE vouchers ADD COLUMN terms_conditions TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE voucher_lines ADD COLUMN description TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE parties ADD COLUMN bank_name TEXT;'); } catch {}
+
   if (!customPath) {
     dbInstance = db;
   }
