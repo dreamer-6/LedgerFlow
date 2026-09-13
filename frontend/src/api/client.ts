@@ -22,6 +22,7 @@ export interface Company {
   bank_ifsc?: string;
   bank_branch?: string;
   terms_and_conditions?: string;
+  role?: string;
 }
 
 export interface FinancialYear {
@@ -33,9 +34,165 @@ export interface FinancialYear {
   status: 'OPEN' | 'LOCKED' | 'CLOSED';
 }
 
+export interface UserSession {
+  userId: string;
+  email: string;
+  username: string;
+  fullName: string;
+  role: string;
+}
+
+export const authStorage = {
+  getToken: () => localStorage.getItem('lf_token'),
+  setToken: (token: string | null) => {
+    if (token) localStorage.setItem('lf_token', token);
+    else localStorage.removeItem('lf_token');
+  },
+  getActiveCompanyId: () => localStorage.getItem('lf_active_company_id'),
+  setActiveCompanyId: (id: string | null) => {
+    if (id) localStorage.setItem('lf_active_company_id', id);
+    else localStorage.removeItem('lf_active_company_id');
+  },
+  getUser: (): UserSession | null => {
+    try {
+      const u = localStorage.getItem('lf_user');
+      return u ? JSON.parse(u) : null;
+    } catch {
+      return null;
+    }
+  },
+  setUser: (user: UserSession | null) => {
+    if (user) localStorage.setItem('lf_user', JSON.stringify(user));
+    else localStorage.removeItem('lf_user');
+  },
+  clear: () => {
+    localStorage.removeItem('lf_token');
+    localStorage.removeItem('lf_active_company_id');
+    localStorage.removeItem('lf_user');
+  }
+};
+
+function getHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { ...extraHeaders };
+  const token = authStorage.getToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const compId = authStorage.getActiveCompanyId();
+  if (compId) {
+    headers['x-company-id'] = compId;
+  }
+  return headers;
+}
+
 export const api = {
+  // ---------------- AUTHENTICATION & BUSINESS TENANCY ----------------
+  async login(credentials: { emailOrUsername: string; password: string }) {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentials)
+    });
+    if (!res.ok) {
+      let msg = 'Login failed';
+      try {
+        const d = await res.json();
+        msg = d.error || msg;
+      } catch {
+        msg = await res.text();
+      }
+      throw new Error(msg);
+    }
+    const data = await res.json();
+    authStorage.setToken(data.token);
+    authStorage.setUser(data.user);
+    if (data.activeCompanyId) {
+      authStorage.setActiveCompanyId(data.activeCompanyId);
+    }
+    return data;
+  },
+
+  async register(info: {
+    fullName: string;
+    email: string;
+    username?: string;
+    password: string;
+    companyName: string;
+    legalName?: string;
+    gstin?: string;
+    state?: string;
+    stateCode?: string;
+  }) {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(info)
+    });
+    if (!res.ok) {
+      let msg = 'Registration failed';
+      try {
+        const d = await res.json();
+        msg = d.error || msg;
+      } catch {
+        msg = await res.text();
+      }
+      throw new Error(msg);
+    }
+    const data = await res.json();
+    authStorage.setToken(data.token);
+    authStorage.setUser(data.user);
+    if (data.company?.company_id) {
+      authStorage.setActiveCompanyId(data.company.company_id);
+    }
+    return data;
+  },
+
+  async getMe(): Promise<{ user: UserSession; businesses: Company[] }> {
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error('Unauthorized');
+    return res.json();
+  },
+
+  async getBusinesses(): Promise<Company[]> {
+    const res = await fetch(`${API_BASE}/businesses`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async createBusiness(data: {
+    companyName: string;
+    legalName?: string;
+    gstin?: string;
+    state?: string;
+    stateCode?: string;
+  }): Promise<{ company: Company; message: string }> {
+    const res = await fetch(`${API_BASE}/businesses`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      let msg = 'Failed to create business';
+      try {
+        const d = await res.json();
+        msg = d.error || msg;
+      } catch {
+        msg = await res.text();
+      }
+      throw new Error(msg);
+    }
+    return res.json();
+  },
+
+  // ---------------- COMPANY & MASTER DETAILS ----------------
   async getCompanyAndFy(): Promise<{ company: Company; activeFinancialYear: FinancialYear }> {
-    const res = await fetch(`${API_BASE}/companies/current`);
+    const res = await fetch(`${API_BASE}/companies/current`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
@@ -43,27 +200,34 @@ export const api = {
   async updateCompany(data: Partial<Company>): Promise<void> {
     const res = await fetch(`${API_BASE}/companies/current`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error(await res.text());
   },
 
-  async getDashboard(companyId: string) {
-    const res = await fetch(`${API_BASE}/reports/dashboard?companyId=${companyId}`);
+  async getDashboard(companyId?: string) {
+    const targetCompId = companyId || authStorage.getActiveCompanyId() || '';
+    const res = await fetch(`${API_BASE}/reports/dashboard?companyId=${encodeURIComponent(targetCompId)}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getLedgers() {
-    const res = await fetch(`${API_BASE}/masters/ledgers`);
+    const res = await fetch(`${API_BASE}/masters/ledgers`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getParties(type?: string) {
     const url = type ? `${API_BASE}/masters/parties?type=${type}` : `${API_BASE}/masters/parties`;
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
@@ -71,7 +235,7 @@ export const api = {
   async createParty(party: any) {
     const res = await fetch(`${API_BASE}/masters/parties`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(party)
     });
     if (!res.ok) {
@@ -90,7 +254,7 @@ export const api = {
   async updateParty(id: string, party: any) {
     const res = await fetch(`${API_BASE}/masters/parties/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(party)
     });
     if (!res.ok) {
@@ -108,7 +272,8 @@ export const api = {
 
   async deleteParty(id: string) {
     const res = await fetch(`${API_BASE}/masters/parties/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getHeaders()
     });
     if (!res.ok) {
       let msg = 'Failed to delete party';
@@ -124,7 +289,9 @@ export const api = {
   },
 
   async getStockItems() {
-    const res = await fetch(`${API_BASE}/masters/items`);
+    const res = await fetch(`${API_BASE}/masters/items`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
@@ -132,7 +299,7 @@ export const api = {
   async createStockItem(item: any) {
     const res = await fetch(`${API_BASE}/masters/items`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(item)
     });
     if (!res.ok) {
@@ -151,7 +318,7 @@ export const api = {
   async updateStockItem(id: string, item: any) {
     const res = await fetch(`${API_BASE}/masters/items/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(item)
     });
     if (!res.ok) {
@@ -169,26 +336,33 @@ export const api = {
 
   async deleteStockItem(id: string) {
     const res = await fetch(`${API_BASE}/masters/items/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getHeaders()
     });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getGodowns() {
-    const res = await fetch(`${API_BASE}/masters/godowns`);
+    const res = await fetch(`${API_BASE}/masters/godowns`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getUnits() {
-    const res = await fetch(`${API_BASE}/masters/units`);
+    const res = await fetch(`${API_BASE}/masters/units`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getNextVoucherNumber(companyId: string, fyId: string, type: string) {
-    const res = await fetch(`${API_BASE}/vouchers/next-number?companyId=${companyId}&fyId=${fyId}&type=${type}`);
+    const res = await fetch(`${API_BASE}/vouchers/next-number?companyId=${companyId}&fyId=${fyId}&type=${type}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
@@ -198,13 +372,17 @@ export const api = {
     if (type) params.append('type', type);
     if (fromDate) params.append('fromDate', fromDate);
     if (toDate) params.append('toDate', toDate);
-    const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`);
+    const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getVoucherById(id: string) {
-    const res = await fetch(`${API_BASE}/vouchers/${id}`);
+    const res = await fetch(`${API_BASE}/vouchers/${id}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
@@ -212,11 +390,11 @@ export const api = {
   async postVoucher(voucherData: any) {
     const res = await fetch(`${API_BASE}/vouchers`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(voucherData)
     });
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({ error: 'Failed to post voucher' }));
       throw new Error(err.error || 'Failed to post voucher');
     }
     return res.json();
@@ -225,78 +403,102 @@ export const api = {
   async cancelVoucher(id: string, reason: string) {
     const res = await fetch(`${API_BASE}/vouchers/${id}/cancel`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ reason })
     });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
-  // Reports
+  // ---------------- REPORTS ----------------
   async getDayBook(companyId: string, fromDate: string, toDate: string) {
-    const res = await fetch(`${API_BASE}/reports/daybook?companyId=${companyId}&fromDate=${fromDate}&toDate=${toDate}`);
+    const res = await fetch(`${API_BASE}/reports/daybook?companyId=${companyId}&fromDate=${fromDate}&toDate=${toDate}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getLedgerStatement(ledgerId: string, fromDate: string, toDate: string) {
-    const res = await fetch(`${API_BASE}/reports/ledger/${ledgerId}?fromDate=${fromDate}&toDate=${toDate}`);
+    const res = await fetch(`${API_BASE}/reports/ledger/${ledgerId}?fromDate=${fromDate}&toDate=${toDate}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getTrialBalance(companyId: string, asOnDate: string) {
-    const res = await fetch(`${API_BASE}/reports/trial-balance?companyId=${companyId}&asOnDate=${asOnDate}`);
+    const res = await fetch(`${API_BASE}/reports/trial-balance?companyId=${companyId}&asOnDate=${asOnDate}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getProfitAndLoss(companyId: string, fromDate: string, toDate: string) {
-    const res = await fetch(`${API_BASE}/reports/profit-loss?companyId=${companyId}&fromDate=${fromDate}&toDate=${toDate}`);
+    const res = await fetch(`${API_BASE}/reports/profit-loss?companyId=${companyId}&fromDate=${fromDate}&toDate=${toDate}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getBalanceSheet(companyId: string, asOnDate: string) {
-    const res = await fetch(`${API_BASE}/reports/balance-sheet?companyId=${companyId}&asOnDate=${asOnDate}`);
+    const res = await fetch(`${API_BASE}/reports/balance-sheet?companyId=${companyId}&asOnDate=${asOnDate}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getStockSummary(companyId: string) {
-    const res = await fetch(`${API_BASE}/reports/stock-summary?companyId=${companyId}`);
+    const res = await fetch(`${API_BASE}/reports/stock-summary?companyId=${companyId}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getOutstanding(companyId: string, type: 'CUSTOMER' | 'SUPPLIER') {
-    const res = await fetch(`${API_BASE}/reports/outstanding?companyId=${companyId}&type=${type}`);
+    const res = await fetch(`${API_BASE}/reports/outstanding?companyId=${companyId}&type=${type}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getGstSummary(companyId: string, fromDate: string, toDate: string) {
-    const res = await fetch(`${API_BASE}/reports/gst-summary?companyId=${companyId}&fromDate=${fromDate}&toDate=${toDate}`);
+    const res = await fetch(`${API_BASE}/reports/gst-summary?companyId=${companyId}&fromDate=${fromDate}&toDate=${toDate}`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
+  // ---------------- UTILITIES ----------------
   async triggerBackup() {
-    const res = await fetch(`${API_BASE}/utilities/backup`, { method: 'POST' });
+    const res = await fetch(`${API_BASE}/utilities/backup`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async getAuditLogs() {
-    const res = await fetch(`${API_BASE}/utilities/audit-logs`);
+    const res = await fetch(`${API_BASE}/utilities/audit-logs`, {
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   async resetData() {
-    const res = await fetch(`${API_BASE}/utilities/reset-data`, { method: 'POST' });
+    const res = await fetch(`${API_BASE}/utilities/reset-data`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   }
 };
-

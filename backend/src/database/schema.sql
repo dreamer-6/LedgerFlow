@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS companies (
     bank_ifsc TEXT,
     bank_branch TEXT,
     terms_and_conditions TEXT,
+    owner_user_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -250,6 +251,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     username TEXT NOT NULL UNIQUE,
+    email TEXT UNIQUE,
     password_hash TEXT NOT NULL,
     full_name TEXT NOT NULL,
     role TEXT CHECK(role IN ('ADMIN', 'ACCOUNTANT', 'DATA_ENTRY', 'AUDITOR')) NOT NULL DEFAULT 'ADMIN',
@@ -257,8 +259,19 @@ CREATE TABLE IF NOT EXISTS users (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 12. MULTI-TENANT USER BUSINESSES MEMBERSHIP
+CREATE TABLE IF NOT EXISTS user_businesses (
+    user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    company_id TEXT NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
+    role TEXT CHECK(role IN ('OWNER', 'ADMIN', 'ACCOUNTANT', 'VIEWER')) DEFAULT 'OWNER',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, company_id)
+);
+
 -- INDEXES
 CREATE INDEX IF NOT EXISTS idx_ledger_entries_ledger_date ON ledger_entries(ledger_id, entry_date);
 CREATE INDEX IF NOT EXISTS idx_stock_entries_item_date ON stock_entries(item_id, entry_date);
 CREATE INDEX IF NOT EXISTS idx_vouchers_date_type ON vouchers(voucher_date, voucher_type);
 CREATE INDEX IF NOT EXISTS idx_bill_alloc_ref ON bill_allocations(reference_voucher_id);
+CREATE INDEX IF NOT EXISTS idx_user_biz_user ON user_businesses(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_biz_company ON user_businesses(company_id);

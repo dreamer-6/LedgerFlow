@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { api, Company, FinancialYear } from './api/client';
+import { api, Company, FinancialYear, authStorage, UserSession } from './api/client';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
+import { BusinessSwitcherModal } from './components/BusinessSwitcherModal';
+import { AuthView } from './pages/AuthView';
 import { DashboardView } from './pages/DashboardView';
 import { VoucherEntryView } from './pages/VoucherEntryView';
 import { ReportsView } from './pages/ReportsView';
@@ -25,6 +27,12 @@ import {
 } from 'lucide-react';
 
 export const App: React.FC = () => {
+  // Authentication & Multi-Business State
+  const [user, setUser] = useState<UserSession | null>(() => authStorage.getUser());
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!authStorage.getToken() && !!authStorage.getUser());
+  const [businesses, setBusinesses] = useState<Company[]>([]);
+  const [showBusinessSwitcher, setShowBusinessSwitcher] = useState<boolean>(false);
+
   const [company, setCompany] = useState<Company | null>(null);
   const [activeFy, setActiveFy] = useState<FinancialYear | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,9 +63,44 @@ export const App: React.FC = () => {
     }
   };
 
+  const loadBusinesses = async () => {
+    try {
+      const list = await api.getBusinesses();
+      setBusinesses(list);
+    } catch (err) {
+      console.error('Failed to load businesses:', err);
+    }
+  };
+
   useEffect(() => {
+    if (isAuthenticated) {
+      loadCompanyData();
+      loadBusinesses();
+    } else {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  const handleAuthSuccess = (authUser: UserSession, activeCompId: string, userBizs: Company[]) => {
+    setUser(authUser);
+    setIsAuthenticated(true);
+    if (activeCompId) {
+      authStorage.setActiveCompanyId(activeCompId);
+    }
+    if (userBizs && userBizs.length > 0) {
+      setBusinesses(userBizs);
+    }
     loadCompanyData();
-  }, []);
+    loadBusinesses();
+  };
+
+  const handleLogout = () => {
+    authStorage.clear();
+    setUser(null);
+    setIsAuthenticated(false);
+    setCompany(null);
+    setActiveFy(null);
+  };
 
   // Global Keyboard Navigation Shortcuts
   useEffect(() => {
@@ -69,8 +112,19 @@ export const App: React.FC = () => {
         return;
       }
 
+      // Switch Business: Alt + B
+      if (e.altKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setShowBusinessSwitcher((prev) => !prev);
+        return;
+      }
+
       // Escape: Close modals
       if (e.key === 'Escape') {
+        if (showBusinessSwitcher) {
+          setShowBusinessSwitcher(false);
+          return;
+        }
         if (showSearchModal) {
           setShowSearchModal(false);
           return;
@@ -207,6 +261,10 @@ export const App: React.FC = () => {
     setSearchQuery('');
   };
 
+  if (!isAuthenticated) {
+    return <AuthView onAuthSuccess={handleAuthSuccess} />;
+  }
+
   if (loading) {
     return (
       <div
@@ -239,8 +297,11 @@ export const App: React.FC = () => {
         activeFy={activeFy}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        user={user}
         onOpenSearch={() => setShowSearchModal(true)}
         onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+        onOpenBusinessSwitcher={() => setShowBusinessSwitcher(true)}
+        onLogout={handleLogout}
       />
 
       {/* Main Layout: Left Sidebar + Content Area */}
@@ -424,6 +485,23 @@ export const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Multi-Tenant Business Switcher & Creation Modal */}
+      <BusinessSwitcherModal
+        isOpen={showBusinessSwitcher}
+        onClose={() => setShowBusinessSwitcher(false)}
+        businesses={businesses}
+        activeCompanyId={company?.company_id || ''}
+        onSelectBusiness={(compId) => {
+          authStorage.setActiveCompanyId(compId);
+          loadCompanyData();
+        }}
+        onBusinessCreated={(newComp) => {
+          setBusinesses((prev) => [...prev, newComp]);
+          authStorage.setActiveCompanyId(newComp.company_id);
+          loadCompanyData();
+        }}
+      />
     </div>
   );
 };

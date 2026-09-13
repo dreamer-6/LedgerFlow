@@ -7,7 +7,10 @@ import {
   AlertTriangle,
   ArrowUpRight,
   ArrowDownLeft,
-  ChevronRight
+  ChevronRight,
+  CircleDollarSign,
+  Boxes,
+  Wallet
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -116,135 +119,169 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* KPI 1: Today's Sales */}
         <div
           className="ledger-card"
-          style={{ padding: '14px 16px' }}
+          style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
         >
-          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Today's Sales
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Today's Sales
+            </span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '7px', backgroundColor: 'var(--info-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary-accent)' }}>
+              <TrendingUp size={14} />
+            </span>
           </div>
           <div
             className="tabular-nums"
             style={{
-              fontSize: '20px',
+              fontSize: '22px',
               fontWeight: 700,
               color: 'var(--text-primary)',
-              margin: '6px 0 4px'
+              margin: '10px 0 6px',
+              letterSpacing: '-0.02em'
             }}
           >
             {formatPaise(data?.todaySalesPaise)}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: (data?.todaySalesPaise || 0) > 0 ? 'var(--success-emerald)' : 'var(--text-muted)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: (data?.todaySalesPaise || 0) > 0 ? 'var(--success-emerald)' : 'var(--text-muted)' }}>
             {(data?.todaySalesPaise || 0) > 0 ? (
               <>
-                <TrendingUp size={12} />
-                <span>Today's posted invoices</span>
+                <span className="beacon-dot" />
+                <span style={{ fontWeight: 500 }}>Active posted sales</span>
               </>
             ) : (
-              <span>No sales recorded today</span>
+              <span>No transactions today</span>
             )}
           </div>
         </div>
 
         {/* KPI 2: Receivables */}
         <div
-          className="ledger-card"
-          style={{ padding: '14px 16px', cursor: 'pointer' }}
+          className="ledger-card ledger-card-interactive"
+          style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
           onClick={() => onNavigateReports('outstanding')}
           title="View Outstanding Debtors"
         >
-          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Receivables
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Receivables
+            </span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '7px', backgroundColor: 'var(--warning-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--warning-amber)' }}>
+              <ArrowDownLeft size={14} />
+            </span>
           </div>
           <div
             className="tabular-nums"
             style={{
-              fontSize: '20px',
+              fontSize: '22px',
               fontWeight: 700,
               color: 'var(--text-primary)',
-              margin: '6px 0 4px'
+              margin: '10px 0 6px',
+              letterSpacing: '-0.02em'
             }}
           >
             {formatPaise(data?.receivablesPaise)}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            {(data?.receivablesPaise || 0) > 0 ? 'Debtor balances' : 'No receivables pending'}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-secondary)' }}>
+            <span>{(data?.receivablesPaise || 0) > 0 ? 'Debtor balances' : 'Zero outstanding'}</span>
+            <ChevronRight size={12} color="var(--text-muted)" />
           </div>
         </div>
 
         {/* KPI 3: Payables */}
         <div
-          className="ledger-card"
-          style={{ padding: '14px 16px', cursor: 'pointer' }}
+          className="ledger-card ledger-card-interactive"
+          style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
           onClick={() => onNavigateReports('outstanding')}
           title="View Outstanding Creditors"
         >
-          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Payables
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Payables
+            </span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '7px', backgroundColor: 'var(--danger-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--danger-red)' }}>
+              <ArrowUpRight size={14} />
+            </span>
           </div>
           <div
             className="tabular-nums"
             style={{
-              fontSize: '20px',
+              fontSize: '22px',
               fontWeight: 700,
               color: 'var(--text-primary)',
-              margin: '6px 0 4px'
+              margin: '10px 0 6px',
+              letterSpacing: '-0.02em'
             }}
           >
             {formatPaise(data?.payablesPaise)}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            {(data?.payablesPaise || 0) > 0 ? 'Creditor balances' : 'No payables pending'}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-secondary)' }}>
+            <span>{(data?.payablesPaise || 0) > 0 ? 'Creditor liabilities' : 'Zero liabilities'}</span>
+            <ChevronRight size={12} color="var(--text-muted)" />
           </div>
         </div>
 
         {/* KPI 4: Cash & Bank */}
         <div
-          className="ledger-card"
-          style={{ padding: '14px 16px', cursor: 'pointer' }}
+          className="ledger-card ledger-card-interactive"
+          style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
           onClick={() => onNavigateReports('trial_balance')}
           title="View Liquid Balances"
         >
-          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Cash & Bank
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Cash & Bank
+            </span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '7px', backgroundColor: 'var(--success-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--success-emerald)' }}>
+              <Wallet size={14} />
+            </span>
           </div>
           <div
             className="tabular-nums"
             style={{
-              fontSize: '20px',
+              fontSize: '22px',
               fontWeight: 700,
               color: 'var(--text-primary)',
-              margin: '6px 0 4px'
+              margin: '10px 0 6px',
+              letterSpacing: '-0.02em'
             }}
           >
             {formatPaise(data?.cashBankPaise)}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            Liquid ledger accounts
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-secondary)' }}>
+            <span>Liquid reserve</span>
+            <ChevronRight size={12} color="var(--text-muted)" />
           </div>
         </div>
 
         {/* KPI 5: Stock Valuation */}
         <div
-          className="ledger-card"
-          style={{ padding: '14px 16px', cursor: 'pointer' }}
+          className="ledger-card ledger-card-interactive"
+          style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}
           onClick={() => onNavigateReports('stock_summary')}
           title="View Stock Summary"
         >
-          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Stock Valuation
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Stock Valuation
+            </span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '7px', backgroundColor: 'rgba(2, 132, 199, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--secondary-cyan)' }}>
+              <Boxes size={14} />
+            </span>
           </div>
           <div
             className="tabular-nums"
             style={{
-              fontSize: '20px',
+              fontSize: '22px',
               fontWeight: 700,
               color: 'var(--text-primary)',
-              margin: '6px 0 4px'
+              margin: '10px 0 6px',
+              letterSpacing: '-0.02em'
             }}
           >
             {formatPaise(data?.stockValuePaise)}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-            At FIFO valuation
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-secondary)' }}>
+            <span>FIFO Inventory</span>
+            <ChevronRight size={12} color="var(--text-muted)" />
           </div>
         </div>
       </div>
@@ -281,10 +318,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div
               style={{
                 display: 'inline-flex',
-                backgroundColor: 'var(--bg-app)',
-                padding: '2px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-subtle)'
+                backgroundColor: 'var(--bg-subtle)',
+                padding: '3px',
+                borderRadius: '8px',
+                border: '1px solid var(--border-subtle)',
+                gap: '2px'
               }}
             >
               {(['Monthly', 'Quarterly', 'Yearly'] as const).map((p) => (
@@ -294,11 +332,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   style={{
                     padding: '4px 10px',
                     fontSize: '11.5px',
-                    fontWeight: 600,
-                    borderRadius: '4px',
+                    fontWeight: trendPeriod === p ? 600 : 500,
+                    borderRadius: '6px',
                     backgroundColor: trendPeriod === p ? 'var(--bg-surface)' : 'transparent',
-                    color: trendPeriod === p ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    boxShadow: trendPeriod === p ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
+                    color: trendPeriod === p ? 'var(--primary-accent)' : 'var(--text-secondary)',
+                    boxShadow: trendPeriod === p ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                    border: 'none'
                   }}
                 >
                   {p}
@@ -345,7 +384,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </h2>
             <button
               className="btn-quiet"
-              style={{ fontSize: '11.5px', padding: '2px 6px' }}
+              style={{ fontSize: '11.5px', padding: '3px 8px' }}
               onClick={() => onNavigateReports('daybook')}
             >
               View Day Book
@@ -362,12 +401,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '9px 12px',
-                    borderRadius: '6px',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
                     backgroundColor: 'var(--bg-app)',
                     border: '1px solid var(--border-subtle)',
                     cursor: 'pointer',
-                    transition: 'background-color 0.1s ease'
+                    transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                    e.currentTarget.style.borderColor = 'var(--border-strong)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--bg-app)';
+                    e.currentTarget.style.borderColor = 'var(--border-subtle)';
                   }}
                 >
                   <div>
@@ -546,36 +593,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
-              gap: '8px'
+              gap: '10px'
             }}
           >
             <button
               className="btn-secondary"
               onClick={() => onOpenNewVoucher('SALES')}
-              style={{ justifyContent: 'center', fontSize: '12px', padding: '10px 8px' }}
+              style={{ justifyContent: 'center', fontSize: '12px', padding: '10px 8px', gap: '6px' }}
             >
-              New Sales
+              <Plus size={13} color="var(--primary-accent)" />
+              <span>New Sales</span>
             </button>
             <button
               className="btn-secondary"
               onClick={() => onOpenNewVoucher('PURCHASE')}
-              style={{ justifyContent: 'center', fontSize: '12px', padding: '10px 8px' }}
+              style={{ justifyContent: 'center', fontSize: '12px', padding: '10px 8px', gap: '6px' }}
             >
-              New Purchase
+              <Plus size={13} color="var(--secondary-cyan)" />
+              <span>New Purchase</span>
             </button>
             <button
               className="btn-secondary"
               onClick={() => onOpenNewVoucher('RECEIPT')}
-              style={{ justifyContent: 'center', fontSize: '12px', padding: '10px 8px' }}
+              style={{ justifyContent: 'center', fontSize: '12px', padding: '10px 8px', gap: '6px' }}
             >
-              Receipt
+              <ArrowDownLeft size={13} color="var(--success-emerald)" />
+              <span>Receipt</span>
             </button>
             <button
               className="btn-secondary"
               onClick={() => onOpenNewVoucher('PAYMENT')}
-              style={{ justifyContent: 'center', fontSize: '12px', padding: '10px 8px' }}
+              style={{ justifyContent: 'center', fontSize: '12px', padding: '10px 8px', gap: '6px' }}
             >
-              Payment
+              <ArrowUpRight size={13} color="var(--warning-amber)" />
+              <span>Payment</span>
             </button>
           </div>
         </div>

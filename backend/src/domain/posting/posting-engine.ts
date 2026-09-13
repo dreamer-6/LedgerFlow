@@ -259,42 +259,55 @@ export class PostingEngine {
     // 3. Assemble Accounting Lines
     let ledgerLines: LedgerPostingLine[] = [];
 
+    const findLedgerId = (possibleIds: string[], nameMatch?: string) => {
+      for (const id of possibleIds) {
+        const scoped = `${input.companyId}_${id}`;
+        if (db.prepare('SELECT 1 FROM ledgers WHERE ledger_id = ?').get(scoped)) return scoped;
+        if (db.prepare('SELECT 1 FROM ledgers WHERE ledger_id = ?').get(id)) return id;
+      }
+      if (nameMatch) {
+        const row = db.prepare('SELECT ledger_id FROM ledgers WHERE company_id = ? AND ledger_name LIKE ? LIMIT 1').get(input.companyId, nameMatch) as any;
+        if (row) return row.ledger_id;
+      }
+      return possibleIds[0];
+    };
+
     if (input.customLedgerLines && input.customLedgerLines.length > 0) {
       ledgerLines = input.customLedgerLines;
     } else if (input.voucherType === 'SALES') {
       if (!partyLedgerId) throw new Error('Party (Customer) is mandatory for Sales voucher.');
       ledgerLines = DoubleEntryEngine.buildSalesEntries({
         customerLedgerId: partyLedgerId,
-        salesLedgerId: 'led_sales',
+        salesLedgerId: findLedgerId(['led_sales'], '%Sales%'),
         taxableAmountPaise: voucherTotals.taxableAmountPaise,
         cgstAmountPaise: voucherTotals.cgstAmountPaise,
         sgstAmountPaise: voucherTotals.sgstAmountPaise,
         igstAmountPaise: voucherTotals.igstAmountPaise,
         roundOffPaise: voucherTotals.roundOffPaise,
         totalAmountPaise: voucherTotals.totalAmountPaise,
-        outputCgstLedgerId: 'led_output_cgst',
-        outputSgstLedgerId: 'led_output_sgst',
-        outputIgstLedgerId: 'led_output_igst',
-        roundOffLedgerId: 'led_round_off',
+        outputCgstLedgerId: findLedgerId(['led_out_cgst', 'led_output_cgst'], '%Output CGST%'),
+        outputSgstLedgerId: findLedgerId(['led_out_sgst', 'led_output_sgst'], '%Output SGST%'),
+        outputIgstLedgerId: findLedgerId(['led_out_igst', 'led_output_igst'], '%Output IGST%'),
+        roundOffLedgerId: findLedgerId(['led_roundoff', 'led_round_off'], '%Round Off%'),
         cogsAmountPaise,
-        cogsLedgerId: 'led_cogs',
-        inventoryLedgerId: 'led_inventory'
+        cogsLedgerId: findLedgerId(['led_cogs'], '%Cost of Goods%'),
+        inventoryLedgerId: findLedgerId(['led_inventory'], '%Inventory%')
       });
     } else if (input.voucherType === 'PURCHASE') {
       if (!partyLedgerId) throw new Error('Party (Supplier) is mandatory for Purchase voucher.');
       ledgerLines = DoubleEntryEngine.buildPurchaseEntries({
         supplierLedgerId: partyLedgerId,
-        purchaseLedgerId: 'led_purchase',
+        purchaseLedgerId: findLedgerId(['led_purchase'], '%Purchase%'),
         taxableAmountPaise: voucherTotals.taxableAmountPaise,
         cgstAmountPaise: voucherTotals.cgstAmountPaise,
         sgstAmountPaise: voucherTotals.sgstAmountPaise,
         igstAmountPaise: voucherTotals.igstAmountPaise,
         roundOffPaise: voucherTotals.roundOffPaise,
         totalAmountPaise: voucherTotals.totalAmountPaise,
-        inputCgstLedgerId: 'led_input_cgst',
-        inputSgstLedgerId: 'led_input_sgst',
-        inputIgstLedgerId: 'led_input_igst',
-        roundOffLedgerId: 'led_round_off'
+        inputCgstLedgerId: findLedgerId(['led_in_cgst', 'led_input_cgst'], '%Input CGST%'),
+        inputSgstLedgerId: findLedgerId(['led_in_sgst', 'led_input_sgst'], '%Input SGST%'),
+        inputIgstLedgerId: findLedgerId(['led_in_igst', 'led_input_igst'], '%Input IGST%'),
+        roundOffLedgerId: findLedgerId(['led_roundoff', 'led_round_off'], '%Round Off%')
       });
     }
 

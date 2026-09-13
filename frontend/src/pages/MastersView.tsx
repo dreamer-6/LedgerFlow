@@ -315,11 +315,13 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
       <div
         style={{
           display: 'flex',
-          gap: '8px',
-          borderBottom: '1px solid var(--border-subtle)',
+          gap: '4px',
+          backgroundColor: 'var(--bg-subtle)',
+          padding: '4px',
+          borderRadius: '10px',
+          border: '1px solid var(--border-subtle)',
           marginBottom: '20px',
-          overflowX: 'auto',
-          paddingBottom: '4px'
+          overflowX: 'auto'
         }}
       >
         {tabs.map((t) => {
@@ -336,14 +338,16 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '10px 16px',
-                borderBottom: isActive ? '2px solid var(--primary-accent)' : '2px solid transparent',
-                borderRadius: '0',
-                backgroundColor: 'transparent',
+                padding: '8px 16px',
+                borderRadius: '7px',
+                backgroundColor: isActive ? 'var(--bg-surface)' : 'transparent',
                 color: isActive ? 'var(--primary-accent)' : 'var(--text-secondary)',
-                fontWeight: isActive ? 700 : 500,
-                fontSize: '13px',
-                whiteSpace: 'nowrap'
+                fontWeight: isActive ? 600 : 500,
+                fontSize: '12.5px',
+                whiteSpace: 'nowrap',
+                boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                border: 'none',
+                transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
               }}
             >
               {t.icon}
@@ -353,9 +357,11 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
                   className="tabular-nums"
                   style={{
                     fontSize: '11px',
-                    backgroundColor: isActive ? 'var(--bg-selected)' : 'var(--bg-subtle)',
+                    backgroundColor: isActive ? 'var(--bg-selected)' : 'var(--kbd-bg)',
+                    color: isActive ? 'var(--primary-accent)' : 'var(--text-muted)',
                     padding: '1px 6px',
-                    borderRadius: '10px'
+                    borderRadius: '10px',
+                    fontWeight: 600
                   }}
                 >
                   {t.count}

@@ -6,60 +6,269 @@ import { PostingEngine } from '../domain/posting/posting-engine.js';
 import { ReportEngine } from '../reports/report-engine.js';
 import { GstEngine } from '../domain/tax/gst-engine.js';
 import { InventoryEngine } from '../domain/inventory/valuation.js';
+import { initializeBusiness } from '../database/seed.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'ledgerflow_secure_secret_key_2026';
+
+// Helper: Extract authenticated user from Authorization header
+export function getUserFromToken(req: Request): any | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return null;
+  try {
+    const token = authHeader.replace('Bearer ', '');
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
+
+// Helper: Resolve active company ID for multi-tenant isolation
+export function resolveCompanyId(req: Request, db: DatabaseSync, user?: any): string {
+  const headerId = req.headers['x-company-id'] as string;
+  const queryId = req.query.companyId as string;
+  const requested = headerId || queryId;
+
+  if (user?.userId) {
+    if (requested) {
+      const access = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? AND company_id = ?').get(user.userId, requested) as any;
+      if (access) return access.company_id;
+    }
+    const first = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? ORDER BY created_at ASC LIMIT 1').get(user.userId) as any;
+    if (first) return first.company_id;
+  }
+
+  if (requested) {
+    const exists = db.prepare('SELECT company_id FROM companies WHERE company_id = ?').get(requested) as any;
+    if (exists) return exists.company_id;
+  }
+
+  const def = db.prepare('SELECT company_id FROM companies ORDER BY created_at ASC LIMIT 1').get() as any;
+  return def?.company_id || 'comp_default_01';
+}
 
 export function createApiRouter(db: DatabaseSync): Router {
   const router = Router();
 
-  // ---------------- AUTHENTICATION ----------------
-  router.post('/auth/login', (req: Request, res: Response) => {
-    try {
-      const { username, password } = req.body;
-      const user = db.prepare('SELECT user_id, username, password_hash, full_name, role FROM users WHERE username = ? AND is_active = 1')
-        .get(username) as any;
+  // ---------------- AUTHENTICATION & MULTI-TENANCY ----------------
 
-      if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-        return res.status(401).json({ error: 'Invalid username or password.' });
+  // Sign Up / Register new SaaS account with first business
+  router.post('/auth/register', (req: Request, res: Response) => {
+    try {
+      const { email, password, fullName, businessName, gstin, state, stateCode } = req.body;
+
+      if (!email || !password || !fullName || !businessName) {
+        return res.status(400).json({ error: 'Email, password, full name, and business name are required.' });
       }
 
+      const cleanEmail = email.trim().toLowerCase();
+      const existing = db.prepare('SELECT user_id FROM users WHERE LOWER(email) = ? OR LOWER(username) = ?')
+        .get(cleanEmail, cleanEmail) as any;
+
+      if (existing) {
+        return res.status(400).json({ error: 'An account with this email address already exists. Please sign in.' });
+      }
+
+      const userId = 'usr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+      const salt = bcrypt.genSaltSync(10);
+      const passwordHash = bcrypt.hashSync(password, salt);
+
+      // 1. Create User
+      db.prepare(`
+        INSERT INTO users (user_id, username, email, password_hash, full_name, role)
+        VALUES (?, ?, ?, ?, ?, 'ADMIN')
+      `).run(userId, cleanEmail, cleanEmail, passwordHash, fullName.trim());
+
+      // 2. Provision Isolated Business
+      const companyId = 'comp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+      initializeBusiness(db, {
+        companyId,
+        companyName: businessName.trim(),
+        gstin: gstin ? gstin.trim() : '',
+        state: state || 'Tamil Nadu',
+        stateCode: stateCode || '33',
+        ownerUserId: userId
+      });
+
       const token = jwt.sign(
-        { userId: user.user_id, username: user.username, role: user.role, name: user.full_name },
+        { userId, username: cleanEmail, role: 'ADMIN', name: fullName.trim(), email: cleanEmail },
         JWT_SECRET,
-        { expiresIn: '24h' }
+        { expiresIn: '30d' }
       );
 
-      res.json({
+      const businesses = db.prepare(`
+        SELECT c.*, ub.role
+        FROM companies c
+        JOIN user_businesses ub ON c.company_id = ub.company_id
+        WHERE ub.user_id = ?
+        ORDER BY c.created_at ASC
+      `).all(userId);
+
+      res.status(201).json({
         token,
         user: {
-          userId: user.user_id,
-          username: user.username,
-          fullName: user.full_name,
-          role: user.role
-        }
+          userId,
+          email: cleanEmail,
+          fullName: fullName.trim(),
+          role: 'ADMIN'
+        },
+        activeCompanyId: companyId,
+        businesses
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  router.get('/auth/me', (req: Request, res: Response) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
+  // Login to SaaS account
+  router.post('/auth/login', (req: Request, res: Response) => {
     try {
-      const token = authHeader.replace('Bearer ', '');
-      const decoded = jwt.verify(token, JWT_SECRET);
-      res.json({ user: decoded });
-    } catch {
-      res.status(401).json({ error: 'Invalid token' });
+      const { username, email, emailOrUsername, password } = req.body;
+      const identifier = (emailOrUsername || email || username || '').trim().toLowerCase();
+
+      if (!identifier || !password) {
+        return res.status(400).json({ error: 'Email/username and password are required.' });
+      }
+
+      const user = db.prepare(`
+        SELECT user_id, username, email, password_hash, full_name, role
+        FROM users
+        WHERE (LOWER(username) = ? OR LOWER(email) = ?) AND is_active = 1
+      `).get(identifier, identifier) as any;
+
+      if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+        return res.status(401).json({ error: 'Invalid email or password.' });
+      }
+
+      const token = jwt.sign(
+        { userId: user.user_id, username: user.username, role: user.role, name: user.full_name, email: user.email },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
+
+      let businesses = db.prepare(`
+        SELECT c.*, ub.role
+        FROM companies c
+        JOIN user_businesses ub ON c.company_id = ub.company_id
+        WHERE ub.user_id = ?
+        ORDER BY c.created_at ASC
+      `).all(user.user_id) as any[];
+
+      // If user has no businesses linked yet, link to first company or create one
+      if (businesses.length === 0) {
+        const defCompany = db.prepare('SELECT * FROM companies LIMIT 1').get() as any;
+        if (defCompany) {
+          db.prepare('INSERT OR IGNORE INTO user_businesses (user_id, company_id, role) VALUES (?, ?, ?)')
+            .run(user.user_id, defCompany.company_id, 'OWNER');
+          businesses = [{ ...defCompany, role: 'OWNER' }];
+        }
+      }
+
+      res.json({
+        token,
+        user: {
+          userId: user.user_id,
+          email: user.email || user.username,
+          username: user.username,
+          fullName: user.full_name,
+          role: user.role
+        },
+        activeCompanyId: businesses[0]?.company_id || null,
+        businesses
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Current User & Accessible Businesses
+  router.get('/auth/me', (req: Request, res: Response) => {
+    const user = getUserFromToken(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+      const dbUser = db.prepare('SELECT user_id, username, email, full_name, role FROM users WHERE user_id = ?').get(user.userId) as any;
+      const businesses = db.prepare(`
+        SELECT c.*, ub.role
+        FROM companies c
+        JOIN user_businesses ub ON c.company_id = ub.company_id
+        WHERE ub.user_id = ?
+        ORDER BY c.created_at ASC
+      `).all(user.userId);
+
+      res.json({
+        user: dbUser || user,
+        businesses
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ---------------- BUSINESSES (TENANTS) ----------------
+
+  // List all businesses for current user
+  router.get('/businesses', (req: Request, res: Response) => {
+    try {
+      const user = getUserFromToken(req);
+      let businesses: any[];
+      if (user?.userId) {
+        businesses = db.prepare(`
+          SELECT c.*, ub.role
+          FROM companies c
+          JOIN user_businesses ub ON c.company_id = ub.company_id
+          WHERE ub.user_id = ?
+          ORDER BY c.created_at ASC
+        `).all(user.userId);
+      } else {
+        businesses = db.prepare('SELECT * FROM companies ORDER BY created_at ASC').all();
+      }
+      res.json(businesses);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Create an additional isolated business for current user
+  router.post('/businesses', (req: Request, res: Response) => {
+    try {
+      const user = getUserFromToken(req);
+      if (!user?.userId) {
+        return res.status(401).json({ error: 'Authentication required to create a new business.' });
+      }
+
+      const { companyName, legalName, gstin, state, stateCode } = req.body;
+      if (!companyName || !companyName.trim()) {
+        return res.status(400).json({ error: 'Business name is required.' });
+      }
+
+      const companyId = 'comp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+      initializeBusiness(db, {
+        companyId,
+        companyName: companyName.trim(),
+        legalName: (legalName || companyName).trim(),
+        gstin: gstin ? gstin.trim() : '',
+        state: state || 'Tamil Nadu',
+        stateCode: stateCode || '33',
+        ownerUserId: user.userId
+      });
+
+      const newCompany = db.prepare('SELECT * FROM companies WHERE company_id = ?').get(companyId);
+      res.status(201).json({
+        company: newCompany,
+        message: 'Business created and isolated accounting initialized successfully.'
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
   // ---------------- COMPANY & FINANCIAL YEARS ----------------
   router.get('/companies/current', (req: Request, res: Response) => {
     try {
-      const company = db.prepare('SELECT * FROM companies LIMIT 1').get();
-      const activeFy = db.prepare("SELECT * FROM financial_years WHERE status = 'OPEN' LIMIT 1").get();
+      const user = getUserFromToken(req);
+      const companyId = resolveCompanyId(req, db, user);
+      const company = db.prepare('SELECT * FROM companies WHERE company_id = ?').get(companyId);
+      const activeFy = db.prepare("SELECT * FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(companyId);
       res.json({ company, activeFinancialYear: activeFy });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -68,7 +277,11 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.put('/companies/current', (req: Request, res: Response) => {
     try {
+      const user = getUserFromToken(req);
+      const companyId = resolveCompanyId(req, db, user);
       const b = req.body;
+      const targetId = b.company_id || companyId;
+
       db.prepare(`
         UPDATE companies SET
           company_name = ?, legal_name = ?, gstin = ?, pan = ?,
@@ -80,7 +293,7 @@ export function createApiRouter(db: DatabaseSync): Router {
         b.company_name, b.legal_name, b.gstin, b.pan,
         b.address_line1, b.address_line2, b.city, b.state, b.state_code, b.pincode,
         b.phone, b.email, b.bank_name, b.bank_account_no, b.bank_ifsc, b.bank_branch,
-        b.terms_and_conditions, b.company_id
+        b.terms_and_conditions, targetId
       );
       res.json({ success: true });
     } catch (err: any) {
@@ -90,23 +303,27 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/financial-years', (req: Request, res: Response) => {
     try {
-      const rows = db.prepare('SELECT * FROM financial_years ORDER BY start_date DESC').all();
+      const user = getUserFromToken(req);
+      const companyId = resolveCompanyId(req, db, user);
+      const rows = db.prepare('SELECT * FROM financial_years WHERE company_id = ? ORDER BY start_date DESC').all(companyId);
       res.json(rows);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // ---------------- MASTERS ----------------
+  // ---------------- MASTERS (TENANT ISOLATED) ----------------
   router.get('/masters/ledgers', (req: Request, res: Response) => {
     try {
+      const user = getUserFromToken(req);
+      const companyId = resolveCompanyId(req, db, user);
       const rows = db.prepare(`
         SELECT l.*, g.group_name, g.nature
         FROM ledgers l
         JOIN ledger_groups g ON l.group_id = g.group_id
-        WHERE l.is_active = 1
+        WHERE l.company_id = ? AND l.is_active = 1
         ORDER BY l.ledger_name ASC
-      `).all();
+      `).all(companyId);
       res.json(rows);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -115,13 +332,15 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.post('/masters/ledgers', (req: Request, res: Response) => {
     try {
-      const { companyId, groupId, ledgerName, code, openingBalancePaise, openingBalanceType } = req.body;
+      const user = getUserFromToken(req);
+      const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, user);
+      const { groupId, ledgerName, code, openingBalancePaise, openingBalanceType } = req.body;
       const ledgerId = 'led_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 
       db.prepare(`
         INSERT INTO ledgers (ledger_id, company_id, group_id, ledger_name, code, opening_balance_paise, opening_balance_type)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(ledgerId, companyId, groupId, ledgerName, code || null, openingBalancePaise || 0, openingBalanceType || 'DR');
+      `).run(ledgerId, targetCompanyId, groupId, ledgerName, code || null, openingBalancePaise || 0, openingBalanceType || 'DR');
 
       res.status(201).json({ ledgerId, ledgerName });
     } catch (err: any) {
@@ -131,7 +350,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/masters/groups', (req: Request, res: Response) => {
     try {
-      const rows = db.prepare('SELECT * FROM ledger_groups ORDER BY group_name ASC').all();
+      const user = getUserFromToken(req);
+      const companyId = resolveCompanyId(req, db, user);
+      const rows = db.prepare('SELECT * FROM ledger_groups WHERE company_id = ? OR company_id IS NULL ORDER BY group_name ASC').all(companyId);
       res.json(rows);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -140,6 +361,8 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/masters/parties', (req: Request, res: Response) => {
     try {
+      const user = getUserFromToken(req);
+      const companyId = resolveCompanyId(req, db, user);
       const type = req.query.type as string;
       let query = `
         SELECT p.*, pa.address_line1, pa.address_line2, pa.city, pa.state, pa.state_code, pa.pincode,
@@ -149,10 +372,11 @@ export function createApiRouter(db: DatabaseSync): Router {
         FROM parties p
         JOIN ledgers l ON p.ledger_id = l.ledger_id
         LEFT JOIN party_addresses pa ON p.party_id = pa.party_id
+        WHERE p.company_id = ?
       `;
-      const params: any[] = [];
+      const params: any[] = [companyId];
       if (type) {
-        query += ` WHERE p.party_type = ? OR p.party_type = 'BOTH'`;
+        query += ` AND (p.party_type = ? OR p.party_type = 'BOTH')`;
         params.push(type);
       }
       query += ` ORDER BY p.party_name ASC`;
@@ -165,8 +389,10 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.post('/masters/parties', (req: Request, res: Response) => {
     try {
+      const user = getUserFromToken(req);
+      const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, user);
       const {
-        companyId, partyName, partyType, gstin, pan, phone, email, contactPerson, bankName,
+        partyName, partyType, gstin, pan, phone, email, contactPerson, bankName,
         addressLine1, addressLine2, city, state, stateCode, pincode, openingBalancePaise
       } = req.body;
 
@@ -183,20 +409,25 @@ export function createApiRouter(db: DatabaseSync): Router {
       db.exec('BEGIN TRANSACTION;');
       const partyId = 'party_' + Date.now().toString(36);
       const ledgerId = 'led_pty_' + Date.now().toString(36);
-      const groupId = partyType === 'SUPPLIER' ? 'grp_creditors' : 'grp_debtors';
+
+      // Find appropriate group for this company
+      const groupSearch = partyType === 'SUPPLIER' ? '%Creditor%' : '%Debtor%';
+      const foundGroup = db.prepare('SELECT group_id FROM ledger_groups WHERE (company_id = ? OR company_id IS NULL) AND group_name LIKE ? LIMIT 1')
+        .get(targetCompanyId, groupSearch) as { group_id: string } | undefined;
+      const groupId = foundGroup?.group_id || (partyType === 'SUPPLIER' ? `${targetCompanyId}_grp_creditors` : `${targetCompanyId}_grp_debtors`);
       const balType = partyType === 'SUPPLIER' ? 'CR' : 'DR';
 
       // 1. Create Ledger for party
       db.prepare(`
         INSERT INTO ledgers (ledger_id, company_id, group_id, ledger_name, opening_balance_paise, opening_balance_type, is_party)
         VALUES (?, ?, ?, ?, ?, ?, 1)
-      `).run(ledgerId, companyId, groupId, partyName.trim(), openingBalancePaise || 0, balType);
+      `).run(ledgerId, targetCompanyId, groupId, partyName.trim(), openingBalancePaise || 0, balType);
 
       // 2. Create Party
       db.prepare(`
         INSERT INTO parties (party_id, company_id, ledger_id, party_type, party_name, gstin, pan, phone, email, contact_person, bank_name)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(partyId, companyId, ledgerId, partyType, partyName.trim(), gstin || null, derivedPan || null, phone || null, email || null, contactPerson || null, bankName || null);
+      `).run(partyId, targetCompanyId, ledgerId, partyType, partyName.trim(), gstin || null, derivedPan || null, phone || null, email || null, contactPerson || null, bankName || null);
 
       // 3. Create Address
       db.prepare(`
@@ -345,13 +576,15 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/masters/items', (req: Request, res: Response) => {
     try {
+      const user = getUserFromToken(req);
+      const companyId = resolveCompanyId(req, db, user);
       const rows = db.prepare(`
         SELECT si.*, u.symbol as unit_symbol
         FROM stock_items si
-        JOIN units u ON si.unit_id = u.unit_id
-        WHERE si.is_active = 1
+        LEFT JOIN units u ON si.unit_id = u.unit_id
+        WHERE si.company_id = ? AND si.is_active = 1
         ORDER BY si.item_name ASC
-      `).all();
+      `).all(companyId);
       res.json(rows);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -360,18 +593,33 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.post('/masters/items', (req: Request, res: Response) => {
     try {
+      const user = getUserFromToken(req);
+      const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, user);
       const b = req.body;
       if (!b.itemName || !b.itemName.trim()) {
         return res.status(400).json({ error: 'Item name is required.' });
       }
 
       const existing = db.prepare('SELECT item_id, item_name FROM stock_items WHERE company_id = ? AND LOWER(item_name) = LOWER(?)')
-        .get(b.companyId, b.itemName.trim()) as { item_id: string; item_name: string } | undefined;
+        .get(targetCompanyId, b.itemName.trim()) as { item_id: string; item_name: string } | undefined;
 
       if (existing) {
         return res.status(400).json({
           error: `A stock item named '${b.itemName}' already exists. To increase or add stock quantity, record a Purchase Voucher (Alt+V -> Purchase) or edit the existing item.`
         });
+      }
+
+      // Resolve default unit and godown for this company if needed
+      let unitId = b.unitId;
+      if (!unitId || unitId === 'unit_nos') {
+        const defUnit = db.prepare('SELECT unit_id FROM units WHERE company_id = ? LIMIT 1').get(targetCompanyId) as any;
+        unitId = defUnit?.unit_id || b.unitId || 'unit_nos';
+      }
+
+      let godownId = b.godownId;
+      if (!godownId || godownId === 'godown_main') {
+        const defGodown = db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? LIMIT 1').get(targetCompanyId) as any;
+        godownId = defGodown?.godown_id || 'godown_main';
       }
 
       const itemId = 'item_' + Date.now().toString(36);
@@ -382,8 +630,8 @@ export function createApiRouter(db: DatabaseSync): Router {
           opening_qty, opening_rate_paise, reorder_level
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        itemId, b.companyId, b.itemName.trim(), b.itemCode || null, b.sku || null, b.hsnSac || '9999',
-        b.unitId || 'unit_nos', b.gstRate || 18, b.cessRate || 0,
+        itemId, targetCompanyId, b.itemName.trim(), b.itemCode || null, b.sku || null, b.hsnSac || '9999',
+        unitId, b.gstRate || 18, b.cessRate || 0,
         b.purchaseRatePaise || 0, b.sellingRatePaise || 0,
         b.openingQty || 0, b.openingRatePaise || 0, b.reorderLevel || 0
       );
@@ -393,8 +641,8 @@ export function createApiRouter(db: DatabaseSync): Router {
         const openingVal = Math.round(b.openingQty * (b.openingRatePaise || 0));
         db.prepare(`
           INSERT INTO stock_entries (stock_entry_id, voucher_id, item_id, godown_id, entry_date, movement_type, quantity, rate_paise, value_paise)
-          VALUES (?, 'vch_opening', ?, 'godown_main', '2026-04-01', 'IN', ?, ?, ?)
-        `).run('se_opn_' + itemId, itemId, b.openingQty, b.openingRatePaise || 0, openingVal);
+          VALUES (?, 'vch_opening', ?, ?, '2026-04-01', 'IN', ?, ?, ?)
+        `).run('se_opn_' + itemId, itemId, godownId, b.openingQty, b.openingRatePaise || 0, openingVal);
       }
 
       res.status(201).json({ itemId, itemName: b.itemName });
@@ -452,7 +700,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/masters/godowns', (req: Request, res: Response) => {
     try {
-      const rows = db.prepare('SELECT * FROM godowns').all();
+      const user = getUserFromToken(req);
+      const companyId = resolveCompanyId(req, db, user);
+      const rows = db.prepare('SELECT * FROM godowns WHERE company_id = ? OR company_id IS NULL ORDER BY godown_name ASC').all(companyId);
       res.json(rows);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -461,7 +711,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/masters/units', (req: Request, res: Response) => {
     try {
-      const rows = db.prepare('SELECT * FROM units').all();
+      const user = getUserFromToken(req);
+      const companyId = resolveCompanyId(req, db, user);
+      const rows = db.prepare('SELECT * FROM units WHERE company_id = ? OR company_id IS NULL ORDER BY unit_name ASC').all(companyId);
       res.json(rows);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -471,7 +723,9 @@ export function createApiRouter(db: DatabaseSync): Router {
   // ---------------- VOUCHER OPERATIONS ----------------
   router.get('/vouchers/next-number', (req: Request, res: Response) => {
     try {
-      const { companyId, fyId, type } = req.query as { companyId: string; fyId: string; type: string };
+      const user = getUserFromToken(req);
+      const companyId = (req.query.companyId as string) || resolveCompanyId(req, db, user);
+      const { fyId, type } = req.query as { fyId: string; type: string };
       const nextNum = PostingEngine.getNextVoucherNumber(db, companyId, fyId, type);
       res.json({ nextVoucherNumber: nextNum });
     } catch (err: any) {
@@ -481,7 +735,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/vouchers', (req: Request, res: Response) => {
     try {
-      const { companyId, type, fromDate, toDate } = req.query as any;
+      const user = getUserFromToken(req);
+      const companyId = (req.query.companyId as string) || resolveCompanyId(req, db, user);
+      const { type, fromDate, toDate } = req.query as any;
       let query = `
         SELECT v.*, p.party_name
         FROM vouchers v
@@ -556,7 +812,10 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.post('/vouchers', (req: Request, res: Response) => {
     try {
-      const result = PostingEngine.postVoucher(db, req.body);
+      const user = getUserFromToken(req);
+      const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, user);
+      const payload = { ...req.body, companyId: targetCompanyId };
+      const result = PostingEngine.postVoucher(db, payload);
       res.status(201).json(result);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -576,7 +835,8 @@ export function createApiRouter(db: DatabaseSync): Router {
   // ---------------- REPORTS ----------------
   router.get('/reports/dashboard', (req: Request, res: Response) => {
     try {
-      const { companyId } = req.query as { companyId: string };
+      const user = getUserFromToken(req);
+      const companyId = (req.query.companyId as string) || resolveCompanyId(req, db, user);
       const today = new Date().toISOString().split('T')[0];
 
       // Today Sales
@@ -591,7 +851,8 @@ export function createApiRouter(db: DatabaseSync): Router {
         SELECT COALESCE(SUM(le.debit_paise - le.credit_paise), 0) as balance
         FROM ledger_entries le
         JOIN ledgers l ON le.ledger_id = l.ledger_id
-        WHERE l.company_id = ? AND l.group_id = 'grp_debtors'
+        JOIN ledger_groups g ON l.group_id = g.group_id
+        WHERE l.company_id = ? AND (l.group_id LIKE '%debtor%' OR g.group_name LIKE '%Debtor%')
       `).get(companyId) as { balance: number };
 
       // Total Payables
@@ -599,7 +860,8 @@ export function createApiRouter(db: DatabaseSync): Router {
         SELECT COALESCE(SUM(le.credit_paise - le.debit_paise), 0) as balance
         FROM ledger_entries le
         JOIN ledgers l ON le.ledger_id = l.ledger_id
-        WHERE l.company_id = ? AND l.group_id = 'grp_creditors'
+        JOIN ledger_groups g ON l.group_id = g.group_id
+        WHERE l.company_id = ? AND (l.group_id LIKE '%creditor%' OR g.group_name LIKE '%Creditor%')
       `).get(companyId) as { balance: number };
 
       // Cash & Bank
@@ -607,7 +869,8 @@ export function createApiRouter(db: DatabaseSync): Router {
         SELECT COALESCE(SUM(le.debit_paise - le.credit_paise), 0) as balance
         FROM ledger_entries le
         JOIN ledgers l ON le.ledger_id = l.ledger_id
-        WHERE l.company_id = ? AND l.group_id IN ('grp_cash', 'grp_bank')
+        JOIN ledger_groups g ON l.group_id = g.group_id
+        WHERE l.company_id = ? AND (l.group_id LIKE '%cash%' OR l.group_id LIKE '%bank%' OR g.group_name LIKE '%Cash%' OR g.group_name LIKE '%Bank%')
       `).get(companyId) as { balance: number };
 
       // Stock Value
@@ -661,7 +924,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/reports/daybook', (req: Request, res: Response) => {
     try {
-      const { companyId, fromDate, toDate } = req.query as any;
+      const user = getUserFromToken(req);
+      const companyId = (req.query.companyId as string) || resolveCompanyId(req, db, user);
+      const { fromDate, toDate } = req.query as any;
       const data = ReportEngine.getDayBook(db, companyId, fromDate, toDate);
       res.json(data);
     } catch (err: any) {
@@ -681,7 +946,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/reports/trial-balance', (req: Request, res: Response) => {
     try {
-      const { companyId, asOnDate } = req.query as any;
+      const user = getUserFromToken(req);
+      const companyId = (req.query.companyId as string) || resolveCompanyId(req, db, user);
+      const { asOnDate } = req.query as any;
       const data = ReportEngine.getTrialBalance(db, companyId, asOnDate);
       res.json(data);
     } catch (err: any) {
@@ -691,7 +958,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/reports/profit-loss', (req: Request, res: Response) => {
     try {
-      const { companyId, fromDate, toDate } = req.query as any;
+      const user = getUserFromToken(req);
+      const companyId = (req.query.companyId as string) || resolveCompanyId(req, db, user);
+      const { fromDate, toDate } = req.query as any;
       const data = ReportEngine.getProfitAndLoss(db, companyId, fromDate, toDate);
       res.json(data);
     } catch (err: any) {
@@ -701,7 +970,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/reports/balance-sheet', (req: Request, res: Response) => {
     try {
-      const { companyId, asOnDate } = req.query as any;
+      const user = getUserFromToken(req);
+      const companyId = (req.query.companyId as string) || resolveCompanyId(req, db, user);
+      const { asOnDate } = req.query as any;
       const data = ReportEngine.getBalanceSheet(db, companyId, asOnDate);
       res.json(data);
     } catch (err: any) {
@@ -711,7 +982,8 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/reports/stock-summary', (req: Request, res: Response) => {
     try {
-      const { companyId } = req.query as any;
+      const user = getUserFromToken(req);
+      const companyId = (req.query.companyId as string) || resolveCompanyId(req, db, user);
       const data = ReportEngine.getStockSummary(db, companyId);
       res.json(data);
     } catch (err: any) {
@@ -721,7 +993,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/reports/outstanding', (req: Request, res: Response) => {
     try {
-      const { companyId, type } = req.query as any;
+      const user = getUserFromToken(req);
+      const companyId = (req.query.companyId as string) || resolveCompanyId(req, db, user);
+      const { type } = req.query as any;
       const data = ReportEngine.getOutstandingReport(db, companyId, type || 'CUSTOMER');
       res.json(data);
     } catch (err: any) {
@@ -731,7 +1005,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/reports/gst-summary', (req: Request, res: Response) => {
     try {
-      const { companyId, fromDate, toDate } = req.query as any;
+      const user = getUserFromToken(req);
+      const companyId = (req.query.companyId as string) || resolveCompanyId(req, db, user);
+      const { fromDate, toDate } = req.query as any;
       const data = ReportEngine.getGstSummary(db, companyId, fromDate, toDate);
       res.json(data);
     } catch (err: any) {

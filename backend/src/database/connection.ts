@@ -38,6 +38,19 @@ export function getDatabase(customPath?: string): DatabaseSync {
   try { db.exec('ALTER TABLE vouchers ADD COLUMN terms_conditions TEXT;'); } catch {}
   try { db.exec('ALTER TABLE voucher_lines ADD COLUMN description TEXT;'); } catch {}
   try { db.exec('ALTER TABLE parties ADD COLUMN bank_name TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE users ADD COLUMN email TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE companies ADD COLUMN owner_user_id TEXT;'); } catch {}
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS user_businesses (
+        user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        company_id TEXT NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
+        role TEXT CHECK(role IN ('OWNER', 'ADMIN', 'ACCOUNTANT', 'VIEWER')) DEFAULT 'OWNER',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, company_id)
+      );
+    `);
+  } catch {}
 
   if (!customPath) {
     dbInstance = db;

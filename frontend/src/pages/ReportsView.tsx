@@ -110,8 +110,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       <div
         style={{
           display: 'flex',
-          gap: '6px',
-          borderBottom: '1px solid var(--border-subtle)',
+          gap: '4px',
+          backgroundColor: 'var(--bg-subtle)',
+          padding: '4px',
+          borderRadius: '10px',
+          border: '1px solid var(--border-subtle)',
           marginBottom: '20px',
           overflowX: 'auto'
         }}
@@ -126,14 +129,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '10px 14px',
-                borderBottom: isActive ? '2px solid var(--primary-accent)' : '2px solid transparent',
-                borderRadius: '0',
-                backgroundColor: 'transparent',
+                padding: '8px 14px',
+                borderRadius: '7px',
+                backgroundColor: isActive ? 'var(--bg-surface)' : 'transparent',
                 color: isActive ? 'var(--primary-accent)' : 'var(--text-secondary)',
-                fontWeight: isActive ? 700 : 500,
+                fontWeight: isActive ? 600 : 500,
                 fontSize: '12.5px',
-                whiteSpace: 'nowrap'
+                whiteSpace: 'nowrap',
+                boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
+                border: 'none',
+                transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
               }}
             >
               {t.icon}
