@@ -118,15 +118,21 @@ export const api = {
     username?: string;
     password: string;
     companyName: string;
+    businessName?: string;
     legalName?: string;
     gstin?: string;
     state?: string;
     stateCode?: string;
   }) {
+    const payload = {
+      ...info,
+      businessName: info.businessName || info.companyName,
+      companyName: info.companyName
+    };
     const res = await fetch(`${API_BASE}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(info)
+      body: JSON.stringify(payload)
     });
     if (!res.ok) {
       let msg = 'Registration failed';
@@ -141,8 +147,9 @@ export const api = {
     const data = await res.json();
     authStorage.setToken(data.token);
     authStorage.setUser(data.user);
-    if (data.company?.company_id) {
-      authStorage.setActiveCompanyId(data.company.company_id);
+    const resolvedCompId = data.activeCompanyId || data.company?.company_id || data.businesses?.[0]?.company_id;
+    if (resolvedCompId) {
+      authStorage.setActiveCompanyId(resolvedCompId);
     }
     return data;
   },

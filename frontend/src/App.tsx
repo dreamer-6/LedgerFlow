@@ -11,6 +11,7 @@ import { MastersView } from './pages/MastersView';
 import { UtilitiesView } from './pages/UtilitiesView';
 import { SettingsView } from './pages/SettingsView';
 import { InvoicePrintModal } from './pages/InvoicePrintModal';
+import { CreateBusinessOnboarding } from './components/CreateBusinessOnboarding';
 import {
   Search,
   LayoutDashboard,
@@ -289,6 +290,23 @@ export const App: React.FC = () => {
     );
   }
 
+  // If user is authenticated but has no business registered yet
+  if (!company && businesses.length === 0) {
+    return (
+      <CreateBusinessOnboarding
+        user={user}
+        onBusinessCreated={(newCompany) => {
+          setBusinesses([newCompany]);
+          setCompany(newCompany);
+          authStorage.setActiveCompanyId(newCompany.company_id);
+          loadCompanyData();
+          loadBusinesses();
+        }}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--bg-app)' }}>
       {/* Top Bar Header */}
@@ -326,50 +344,62 @@ export const App: React.FC = () => {
         >
           {/* 1. Dashboard View */}
           {activeTab === 'dashboard' && (
-            <DashboardView
-              companyId={company?.company_id || ''}
-              onOpenNewVoucher={handleOpenNewVoucher}
-              onViewVoucher={(id) => setActivePrintVoucherId(id)}
-              onNavigateReports={(sub) => {
-                setReportSubTab(sub);
-                setActiveTab('reports');
-              }}
-            />
+            <div key="dashboard" className="view-container-animated">
+              <DashboardView
+                companyId={company?.company_id || ''}
+                onOpenNewVoucher={handleOpenNewVoucher}
+                onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                onNavigateReports={(sub) => {
+                  setReportSubTab(sub);
+                  setActiveTab('reports');
+                }}
+              />
+            </div>
           )}
 
           {/* 2. Voucher Entry View */}
           {activeTab === 'vouchers' && (
-            <VoucherEntryView
-              company={company}
-              activeFy={activeFy}
-              initialType={voucherInitialType}
-              onPostSuccess={handleVoucherPostSuccess}
-            />
+            <div key="vouchers" className="view-container-animated">
+              <VoucherEntryView
+                company={company}
+                activeFy={activeFy}
+                initialType={voucherInitialType}
+                onPostSuccess={handleVoucherPostSuccess}
+              />
+            </div>
           )}
 
           {/* 3. Masters View */}
           {activeTab === 'masters' && (
-            <MastersView company={company} onCompanyUpdated={loadCompanyData} />
+            <div key="masters" className="view-container-animated">
+              <MastersView company={company} onCompanyUpdated={loadCompanyData} />
+            </div>
           )}
 
           {/* 4. Reports View */}
           {activeTab === 'reports' && (
-            <ReportsView
-              companyId={company?.company_id || ''}
-              activeSubTab={reportSubTab}
-              setActiveSubTab={setReportSubTab}
-              onViewVoucher={(id) => setActivePrintVoucherId(id)}
-            />
+            <div key="reports" className="view-container-animated">
+              <ReportsView
+                companyId={company?.company_id || ''}
+                activeSubTab={reportSubTab}
+                setActiveSubTab={setReportSubTab}
+                onViewVoucher={(id) => setActivePrintVoucherId(id)}
+              />
+            </div>
           )}
 
           {/* 5. System: Utilities (Backup & Audit) */}
           {activeTab === 'utilities' && (
-            <UtilitiesView />
+            <div key="utilities" className="view-container-animated">
+              <UtilitiesView />
+            </div>
           )}
 
           {/* 6. System: Company Settings */}
           {activeTab === 'settings' && (
-            <SettingsView company={company} onCompanyUpdated={loadCompanyData} />
+            <div key="settings" className="view-container-animated">
+              <SettingsView company={company} onCompanyUpdated={loadCompanyData} />
+            </div>
           )}
         </main>
       </div>

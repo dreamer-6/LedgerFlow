@@ -136,7 +136,9 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
         state: stateName,
         stateCode
       });
-      onAuthSuccess(res.user, res.company?.company_id, [res.company]);
+      const activeId = res.activeCompanyId || res.company?.company_id || res.businesses?.[0]?.company_id;
+      const bizList = res.businesses && res.businesses.length > 0 ? res.businesses : (res.company ? [res.company] : []);
+      onAuthSuccess(res.user, activeId, bizList);
     } catch (err: any) {
       setError(err.message || 'Registration failed.');
     } finally {

@@ -168,7 +168,7 @@ export function initializeBusiness(db: DatabaseSync, options: BusinessInitOption
   return companyId;
 }
 
-export function seedInitialData(db: DatabaseSync) {
+export function seedInitialData(db: DatabaseSync): string | null {
   // Check if admin user exists
   const existingUser = db.prepare('SELECT user_id FROM users WHERE username = ?').get('admin') as any;
   let adminUserId = existingUser?.user_id;
@@ -183,26 +183,8 @@ export function seedInitialData(db: DatabaseSync) {
     `).run(adminUserId, passwordHash);
   }
 
-  // Check if initial company already exists
-  const existingCompany = db.prepare('SELECT company_id FROM companies LIMIT 1').get() as { company_id: string } | undefined;
-  if (existingCompany) {
-    // Link existing company to admin user if not already linked
-    db.prepare(`
-      INSERT OR IGNORE INTO user_businesses (user_id, company_id, role)
-      VALUES (?, ?, 'OWNER')
-    `).run(adminUserId, existingCompany.company_id);
-    return existingCompany.company_id;
-  }
-
-  const companyId = 'comp_default_01';
-  initializeBusiness(db, {
-    companyId,
-    companyName: 'Apex Technologies Enterprises',
-    legalName: 'Apex Technologies Pvt Ltd',
-    gstin: '33AAAAA0000A1Z5',
-    ownerUserId: adminUserId
-  });
-
-  return companyId;
+  // NOTE: Requirement: "initialy don't create any companies only the user creates it's own"
+  // Zero default companies are created. Companies are only created by user registration or onboarding.
+  return null;
 }
 

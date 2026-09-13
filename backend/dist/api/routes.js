@@ -47,7 +47,7 @@ function resolveCompanyId(req, db, user) {
             return exists.company_id;
     }
     const def = db.prepare('SELECT company_id FROM companies ORDER BY created_at ASC LIMIT 1').get();
-    return def?.company_id || 'comp_default_01';
+    return def?.company_id || '';
 }
 function createApiRouter(db) {
     const router = (0, express_1.Router)();
@@ -55,8 +55,9 @@ function createApiRouter(db) {
     // Sign Up / Register new SaaS account with first business
     router.post('/auth/register', (req, res) => {
         try {
-            const { email, password, fullName, businessName, gstin, state, stateCode } = req.body;
-            if (!email || !password || !fullName || !businessName) {
+            const { email, password, fullName, businessName, companyName, legalName, gstin, state, stateCode } = req.body;
+            const finalBusinessName = (businessName || companyName || '').trim();
+            if (!email || !password || !fullName || !finalBusinessName) {
                 return res.status(400).json({ error: 'Email, password, full name, and business name are required.' });
             }
             const cleanEmail = email.trim().toLowerCase();
@@ -77,7 +78,8 @@ function createApiRouter(db) {
             const companyId = 'comp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
             (0, seed_js_1.initializeBusiness)(db, {
                 companyId,
-                companyName: businessName.trim(),
+                companyName: finalBusinessName,
+                legalName: (legalName || finalBusinessName).trim(),
                 gstin: gstin ? gstin.trim() : '',
                 state: state || 'Tamil Nadu',
                 stateCode: stateCode || '33',
@@ -91,6 +93,7 @@ function createApiRouter(db) {
         WHERE ub.user_id = ?
         ORDER BY c.created_at ASC
       `).all(userId);
+            const createdCompany = businesses[0] || null;
             res.status(201).json({
                 token,
                 user: {
@@ -100,6 +103,7 @@ function createApiRouter(db) {
                     role: 'ADMIN'
                 },
                 activeCompanyId: companyId,
+                company: createdCompany,
                 businesses
             });
         }
@@ -110,8 +114,8 @@ function createApiRouter(db) {
     // Login to SaaS account
     router.post('/auth/login', (req, res) => {
         try {
-            const { username, email, password } = req.body;
-            const identifier = (email || username || '').trim().toLowerCase();
+            const { username, email, emailOrUsername, password } = req.body;
+            const identifier = (emailOrUsername || email || username || '').trim().toLowerCase();
             if (!identifier || !password) {
                 return res.status(400).json({ error: 'Email/username and password are required.' });
             }
@@ -240,9 +244,12 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = resolveCompanyId(req, db, user);
+            if (!companyId) {
+                return res.json({ company: null, activeFinancialYear: null });
+            }
             const company = db.prepare('SELECT * FROM companies WHERE company_id = ?').get(companyId);
             const activeFy = db.prepare("SELECT * FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(companyId);
-            res.json({ company, activeFinancialYear: activeFy });
+            res.json({ company: company || null, activeFinancialYear: activeFy || null });
         }
         catch (err) {
             res.status(500).json({ error: err.message });
@@ -254,6 +261,9 @@ function createApiRouter(db) {
             const companyId = resolveCompanyId(req, db, user);
             const b = req.body;
             const targetId = b.company_id || companyId;
+            if (!targetId) {
+                return res.status(400).json({ error: 'No company selected to update.' });
+            }
             db.prepare(`
         UPDATE companies SET
           company_name = ?, legal_name = ?, gstin = ?, pan = ?,
@@ -272,6 +282,8 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json([]);
             const rows = db.prepare('SELECT * FROM financial_years WHERE company_id = ? ORDER BY start_date DESC').all(companyId);
             res.json(rows);
         }
@@ -284,6 +296,8 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json([]);
             const rows = db.prepare(`
         SELECT l.*, g.group_name, g.nature
         FROM ledgers l
@@ -317,6 +331,8 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json([]);
             const rows = db.prepare('SELECT * FROM ledger_groups WHERE company_id = ? OR company_id IS NULL ORDER BY group_name ASC').all(companyId);
             res.json(rows);
         }
@@ -328,6 +344,8 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json([]);
             const type = req.query.type;
             let query = `
         SELECT p.*, pa.address_line1, pa.address_line2, pa.city, pa.state, pa.state_code, pa.pincode,
@@ -485,6 +503,8 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json([]);
             const rows = db.prepare(`
         SELECT si.*, u.symbol as unit_symbol
         FROM stock_items si
@@ -592,6 +612,8 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json([]);
             const rows = db.prepare('SELECT * FROM godowns WHERE company_id = ? OR company_id IS NULL ORDER BY godown_name ASC').all(companyId);
             res.json(rows);
         }
@@ -603,6 +625,8 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json([]);
             const rows = db.prepare('SELECT * FROM units WHERE company_id = ? OR company_id IS NULL ORDER BY unit_name ASC').all(companyId);
             res.json(rows);
         }
@@ -615,6 +639,8 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = req.query.companyId || resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json({ nextVoucherNumber: '1' });
             const { fyId, type } = req.query;
             const nextNum = posting_engine_js_1.PostingEngine.getNextVoucherNumber(db, companyId, fyId, type);
             res.json({ nextVoucherNumber: nextNum });
@@ -627,6 +653,8 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = req.query.companyId || resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json([]);
             const { type, fromDate, toDate } = req.query;
             let query = `
         SELECT v.*, p.party_name
@@ -699,7 +727,18 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, user);
-            const payload = { ...req.body, companyId: targetCompanyId };
+            if (!targetCompanyId) {
+                return res.status(400).json({ error: 'No company selected for voucher posting.' });
+            }
+            let fyId = req.body.fyId;
+            if (!fyId) {
+                const activeFy = db.prepare("SELECT fy_id FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(targetCompanyId);
+                fyId = activeFy?.fy_id;
+            }
+            if (!fyId) {
+                return res.status(400).json({ error: 'No open financial year found for this company.' });
+            }
+            const payload = { ...req.body, companyId: targetCompanyId, fyId };
             const result = posting_engine_js_1.PostingEngine.postVoucher(db, payload);
             res.status(201).json(result);
         }
@@ -722,6 +761,18 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = req.query.companyId || resolveCompanyId(req, db, user);
+            if (!companyId) {
+                return res.json({
+                    todaySalesPaise: 0,
+                    receivablesPaise: 0,
+                    payablesPaise: 0,
+                    cashBankPaise: 0,
+                    stockValuePaise: 0,
+                    stockAlerts: [],
+                    trendData: [],
+                    recentVouchers: []
+                });
+            }
             const today = new Date().toISOString().split('T')[0];
             // Today Sales
             const todaySales = db.prepare(`
@@ -802,8 +853,13 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = req.query.companyId || resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json([]);
             const { fromDate, toDate } = req.query;
-            const data = report_engine_js_1.ReportEngine.getDayBook(db, companyId, fromDate, toDate);
+            const today = new Date().toISOString().split('T')[0];
+            const targetFrom = fromDate || '2000-01-01';
+            const targetTo = toDate || today;
+            const data = report_engine_js_1.ReportEngine.getDayBook(db, companyId, targetFrom, targetTo);
             res.json(data);
         }
         catch (err) {
@@ -813,7 +869,10 @@ function createApiRouter(db) {
     router.get('/reports/ledger/:id', (req, res) => {
         try {
             const { fromDate, toDate } = req.query;
-            const data = report_engine_js_1.ReportEngine.getLedgerStatement(db, req.params.id, fromDate, toDate);
+            const today = new Date().toISOString().split('T')[0];
+            const targetFrom = fromDate || '2000-01-01';
+            const targetTo = toDate || today;
+            const data = report_engine_js_1.ReportEngine.getLedgerStatement(db, req.params.id, targetFrom, targetTo);
             res.json(data);
         }
         catch (err) {
@@ -824,8 +883,11 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = req.query.companyId || resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json({ asOnDate: '', rows: [], totalDebitPaise: 0, totalCreditPaise: 0, isBalanced: true });
             const { asOnDate } = req.query;
-            const data = report_engine_js_1.ReportEngine.getTrialBalance(db, companyId, asOnDate);
+            const targetAsOn = asOnDate || new Date().toISOString().split('T')[0];
+            const data = report_engine_js_1.ReportEngine.getTrialBalance(db, companyId, targetAsOn);
             res.json(data);
         }
         catch (err) {
@@ -836,8 +898,13 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = req.query.companyId || resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json({ fromDate: '', toDate: '', grossProfitPaise: 0, netProfitPaise: 0, tradingExpenseRows: [], tradingIncomeRows: [], pnlExpenseRows: [], pnlIncomeRows: [] });
             const { fromDate, toDate } = req.query;
-            const data = report_engine_js_1.ReportEngine.getProfitAndLoss(db, companyId, fromDate, toDate);
+            const today = new Date().toISOString().split('T')[0];
+            const targetFrom = fromDate || '2000-01-01';
+            const targetTo = toDate || today;
+            const data = report_engine_js_1.ReportEngine.getProfitAndLoss(db, companyId, targetFrom, targetTo);
             res.json(data);
         }
         catch (err) {
@@ -848,8 +915,11 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = req.query.companyId || resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json({ asOnDate: '', totalAssetsPaise: 0, totalLiabilitiesPaise: 0, isBalanced: true, assetRows: [], liabilityRows: [] });
             const { asOnDate } = req.query;
-            const data = report_engine_js_1.ReportEngine.getBalanceSheet(db, companyId, asOnDate);
+            const targetAsOn = asOnDate || new Date().toISOString().split('T')[0];
+            const data = report_engine_js_1.ReportEngine.getBalanceSheet(db, companyId, targetAsOn);
             res.json(data);
         }
         catch (err) {
@@ -860,6 +930,8 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = req.query.companyId || resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json([]);
             const data = report_engine_js_1.ReportEngine.getStockSummary(db, companyId);
             res.json(data);
         }
@@ -871,6 +943,8 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = req.query.companyId || resolveCompanyId(req, db, user);
+            if (!companyId)
+                return res.json([]);
             const { type } = req.query;
             const data = report_engine_js_1.ReportEngine.getOutstandingReport(db, companyId, type || 'CUSTOMER');
             res.json(data);
@@ -883,6 +957,35 @@ function createApiRouter(db) {
         try {
             const user = getUserFromToken(req);
             const companyId = req.query.companyId || resolveCompanyId(req, db, user);
+            if (!companyId) {
+                return res.json({
+                    fromDate: '',
+                    toDate: '',
+                    gstr1: {
+                        totalInvoices: 0,
+                        totalTaxablePaise: 0,
+                        totalCgstPaise: 0,
+                        totalSgstPaise: 0,
+                        totalIgstPaise: 0,
+                        totalTaxPaise: 0,
+                        totalInvoiceValuePaise: 0,
+                        b2b: [],
+                        b2c: []
+                    },
+                    gstr3b: {
+                        outwardTaxablePaise: 0,
+                        outwardCgstPaise: 0,
+                        outwardSgstPaise: 0,
+                        outwardIgstPaise: 0,
+                        itcCgstPaise: 0,
+                        itcSgstPaise: 0,
+                        itcIgstPaise: 0,
+                        netCgstPayablePaise: 0,
+                        netSgstPayablePaise: 0,
+                        netIgstPayablePaise: 0
+                    }
+                });
+            }
             const { fromDate, toDate } = req.query;
             const data = report_engine_js_1.ReportEngine.getGstSummary(db, companyId, fromDate, toDate);
             res.json(data);

@@ -7,7 +7,7 @@ import { DoubleEntryEngine } from '../src/domain/accounting/double-entry.js';
 import { InventoryEngine } from '../src/domain/inventory/valuation.js';
 import { PostingEngine } from '../src/domain/posting/posting-engine.js';
 import { ReportEngine } from '../src/reports/report-engine.js';
-import { seedInitialData } from '../src/database/seed.js';
+import { initializeBusiness } from '../src/database/seed.js';
 
 console.log('====================================================');
 console.log('LEDGERFLOW AUTOMATED ACCOUNTING ENGINE TEST SUITE');
@@ -18,7 +18,13 @@ const testDb = new DatabaseSync(':memory:');
 testDb.exec('PRAGMA foreign_keys = ON;');
 const schemaSql = fs.readFileSync(path.resolve(__dirname, '../src/database/schema.sql'), 'utf8');
 testDb.exec(schemaSql);
-const companyId = seedInitialData(testDb);
+
+const companyId = 'comp_default_01';
+initializeBusiness(testDb, {
+  companyId,
+  companyName: 'Test Accounting Enterprises',
+  gstin: '33AAAAA0000A1Z5'
+});
 const fyId = 'fy_2026_27';
 
 console.log('✓ Database schema and chart of accounts seeded successfully in memory.');
