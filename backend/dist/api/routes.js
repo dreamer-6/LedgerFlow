@@ -291,6 +291,59 @@ function createApiRouter(db) {
             res.status(500).json({ error: err.message });
         }
     });
+    router.post('/financial-years', (req, res) => {
+        try {
+            const user = getUserFromToken(req);
+            const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, user);
+            if (!targetCompanyId) {
+                return res.status(400).json({ error: 'No company selected for financial year creation.' });
+            }
+            const { name, startDate, endDate, status } = req.body;
+            if (!name || !startDate || !endDate) {
+                return res.status(400).json({ error: 'Financial year name, start date, and end date are required.' });
+            }
+            const fyId = `${targetCompanyId}_fy_${name.trim().replace(/[^a-zA-Z0-9]/g, '_')}`;
+            let fyStatus = (status || 'OPEN').toUpperCase();
+            if (fyStatus === 'ACTIVE')
+                fyStatus = 'OPEN';
+            if (!['OPEN', 'LOCKED', 'CLOSED'].includes(fyStatus)) {
+                fyStatus = 'OPEN';
+            }
+            db.prepare(`
+        INSERT INTO financial_years (fy_id, company_id, name, start_date, end_date, status)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(fyId, targetCompanyId, name.trim(), startDate, endDate, fyStatus);
+            const created = db.prepare('SELECT * FROM financial_years WHERE fy_id = ?').get(fyId);
+            res.status(201).json(created);
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+    router.put('/financial-years/:fyId', (req, res) => {
+        try {
+            const user = getUserFromToken(req);
+            const companyId = resolveCompanyId(req, db, user);
+            const { fyId } = req.params;
+            const { status } = req.body;
+            let fyStatus = (status || 'OPEN').toUpperCase();
+            if (fyStatus === 'ACTIVE')
+                fyStatus = 'OPEN';
+            if (!['OPEN', 'LOCKED', 'CLOSED'].includes(fyStatus)) {
+                fyStatus = 'OPEN';
+            }
+            db.prepare(`
+        UPDATE financial_years
+        SET status = ?
+        WHERE fy_id = ? AND company_id = ?
+      `).run(fyStatus, fyId, companyId);
+            const updated = db.prepare('SELECT * FROM financial_years WHERE fy_id = ?').get(fyId);
+            res.json(updated);
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
     // ---------------- MASTERS (TENANT ISOLATED) ----------------
     router.get('/masters/ledgers', (req, res) => {
         try {
@@ -657,7 +710,7 @@ function createApiRouter(db) {
                 return res.json([]);
             const { type, fromDate, toDate } = req.query;
             let query = `
-        SELECT v.*, p.party_name
+        SELECT v.*, p.party_name, p.gstin as party_gstin, p.party_type
         FROM vouchers v
         LEFT JOIN parties p ON v.party_id = p.party_id
         WHERE v.company_id = ?
@@ -731,12 +784,20 @@ function createApiRouter(db) {
                 return res.status(400).json({ error: 'No company selected for voucher posting.' });
             }
             let fyId = req.body.fyId;
-            if (!fyId) {
-                const activeFy = db.prepare("SELECT fy_id FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(targetCompanyId);
-                fyId = activeFy?.fy_id;
+            const validFy = fyId ? db.prepare('SELECT fy_id FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, targetCompanyId) : null;
+            if (!validFy) {
+                const vDate = req.body.voucherDate || new Date().toISOString().split('T')[0];
+                const dateFy = db.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1').get(targetCompanyId, vDate);
+                if (dateFy) {
+                    fyId = dateFy.fy_id;
+                }
+                else {
+                    const activeFy = db.prepare("SELECT fy_id FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(targetCompanyId);
+                    fyId = activeFy?.fy_id;
+                }
             }
             if (!fyId) {
-                return res.status(400).json({ error: 'No open financial year found for this company.' });
+                return res.status(400).json({ error: 'No open financial year found for this company and date.' });
             }
             const payload = { ...req.body, companyId: targetCompanyId, fyId };
             const result = posting_engine_js_1.PostingEngine.postVoucher(db, payload);

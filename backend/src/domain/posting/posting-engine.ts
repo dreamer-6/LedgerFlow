@@ -180,6 +180,24 @@ export class PostingEngine {
 
     let cogsAmountPaise = 0;
 
+    // Helper to resolve valid godown for company
+    const resolveValidGodownId = (requestedGodownId?: string | null): string => {
+      if (requestedGodownId) {
+        const check = db.prepare('SELECT godown_id FROM godowns WHERE godown_id = ? AND (company_id = ? OR company_id IS NULL)').get(requestedGodownId, input.companyId) as any;
+        if (check) return check.godown_id;
+      }
+      const defaultGodown = db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? ORDER BY is_default DESC LIMIT 1').get(input.companyId) as { godown_id: string } | undefined;
+      if (defaultGodown) return defaultGodown.godown_id;
+
+      const anyGodown = db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? LIMIT 1').get(input.companyId) as { godown_id: string } | undefined;
+      if (anyGodown) return anyGodown.godown_id;
+
+      const newGodownId = `${input.companyId}_godown_main`;
+      db.prepare('INSERT OR IGNORE INTO godowns (godown_id, company_id, godown_name, location, is_default) VALUES (?, ?, ?, ?, 1)')
+        .run(newGodownId, input.companyId, 'Main Warehouse', 'Central Warehouse');
+      return newGodownId;
+    };
+
     for (const line of input.lines) {
       let gstRate = line.gstRate ?? 18;
       let cessRate = line.cessRate ?? 0;
@@ -209,12 +227,8 @@ export class PostingEngine {
       taxResults.push(taxRes);
       processedLines.push({ lineInput: line, taxResult: taxRes });
 
-      // Determine godown (default to primary godown if omitted)
-      let resolvedGodownId = line.godownId;
-      if (!resolvedGodownId && line.itemId) {
-        const defaultGodown = db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? ORDER BY is_default DESC LIMIT 1').get(input.companyId) as { godown_id: string } | undefined;
-        resolvedGodownId = defaultGodown?.godown_id || 'godown_main';
-      }
+      // Determine valid godown
+      const resolvedGodownId = line.itemId ? resolveValidGodownId(line.godownId) : null;
 
       // Calculate Stock Movements
       if (line.itemId && resolvedGodownId && (line.quantity || 0) > 0) {
@@ -355,7 +369,7 @@ export class PostingEngine {
       let lineNum = 1;
       for (const pl of processedLines) {
         const lineId = 'ln_' + Date.now().toString(36) + (lineNum++);
-        const lineGodownId = pl.lineInput.godownId || (pl.lineInput.itemId ? (db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? ORDER BY is_default DESC LIMIT 1').get(input.companyId) as any)?.godown_id || 'godown_main' : null);
+        const lineGodownId = pl.lineInput.itemId ? resolveValidGodownId(pl.lineInput.godownId) : null;
         db.prepare(`
           INSERT INTO voucher_lines (
             line_id, voucher_id, line_number, item_id, ledger_id, godown_id, description,
@@ -392,13 +406,14 @@ export class PostingEngine {
       // D. Insert Stock Entries
       for (const se of stockMovements) {
         const stockEntryId = 'se_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+        const validGodownId = resolveValidGodownId(se.godownId);
         db.prepare(`
           INSERT INTO stock_entries (
             stock_entry_id, voucher_id, item_id, godown_id, entry_date,
             movement_type, quantity, rate_paise, value_paise
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-          stockEntryId, voucherId, se.itemId, se.godownId, input.voucherDate,
+          stockEntryId, voucherId, se.itemId, validGodownId, input.voucherDate,
           se.movementType, se.quantity, se.ratePaise, se.valuePaise
         );
       }

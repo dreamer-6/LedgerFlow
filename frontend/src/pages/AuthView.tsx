@@ -28,7 +28,7 @@ interface AuthViewProps {
 }
 
 export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
-  const [mode, setMode] = useState<'LOGIN' | 'SIGNUP'>('SIGNUP');
+  const [mode, setMode] = useState<'LOGIN' | 'SIGNUP'>('LOGIN');
   const [signupStep, setSignupStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,14 +53,14 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Sign In Form State
-  const [loginIdentifier, setLoginIdentifier] = useState('admin');
-  const [loginPassword, setLoginPassword] = useState('admin123');
+  // Sign In Form State (Clean defaults for real user logins)
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
 
   // Sign Up Form State - Step 1: Account
-  const [fullName, setFullName] = useState('Arun K');
+  const [fullName, setFullName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
-  const [phone, setPhone] = useState('+91 98765 43210');
+  const [phone, setPhone] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -706,21 +706,21 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                   </div>
                 </div>
 
-                {/* Quick Auto-Fill Demo Note */}
+                {/* Sign-In Guidance & Optional Demo Helper */}
                 <div style={{
-                  padding: '9px 12px',
+                  padding: '10px 12px',
                   borderRadius: 'var(--radius-sm)',
                   backgroundColor: 'var(--shell)',
-                  border: '1px dashed var(--border)',
+                  border: '1px solid var(--border-subtle)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  fontSize: '12px',
+                  fontSize: '11.5px',
                   color: 'var(--text-secondary)'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Sparkles size={13} color="var(--purple)" />
-                    <span>Demo account: <strong>admin</strong> / <strong>admin123</strong></span>
+                    <Shield size={13} color="var(--green)" />
+                    <span>Sign in with your <strong>registered email</strong> & password</span>
                   </div>
                   <button
                     type="button"
@@ -731,14 +731,17 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: 'var(--text-primary)',
+                      color: 'var(--purple)',
                       fontWeight: 600,
                       cursor: 'pointer',
-                      textDecoration: 'underline',
-                      fontSize: '11.5px'
+                      fontSize: '11px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
                     }}
+                    title="Quickly fill demo admin credentials"
                   >
-                    Auto Fill
+                    <Sparkles size={11} /> Try Demo Admin
                   </button>
                 </div>
 

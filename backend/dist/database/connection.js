@@ -16,7 +16,8 @@ function getDatabasePath() {
     if (!node_fs_1.default.existsSync(dbDir)) {
         node_fs_1.default.mkdirSync(dbDir, { recursive: true });
     }
-    return node_path_1.default.join(dbDir, 'ledgerflow.db');
+    const dbName = process.env.LEDGERFLOW_DB_NAME || 'ledgerflow.db';
+    return node_path_1.default.join(dbDir, dbName);
 }
 function getDatabase(customPath) {
     if (dbInstance && !customPath) {

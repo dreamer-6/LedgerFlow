@@ -213,6 +213,40 @@ export const api = {
     if (!res.ok) throw new Error(await res.text());
   },
 
+  async getFinancialYears(companyId?: string): Promise<FinancialYear[]> {
+    const targetCompId = companyId || authStorage.getActiveCompanyId() || '';
+    const res = await fetch(`${API_BASE}/financial-years?companyId=${encodeURIComponent(targetCompId)}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async createFinancialYear(data: {
+    name: string;
+    startDate: string;
+    endDate: string;
+    status?: 'OPEN' | 'CLOSED';
+    companyId?: string;
+  }): Promise<FinancialYear> {
+    const res = await fetch(`${API_BASE}/financial-years`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      let msg = 'Failed to create financial year';
+      try {
+        const d = await res.json();
+        msg = d.error || msg;
+      } catch {
+        msg = await res.text();
+      }
+      throw new Error(msg);
+    }
+    return res.json();
+  },
+
   async getDashboard(companyId?: string) {
     const targetCompId = companyId || authStorage.getActiveCompanyId() || '';
     const res = await fetch(`${API_BASE}/reports/dashboard?companyId=${encodeURIComponent(targetCompId)}`, {

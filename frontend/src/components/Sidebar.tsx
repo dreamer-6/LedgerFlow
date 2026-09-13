@@ -12,7 +12,9 @@ import {
   CircleDollarSign,
   Percent,
   Database,
-  Settings
+  Settings,
+  ShoppingCart,
+  ShoppingBag
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -110,6 +112,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             Intelligence
           </div>
           {renderItem('reports', 'Day Book', <Clock size={14} />, true, 'daybook')}
+          {renderItem('reports', 'Sales Register', <ShoppingCart size={14} />, true, 'sales_register')}
+          {renderItem('reports', 'Purchase Register', <ShoppingBag size={14} />, true, 'purchase_register')}
           {renderItem('reports', 'Ledger Statement', <BookOpen size={14} />, true, 'ledger')}
           {renderItem('reports', 'Trial Balance', <Scale size={14} />, true, 'trial_balance')}
           {renderItem('reports', 'Profit & Loss', <TrendingUp size={14} />, true, 'pnl')}

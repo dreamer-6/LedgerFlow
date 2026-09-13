@@ -12,6 +12,8 @@ import { UtilitiesView } from './pages/UtilitiesView';
 import { SettingsView } from './pages/SettingsView';
 import { InvoicePrintModal } from './pages/InvoicePrintModal';
 import { CreateBusinessOnboarding } from './components/CreateBusinessOnboarding';
+import { DateChangeModal } from './components/DateChangeModal';
+import { FinancialYearModal } from './components/FinancialYearModal';
 import {
   Search,
   LayoutDashboard,
@@ -24,6 +26,8 @@ import {
   FileSpreadsheet,
   Layers,
   Percent,
+  ShoppingCart,
+  ShoppingBag,
   X
 } from 'lucide-react';
 
@@ -50,6 +54,28 @@ export const App: React.FC = () => {
   // Global Search Modal State (Ctrl + K)
   const [showSearchModal, setShowSearchModal] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Working Transaction Date (F2 in Tally Prime)
+  const [currentDate, setCurrentDate] = useState<string>(() => {
+    return localStorage.getItem('lf_current_date') || new Date().toISOString().split('T')[0];
+  });
+  const [showDateModal, setShowDateModal] = useState<boolean>(false);
+
+  // Financial Year Switcher (Alt + F2 in Tally Prime)
+  const [showFyModal, setShowFyModal] = useState<boolean>(false);
+
+  const handleDateChange = (newDate: string) => {
+    setCurrentDate(newDate);
+    localStorage.setItem('lf_current_date', newDate);
+  };
+
+  const handleSelectFy = (newFy: FinancialYear) => {
+    setActiveFy(newFy);
+    // If current date falls outside the selected FY range, auto-shift to FY start date
+    if (newFy.start_date && (currentDate < newFy.start_date || currentDate > newFy.end_date)) {
+      handleDateChange(newFy.start_date);
+    }
+  };
 
   const loadCompanyData = async () => {
     try {
@@ -120,8 +146,30 @@ export const App: React.FC = () => {
         return;
       }
 
+      // Change Financial Year: Alt + F2
+      if (e.altKey && (e.key === 'F2' || e.code === 'F2')) {
+        e.preventDefault();
+        setShowFyModal((prev) => !prev);
+        return;
+      }
+
+      // Change Date: F2 (without Alt/Ctrl/Meta)
+      if (!e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'F2' || e.code === 'F2')) {
+        e.preventDefault();
+        setShowDateModal((prev) => !prev);
+        return;
+      }
+
       // Escape: Close modals
       if (e.key === 'Escape') {
+        if (showDateModal) {
+          setShowDateModal(false);
+          return;
+        }
+        if (showFyModal) {
+          setShowFyModal(false);
+          return;
+        }
         if (showBusinessSwitcher) {
           setShowBusinessSwitcher(false);
           return;
@@ -235,6 +283,8 @@ export const App: React.FC = () => {
     { label: 'Party Masters (Customers & Suppliers)', tab: 'masters', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+3' },
     { label: 'Stock Items & Inventory', tab: 'masters', category: 'Master', icon: <Boxes size={14} /> },
     { label: 'Day Book Report', tab: 'reports', subTab: 'daybook', category: 'Report', icon: <Clock size={14} /> },
+    { label: 'Sales Register (Display Sales Entries)', tab: 'reports', subTab: 'sales_register', category: 'Report', icon: <ShoppingCart size={14} /> },
+    { label: 'Purchase Register (Display Purchase Entries)', tab: 'reports', subTab: 'purchase_register', category: 'Report', icon: <ShoppingBag size={14} /> },
     { label: 'Ledger Statement', tab: 'reports', subTab: 'ledger', category: 'Report', icon: <BookOpen size={14} /> },
     { label: 'Trial Balance', tab: 'reports', subTab: 'trial_balance', category: 'Report', icon: <Scale size={14} /> },
     { label: 'Profit & Loss Statement', tab: 'reports', subTab: 'pnl', category: 'Report', icon: <TrendingUp size={14} /> },
@@ -313,12 +363,15 @@ export const App: React.FC = () => {
       <Navbar
         company={company}
         activeFy={activeFy}
+        currentDate={currentDate}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         user={user}
         onOpenSearch={() => setShowSearchModal(true)}
         onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
         onOpenBusinessSwitcher={() => setShowBusinessSwitcher(true)}
+        onOpenDateModal={() => setShowDateModal(true)}
+        onOpenFyModal={() => setShowFyModal(true)}
         onLogout={handleLogout}
       />
 
@@ -364,6 +417,7 @@ export const App: React.FC = () => {
                 company={company}
                 activeFy={activeFy}
                 initialType={voucherInitialType}
+                currentDate={currentDate}
                 onPostSuccess={handleVoucherPostSuccess}
               />
             </div>
@@ -530,6 +584,27 @@ export const App: React.FC = () => {
           setBusinesses((prev) => [...prev, newComp]);
           authStorage.setActiveCompanyId(newComp.company_id);
           loadCompanyData();
+        }}
+      />
+
+      {/* Change Working Date Modal (F2) */}
+      <DateChangeModal
+        isOpen={showDateModal}
+        currentDate={currentDate}
+        activeFy={activeFy}
+        onClose={() => setShowDateModal(false)}
+        onDateChange={handleDateChange}
+      />
+
+      {/* Change Financial Year Modal (Alt + F2) */}
+      <FinancialYearModal
+        isOpen={showFyModal}
+        activeFy={activeFy}
+        company={company}
+        onClose={() => setShowFyModal(false)}
+        onSelectFy={handleSelectFy}
+        onFyCreated={(newFy) => {
+          handleSelectFy(newFy);
         }}
       />
     </div>

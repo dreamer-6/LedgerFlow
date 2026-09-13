@@ -16,28 +16,46 @@ import {
 interface NavbarProps {
   company: Company | null;
   activeFy: FinancialYear | null;
+  currentDate?: string;
   activeTab: string;
   setActiveTab: (tab: string) => void;
   user?: UserSession | null;
   onOpenSearch?: () => void;
   onToggleSidebar?: () => void;
   onOpenBusinessSwitcher?: () => void;
+  onOpenDateModal?: () => void;
+  onOpenFyModal?: () => void;
   onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   company,
   activeFy,
+  currentDate,
   setActiveTab,
   user,
   onOpenSearch,
   onToggleSidebar,
   onOpenBusinessSwitcher,
+  onOpenDateModal,
+  onOpenFyModal,
   onLogout
 }) => {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('ledgerflow-theme') as 'light' | 'dark') || 'light';
   });
+
+  const formatDateDisplay = (dateStr?: string) => {
+    if (!dateStr) return 'Current Date';
+    try {
+      const [y, m, d] = dateStr.split('-');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthName = months[parseInt(m, 10) - 1] || m;
+      return `${d} ${monthName} ${y}`;
+    } catch {
+      return dateStr;
+    }
+  };
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -187,53 +205,84 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Right: Calendar | FY | Theme | Notifications | User Avatar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {/* Calendar Date */}
-        <div
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* Interactive Calendar Date Button (F2) */}
+        <button
+          type="button"
+          onClick={onOpenDateModal}
+          title="Change Current Working Date (Press F2)"
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
             fontSize: '12px',
             color: 'var(--text-secondary)',
-            padding: '4px 8px'
+            padding: '4px 9px',
+            borderRadius: '6px',
+            border: '1px solid var(--border-subtle)',
+            backgroundColor: 'var(--surface)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--border-strong)';
+            e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'var(--border-subtle)';
+            e.currentTarget.style.backgroundColor = 'var(--surface)';
           }}
         >
-          <Calendar size={13} color="var(--text-muted)" />
-          <span style={{ fontWeight: 500 }}>{todayStr}</span>
-        </div>
+          <Calendar size={13} color="var(--blue)" />
+          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatDateDisplay(currentDate)}</span>
+          <kbd style={{ fontSize: '9.5px', padding: '1px 4px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}>F2</kbd>
+        </button>
 
-        {/* Financial Year Pill */}
-        <div
+        {/* Interactive Financial Year Pill Button (Alt + F2) */}
+        <button
+          type="button"
+          onClick={onOpenFyModal}
+          title="Change Active Financial Year (Press Alt + F2)"
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            backgroundColor: 'var(--bg-subtle)',
+            backgroundColor: 'var(--surface)',
             border: '1px solid var(--border-subtle)',
-            padding: '3px 9px',
+            padding: '4px 10px',
             borderRadius: '20px',
             fontSize: '11px',
             color: 'var(--text-primary)',
-            fontWeight: 600
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--purple)';
+            e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'var(--border-subtle)';
+            e.currentTarget.style.backgroundColor = 'var(--surface)';
           }}
         >
-          <span>FY {activeFy?.name ? activeFy.name.replace('2026-2027', '2026-27') : '2026-27'}</span>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--green)' }} />
+          <span>FY {activeFy?.name || '2026-27'}</span>
           <span
             style={{
               fontSize: '9px',
-              backgroundColor: 'var(--success-bg)',
-              color: 'var(--success-emerald)',
-              border: '1px solid var(--success-border)',
-              padding: '1px 6px',
-              borderRadius: '10px',
-              fontWeight: 700,
-              letterSpacing: '0.04em'
+              backgroundColor: 'rgba(32, 217, 163, 0.1)',
+              color: 'var(--green)',
+              border: '1px solid rgba(32, 217, 163, 0.25)',
+              padding: '1px 5px',
+              borderRadius: '8px',
+              fontWeight: 700
             }}
           >
             ACTIVE
           </span>
-        </div>
+          <kbd style={{ fontSize: '9px', padding: '0 3px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '3px' }}>Alt+F2</kbd>
+        </button>
 
         {/* Theme Toggle Button */}
         <button

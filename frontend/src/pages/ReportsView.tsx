@@ -13,7 +13,10 @@ import {
   CheckCircle2,
   Printer,
   Search,
-  Filter
+  Filter,
+  ShoppingCart,
+  ShoppingBag,
+  Eye
 } from 'lucide-react';
 
 interface ReportsViewProps {
@@ -33,6 +36,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [toDate, setToDate] = useState('2027-03-31');
   const [selectedLedgerId, setSelectedLedgerId] = useState('');
   const [voucherTypeFilter, setVoucherTypeFilter] = useState('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
   const [ledgers, setLedgers] = useState<any[]>([]);
   const [reportData, setReportData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -52,6 +56,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     try {
       if (activeSubTab === 'daybook') {
         const res = await api.getDayBook(companyId, fromDate, toDate);
+        setReportData(res);
+      } else if (activeSubTab === 'sales_register') {
+        const res = await api.getVouchers(companyId, 'SALES', fromDate, toDate);
+        setReportData(res);
+      } else if (activeSubTab === 'purchase_register') {
+        const res = await api.getVouchers(companyId, 'PURCHASE', fromDate, toDate);
         setReportData(res);
       } else if (activeSubTab === 'ledger' && selectedLedgerId) {
         const res = await api.getLedgerStatement(selectedLedgerId, fromDate, toDate);
@@ -87,7 +97,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   useEffect(() => {
     fetchReport();
-  }, [activeSubTab, selectedLedgerId, fromDate, toDate]);
+  }, [activeSubTab, selectedLedgerId, fromDate, toDate, companyId]);
 
   const formatPaise = (paise: number) => {
     return (paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -95,6 +105,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   const reportTabs = [
     { id: 'daybook', label: 'Day Book', icon: <Clock size={14} /> },
+    { id: 'sales_register', label: 'Sales Register', icon: <ShoppingCart size={14} /> },
+    { id: 'purchase_register', label: 'Purchase Register', icon: <ShoppingBag size={14} /> },
     { id: 'ledger', label: 'Ledger Statement', icon: <BookOpen size={14} /> },
     { id: 'trial_balance', label: 'Trial Balance', icon: <Scale size={14} /> },
     { id: 'pnl', label: 'Profit & Loss', icon: <TrendingUp size={14} /> },
@@ -217,6 +229,35 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </select>
             </div>
           )}
+
+          {/* Quick Search Input */}
+          {(activeSubTab === 'sales_register' || activeSubTab === 'purchase_register' || activeSubTab === 'daybook' || activeSubTab === 'stock_summary') && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--surface)', padding: '4px 10px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <Search size={13} style={{ color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                placeholder={activeSubTab === 'stock_summary' ? "Search item, HSN..." : "Filter party, invoice #..."}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  fontSize: '12px',
+                  color: 'var(--text-primary)',
+                  width: '170px'
+                }}
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '11px', padding: 0 }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Print / Export Action */}
@@ -255,7 +296,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               <tbody>
                 {reportData && reportData.length > 0 ? (
                   reportData
-                    .filter((v: any) => voucherTypeFilter === 'ALL' || v.voucher_type === voucherTypeFilter)
+                    .filter((v: any) => {
+                      if (voucherTypeFilter !== 'ALL' && v.voucher_type !== voucherTypeFilter) return false;
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase();
+                      return (
+                        (v.voucher_number && v.voucher_number.toLowerCase().includes(q)) ||
+                        (v.party_name && v.party_name.toLowerCase().includes(q)) ||
+                        (v.narration && v.narration.toLowerCase().includes(q))
+                      );
+                    })
                     .map((v: any, i: number) => (
                       <tr key={i} style={{ cursor: 'pointer' }} onClick={() => onViewVoucher(v.voucher_id)}>
                         <td className="tabular-nums" style={{ color: 'var(--text-secondary)' }}>{v.voucher_date}</td>
@@ -282,6 +332,212 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
               </tbody>
             </table>
           )}
+
+          {/* Sales Register */}
+          {activeSubTab === 'sales_register' && (() => {
+            const salesList = Array.isArray(reportData) ? reportData : [];
+            const filteredSales = salesList.filter((v: any) => {
+              if (!searchTerm) return true;
+              const q = searchTerm.toLowerCase();
+              return (
+                (v.voucher_number && v.voucher_number.toLowerCase().includes(q)) ||
+                (v.party_name && v.party_name.toLowerCase().includes(q)) ||
+                (v.party_gstin && v.party_gstin.toLowerCase().includes(q)) ||
+                (v.narration && v.narration.toLowerCase().includes(q))
+              );
+            });
+
+            const totalTaxable = filteredSales.reduce((sum: number, v: any) => sum + (v.taxable_amount_paise || 0), 0);
+            const totalCgst = filteredSales.reduce((sum: number, v: any) => sum + (v.cgst_amount_paise || 0), 0);
+            const totalSgst = filteredSales.reduce((sum: number, v: any) => sum + (v.sgst_amount_paise || 0), 0);
+            const totalIgst = filteredSales.reduce((sum: number, v: any) => sum + (v.igst_amount_paise || 0), 0);
+            const totalGross = filteredSales.reduce((sum: number, v: any) => sum + (v.total_amount_paise || 0), 0);
+
+            return (
+              <div>
+                {/* Summary KPI Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', padding: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <div style={{ background: 'var(--surface)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Invoices Issued</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>{filteredSales.length} Vouchers</div>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Taxable Sales</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>₹{formatPaise(totalTaxable)}</div>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Output GST (Tax)</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--purple)', marginTop: '4px' }}>₹{formatPaise(totalCgst + totalSgst + totalIgst)}</div>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Gross Turnover</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--green)', marginTop: '4px' }}>₹{formatPaise(totalGross)}</div>
+                  </div>
+                </div>
+
+                <table className="ledger-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '95px' }}>Date</th>
+                      <th style={{ width: '130px' }}>Invoice No.</th>
+                      <th>Customer / Buyer</th>
+                      <th style={{ width: '130px' }}>GSTIN</th>
+                      <th style={{ textAlign: 'right', width: '110px' }}>Taxable (₹)</th>
+                      <th style={{ textAlign: 'right', width: '95px' }}>CGST (₹)</th>
+                      <th style={{ textAlign: 'right', width: '95px' }}>SGST (₹)</th>
+                      <th style={{ textAlign: 'right', width: '95px' }}>IGST (₹)</th>
+                      <th style={{ textAlign: 'right', width: '120px' }}>Total (₹)</th>
+                      <th style={{ width: '90px' }}>Mode</th>
+                      <th style={{ width: '70px', textAlign: 'center' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSales.length > 0 ? (
+                      filteredSales.map((v: any, i: number) => (
+                        <tr key={i} style={{ cursor: 'pointer' }} onClick={() => onViewVoucher(v.voucher_id)}>
+                          <td className="tabular-nums" style={{ color: 'var(--text-secondary)' }}>{v.voucher_date}</td>
+                          <td className="tabular-nums" style={{ fontWeight: 600, color: 'var(--blue)' }}>{v.voucher_number}</td>
+                          <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{v.party_name || 'Counter Cash Sale'}</td>
+                          <td className="tabular-nums" style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                            {v.party_gstin || <span style={{ color: 'var(--text-muted)' }}>Unregistered</span>}
+                          </td>
+                          <td style={{ textAlign: 'right' }} className="tabular-nums">₹{formatPaise(v.taxable_amount_paise || 0)}</td>
+                          <td style={{ textAlign: 'right' }} className="tabular-nums">{v.cgst_amount_paise > 0 ? `₹${formatPaise(v.cgst_amount_paise)}` : '—'}</td>
+                          <td style={{ textAlign: 'right' }} className="tabular-nums">{v.sgst_amount_paise > 0 ? `₹${formatPaise(v.sgst_amount_paise)}` : '—'}</td>
+                          <td style={{ textAlign: 'right' }} className="tabular-nums">{v.igst_amount_paise > 0 ? `₹${formatPaise(v.igst_amount_paise)}` : '—'}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }} className="tabular-nums">
+                            ₹{formatPaise(v.total_amount_paise || 0)}
+                          </td>
+                          <td>
+                            <span className="badge-status badge-info" style={{ fontSize: '10.5px' }}>{v.payment_mode || 'CREDIT'}</span>
+                          </td>
+                          <td style={{ textAlign: 'center' }} onClick={(e) => { e.stopPropagation(); onViewVoucher(v.voucher_id); }}>
+                            <button
+                              className="btn-secondary"
+                              style={{ padding: '3px 7px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                              title="View & Print Tax Invoice"
+                            >
+                              <Eye size={12} />
+                              <span>View</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={11} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                          No sales vouchers found for selected period.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+
+          {/* Purchase Register */}
+          {activeSubTab === 'purchase_register' && (() => {
+            const purchaseList = Array.isArray(reportData) ? reportData : [];
+            const filteredPurchases = purchaseList.filter((v: any) => {
+              if (!searchTerm) return true;
+              const q = searchTerm.toLowerCase();
+              return (
+                (v.voucher_number && v.voucher_number.toLowerCase().includes(q)) ||
+                (v.party_name && v.party_name.toLowerCase().includes(q)) ||
+                (v.party_gstin && v.party_gstin.toLowerCase().includes(q)) ||
+                (v.narration && v.narration.toLowerCase().includes(q))
+              );
+            });
+
+            const totalTaxable = filteredPurchases.reduce((sum: number, v: any) => sum + (v.taxable_amount_paise || 0), 0);
+            const totalCgst = filteredPurchases.reduce((sum: number, v: any) => sum + (v.cgst_amount_paise || 0), 0);
+            const totalSgst = filteredPurchases.reduce((sum: number, v: any) => sum + (v.sgst_amount_paise || 0), 0);
+            const totalIgst = filteredPurchases.reduce((sum: number, v: any) => sum + (v.igst_amount_paise || 0), 0);
+            const totalGross = filteredPurchases.reduce((sum: number, v: any) => sum + (v.total_amount_paise || 0), 0);
+
+            return (
+              <div>
+                {/* Summary KPI Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', padding: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <div style={{ background: 'var(--surface)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Purchase Bills</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>{filteredPurchases.length} Bills</div>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Taxable Purchases</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>₹{formatPaise(totalTaxable)}</div>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Input Tax Credit (ITC)</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--orange)', marginTop: '4px' }}>₹{formatPaise(totalCgst + totalSgst + totalIgst)}</div>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total Invoiced</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>₹{formatPaise(totalGross)}</div>
+                  </div>
+                </div>
+
+                <table className="ledger-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '95px' }}>Date</th>
+                      <th style={{ width: '130px' }}>Bill / Ref No.</th>
+                      <th>Supplier / Vendor</th>
+                      <th style={{ width: '130px' }}>GSTIN</th>
+                      <th style={{ textAlign: 'right', width: '110px' }}>Taxable (₹)</th>
+                      <th style={{ textAlign: 'right', width: '95px' }}>CGST (₹)</th>
+                      <th style={{ textAlign: 'right', width: '95px' }}>SGST (₹)</th>
+                      <th style={{ textAlign: 'right', width: '95px' }}>IGST (₹)</th>
+                      <th style={{ textAlign: 'right', width: '120px' }}>Total (₹)</th>
+                      <th style={{ width: '90px' }}>Status</th>
+                      <th style={{ width: '70px', textAlign: 'center' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPurchases.length > 0 ? (
+                      filteredPurchases.map((v: any, i: number) => (
+                        <tr key={i} style={{ cursor: 'pointer' }} onClick={() => onViewVoucher(v.voucher_id)}>
+                          <td className="tabular-nums" style={{ color: 'var(--text-secondary)' }}>{v.voucher_date}</td>
+                          <td className="tabular-nums" style={{ fontWeight: 600, color: 'var(--orange)' }}>{v.voucher_number}</td>
+                          <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{v.party_name || 'Direct Vendor Purchase'}</td>
+                          <td className="tabular-nums" style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                            {v.party_gstin || <span style={{ color: 'var(--text-muted)' }}>Unregistered</span>}
+                          </td>
+                          <td style={{ textAlign: 'right' }} className="tabular-nums">₹{formatPaise(v.taxable_amount_paise || 0)}</td>
+                          <td style={{ textAlign: 'right' }} className="tabular-nums">{v.cgst_amount_paise > 0 ? `₹${formatPaise(v.cgst_amount_paise)}` : '—'}</td>
+                          <td style={{ textAlign: 'right' }} className="tabular-nums">{v.sgst_amount_paise > 0 ? `₹${formatPaise(v.sgst_amount_paise)}` : '—'}</td>
+                          <td style={{ textAlign: 'right' }} className="tabular-nums">{v.igst_amount_paise > 0 ? `₹${formatPaise(v.igst_amount_paise)}` : '—'}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }} className="tabular-nums">
+                            ₹{formatPaise(v.total_amount_paise || 0)}
+                          </td>
+                          <td>
+                            <span className="badge-status badge-success" style={{ fontSize: '10.5px' }}>POSTED</span>
+                          </td>
+                          <td style={{ textAlign: 'center' }} onClick={(e) => { e.stopPropagation(); onViewVoucher(v.voucher_id); }}>
+                            <button
+                              className="btn-secondary"
+                              style={{ padding: '3px 7px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                              title="View Voucher"
+                            >
+                              <Eye size={12} />
+                              <span>View</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={11} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                          No purchase bills found for selected period.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
 
           {/* 2. Ledger Statement */}
           {activeSubTab === 'ledger' && (
@@ -517,50 +773,93 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           )}
 
           {/* 6. Stock Summary */}
-          {activeSubTab === 'stock_summary' && (
-            <table className="ledger-table">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  <th>HSN/SAC</th>
-                  <th>Unit</th>
-                  <th style={{ textAlign: 'right' }}>Opening</th>
-                  <th style={{ textAlign: 'right' }}>Inward</th>
-                  <th style={{ textAlign: 'right' }}>Outward</th>
-                  <th style={{ textAlign: 'right' }}>Closing</th>
-                  <th style={{ textAlign: 'right' }}>Value (₹)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reportData && reportData.length > 0 ? (
-                  reportData.map((item: any, i: number) => {
-                    const closing = (item.opening_qty || 0) + (item.inward_qty || 0) - (item.outward_qty || 0);
-                    const val = closing * (item.selling_rate_paise || 100000) / 100;
-                    return (
-                      <tr key={i}>
-                        <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.item_name}</td>
-                        <td className="tabular-nums">{item.hsn_sac || '84716060'}</td>
-                        <td>Nos</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">{item.opening_qty || 10}</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">{item.inward_qty || 5}</td>
-                        <td style={{ textAlign: 'right' }} className="tabular-nums">{item.outward_qty || 3}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">{closing || 12}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">
-                          ₹{val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {activeSubTab === 'stock_summary' && (() => {
+            const stockList = Array.isArray(reportData) ? reportData : [];
+            const filteredStock = stockList.filter((item: any) => {
+              if (!searchTerm) return true;
+              const q = searchTerm.toLowerCase();
+              const name = (item.itemName || item.item_name || '').toLowerCase();
+              const hsn = (item.hsn || item.hsn_sac || '').toLowerCase();
+              return name.includes(q) || hsn.includes(q);
+            });
+
+            const totalUnits = filteredStock.reduce((acc: number, item: any) => acc + Number(item.quantity ?? item.closing_qty ?? 0), 0);
+            const totalValPaise = filteredStock.reduce((acc: number, item: any) => acc + Number(item.totalValuePaise ?? item.total_value_paise ?? 0), 0);
+
+            return (
+              <div>
+                {/* Summary KPI Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', padding: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <div style={{ background: 'var(--surface)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Unique Items</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>{filteredStock.length} SKUs</div>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total In-Stock Units</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--blue)', marginTop: '4px' }}>
+                      {totalUnits.toLocaleString('en-IN')} Units
+                    </div>
+                  </div>
+                  <div style={{ background: 'var(--surface)', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Inventory Valuation</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--green)', marginTop: '4px' }}>
+                      ₹{formatPaise(totalValPaise)}
+                    </div>
+                  </div>
+                </div>
+
+                <table className="ledger-table">
+                  <thead>
+                    <tr>
+                      <th>Stock Item Name</th>
+                      <th style={{ width: '130px' }}>HSN / SAC</th>
+                      <th style={{ width: '100px' }}>Unit</th>
+                      <th style={{ textAlign: 'right', width: '130px' }}>Closing Qty</th>
+                      <th style={{ textAlign: 'right', width: '150px' }}>Valuation Rate (₹)</th>
+                      <th style={{ textAlign: 'right', width: '160px' }}>Closing Value (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredStock.length > 0 ? (
+                      filteredStock.map((item: any, i: number) => {
+                        const itemName = item.itemName || item.item_name || 'Stock Item';
+                        const hsn = item.hsn || item.hsn_sac || '-';
+                        const unit = item.unit || item.unit_symbol || 'Nos';
+                        const qty = Number(item.quantity ?? item.closing_qty ?? 0);
+                        const avgRatePaise = Number(item.avgRatePaise ?? item.avg_rate_paise ?? (item.selling_price_paise || 0));
+                        const valPaise = Number(item.totalValuePaise ?? item.total_value_paise ?? (qty * avgRatePaise));
+
+                        return (
+                          <tr key={i}>
+                            <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{itemName}</td>
+                            <td className="tabular-nums" style={{ color: 'var(--text-secondary)' }}>{hsn}</td>
+                            <td>
+                              <span className="badge-status badge-info" style={{ fontSize: '10.5px' }}>{unit}</span>
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 600 }} className="tabular-nums">
+                              {qty.toLocaleString('en-IN')}
+                            </td>
+                            <td style={{ textAlign: 'right' }} className="tabular-nums">
+                              ₹{formatPaise(avgRatePaise)}
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }} className="tabular-nums">
+                              ₹{formatPaise(valPaise)}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                          No stock valuation records found for this company.
                         </td>
                       </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
-                      No stock valuation records found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          )}
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
 
           {/* 7. Outstanding */}
           {activeSubTab === 'outstanding' && (

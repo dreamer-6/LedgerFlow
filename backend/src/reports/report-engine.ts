@@ -346,26 +346,33 @@ export class ReportEngine {
    */
   public static getStockSummary(db: DatabaseSync, companyId: string): Array<{
     itemId: string;
+    item_id: string;
     itemName: string;
+    item_name: string;
     sku: string;
     hsn: string;
+    hsn_sac: string;
     unit: string;
+    unit_symbol: string;
     quantity: number;
+    closing_qty: number;
     avgRatePaise: number;
+    avg_rate_paise: number;
     totalValuePaise: number;
+    total_value_paise: number;
   }> {
     const items = db.prepare(`
       SELECT 
-        si.item_id, si.item_name, si.sku, si.hsn_sac, u.symbol as unit_symbol,
+        si.item_id, si.item_name, si.sku, si.hsn_sac, COALESCE(u.symbol, 'Nos') as unit_symbol,
         COALESCE(SUM(CASE WHEN se.movement_type = 'IN' THEN se.quantity ELSE 0 END), 0) -
         COALESCE(SUM(CASE WHEN se.movement_type = 'OUT' THEN se.quantity ELSE 0 END), 0) AS current_qty,
-        COALESCE(AVG(CASE WHEN se.movement_type = 'IN' THEN se.rate_paise ELSE NULL END), si.purchase_rate_paise) AS avg_rate
+        COALESCE(AVG(CASE WHEN se.movement_type = 'IN' THEN se.rate_paise ELSE NULL END), si.purchase_rate_paise, 0) AS avg_rate
       FROM stock_items si
-      JOIN units u ON si.unit_id = u.unit_id
+      LEFT JOIN units u ON si.unit_id = u.unit_id
       LEFT JOIN stock_entries se ON si.item_id = se.item_id
       WHERE si.company_id = ? AND si.is_active = 1
       GROUP BY si.item_id
-      ORDER BY si.item_name
+      ORDER BY si.item_name ASC
     `).all(companyId) as any[];
 
     return items.map(i => {
@@ -373,13 +380,20 @@ export class ReportEngine {
       const rate = Math.round(Number(i.avg_rate) || 0);
       return {
         itemId: i.item_id,
+        item_id: i.item_id,
         itemName: i.item_name,
+        item_name: i.item_name,
         sku: i.sku || '',
-        hsn: i.hsn_sac,
-        unit: i.unit_symbol,
+        hsn: i.hsn_sac || '',
+        hsn_sac: i.hsn_sac || '',
+        unit: i.unit_symbol || 'Nos',
+        unit_symbol: i.unit_symbol || 'Nos',
         quantity: qty,
+        closing_qty: qty,
         avgRatePaise: rate,
-        totalValuePaise: Math.round(qty * rate)
+        avg_rate_paise: rate,
+        totalValuePaise: Math.round(qty * rate),
+        total_value_paise: Math.round(qty * rate)
       };
     });
   }

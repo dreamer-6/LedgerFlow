@@ -22,6 +22,7 @@ interface VoucherEntryViewProps {
   company: Company | null;
   activeFy: FinancialYear | null;
   initialType?: string;
+  currentDate?: string;
   onPostSuccess: (voucherId: string) => void;
 }
 
@@ -29,12 +30,20 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
   company,
   activeFy,
   initialType = 'SALES',
+  currentDate,
   onPostSuccess
 }) => {
   const [voucherType, setVoucherType] = useState<string>(initialType);
   const [voucherNumber, setVoucherNumber] = useState<string>('INV-2026-0001');
-  const [voucherDate, setVoucherDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [supplierInvoiceDate, setSupplierInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [voucherDate, setVoucherDate] = useState<string>(currentDate || new Date().toISOString().split('T')[0]);
+  const [supplierInvoiceDate, setSupplierInvoiceDate] = useState<string>(currentDate || new Date().toISOString().split('T')[0]);
+
+  useEffect(() => {
+    if (currentDate) {
+      setVoucherDate(currentDate);
+      setSupplierInvoiceDate(currentDate);
+    }
+  }, [currentDate]);
   const [voucherStatus, setVoucherStatus] = useState<'Draft' | 'Posted'>('Draft');
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState<string>('');
   const [partyId, setPartyId] = useState<string>('');
@@ -65,7 +74,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
     {
       itemId: '',
       description: '',
-      godownId: 'godown_main',
+      godownId: '',
       quantity: 1,
       unit: 'Nos',
       hsnSac: '85044029',
@@ -124,6 +133,10 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
       setGodowns(gd);
       setLedgers(led);
       setUnits(un);
+
+      if (gd && gd.length > 0) {
+        setLines(prev => prev.map(l => ({ ...l, godownId: l.godownId || gd[0].godown_id })));
+      }
 
       // Select default party
       const filteredParties = pty.filter((p: any) =>
@@ -305,7 +318,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
       {
         itemId: defaultItem ? defaultItem.item_id : '',
         description: '',
-        godownId: godowns[0]?.godown_id || 'godown_main',
+        godownId: godowns[0]?.godown_id || '',
         quantity: 1,
         unit: 'Nos',
         hsnSac: defaultItem ? defaultItem.hsn_sac : '85044029',
@@ -493,8 +506,8 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
     try {
       let payload: any = {
         companyId: company.company_id,
-        fyId: activeFy?.fy_id || 'fy_2026_27',
-        financialYearId: activeFy?.fy_id || 'fy_2026_27',
+        fyId: activeFy?.fy_id,
+        financialYearId: activeFy?.fy_id,
         voucherType,
         voucherDate,
         voucherNumber,
@@ -515,7 +528,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         payload.lines = lines.map((l) => ({
           itemId: l.itemId,
           description: l.description || null,
-          godownId: l.godownId || godowns[0]?.godown_id || 'godown_main',
+          godownId: l.godownId || godowns[0]?.godown_id || undefined,
           quantity: Number(l.quantity),
           ratePaise: Math.round(Number(l.rate) * 100),
           discountPercentPaise: Math.round(Number(l.discountPercent) * 100),

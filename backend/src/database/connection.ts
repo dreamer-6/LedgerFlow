@@ -10,7 +10,8 @@ export function getDatabasePath(): string {
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
   }
-  return path.join(dbDir, 'ledgerflow.db');
+  const dbName = process.env.LEDGERFLOW_DB_NAME || 'ledgerflow.db';
+  return path.join(dbDir, dbName);
 }
 
 export function getDatabase(customPath?: string): DatabaseSync {
