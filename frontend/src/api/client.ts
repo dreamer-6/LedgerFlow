@@ -22,6 +22,7 @@ export interface Company {
   bank_ifsc?: string;
   bank_branch?: string;
   terms_and_conditions?: string;
+  logo_base64?: string;
   role?: string;
 }
 
@@ -170,13 +171,7 @@ export const api = {
     return res.json();
   },
 
-  async createBusiness(data: {
-    companyName: string;
-    legalName?: string;
-    gstin?: string;
-    state?: string;
-    stateCode?: string;
-  }): Promise<{ company: Company; message: string }> {
+  async createBusiness(data: any): Promise<{ company: Company; message: string }> {
     const res = await fetch(`${API_BASE}/businesses`, {
       method: 'POST',
       headers: getHeaders({ 'Content-Type': 'application/json' }),
@@ -474,6 +469,15 @@ export const api = {
     return res.json();
   },
 
+  async deleteVoucher(id: string) {
+    const res = await fetch(`${API_BASE}/vouchers/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
   // ---------------- REPORTS ----------------
   async getDayBook(companyId: string, fromDate: string, toDate: string) {
     const res = await fetch(`${API_BASE}/reports/daybook?companyId=${companyId}&fromDate=${fromDate}&toDate=${toDate}`, {
@@ -560,6 +564,14 @@ export const api = {
   async resetData() {
     const res = await fetch(`${API_BASE}/utilities/reset-data`, {
       method: 'POST',
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async getAvailableSerials(itemId: string): Promise<string[]> {
+    const res = await fetch(`${API_BASE}/masters/items/${itemId}/serials`, {
       headers: getHeaders()
     });
     if (!res.ok) throw new Error(await res.text());

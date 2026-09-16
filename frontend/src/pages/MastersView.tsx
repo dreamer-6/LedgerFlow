@@ -39,7 +39,15 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
   const [pGstin, setPGstin] = useState('');
   const [pPan, setPPan] = useState('');
   const [pState, setPState] = useState('Tamil Nadu');
+  const [pStateCode, setPStateCode] = useState('33');
   const [pCity, setPCity] = useState('Chennai');
+  const [pAddress, setPAddress] = useState('');
+  const [pPincode, setPPincode] = useState('');
+  const [pPhone, setPPhone] = useState('');
+  const [pEmail, setPEmail] = useState('');
+  const [pBankName, setPBankName] = useState('');
+  const [pBankAccountNo, setPBankAccountNo] = useState('');
+  const [pBankIfsc, setPBankIfsc] = useState('');
   const [pOpeningBal, setPOpeningBal] = useState(0);
 
   // Item Modal State
@@ -50,7 +58,9 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
   const [iUnit, setIUnit] = useState('unit_nos');
   const [iGst, setIGst] = useState(18);
   const [iCost, setICost] = useState(0);
+  const [iCostIncl, setICostIncl] = useState(0);
   const [iSell, setISell] = useState(0);
+  const [iSellIncl, setISellIncl] = useState(0);
   const [iQtyToAdd, setIQtyToAdd] = useState(0);
   const [iHasSerialNo, setIHasSerialNo] = useState(false);
   const [iSerialNumbers, setISerialNumbers] = useState('');
@@ -73,6 +83,7 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
   const [compBankIfsc, setCompBankIfsc] = useState('');
   const [compBankBranch, setCompBankBranch] = useState('');
   const [compTerms, setCompTerms] = useState('');
+  const [compLogoBase64, setCompLogoBase64] = useState<string | null>(null);
   const [companySaving, setCompanySaving] = useState(false);
   const [companySaveSuccess, setCompanySaveSuccess] = useState(false);
 
@@ -118,6 +129,7 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
       setCompBankIfsc(company.bank_ifsc || '');
       setCompBankBranch(company.bank_branch || '');
       setCompTerms(company.terms_and_conditions || '');
+      setCompLogoBase64(company.logo_base64 || null);
     }
   }, [company]);
 
@@ -129,7 +141,15 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
     setPGstin('');
     setPPan('');
     setPState('Tamil Nadu');
+    setPStateCode('33');
     setPCity('Chennai');
+    setPAddress('');
+    setPPincode('');
+    setPPhone('');
+    setPEmail('');
+    setPBankName('');
+    setPBankAccountNo('');
+    setPBankIfsc('');
     setPOpeningBal(0);
     setShowPartyModal(true);
   };
@@ -142,7 +162,15 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
     setPGstin(p.gstin || '');
     setPPan(p.pan || '');
     setPState(p.state || 'Tamil Nadu');
+    setPStateCode(p.state_code || '33');
     setPCity(p.city || '');
+    setPAddress(p.address_line1 || '');
+    setPPincode(p.pincode || '');
+    setPPhone(p.phone || '');
+    setPEmail(p.email || '');
+    setPBankName(p.bank_name || '');
+    setPBankAccountNo(p.bank_account_no || '');
+    setPBankIfsc(p.bank_ifsc || '');
     setPOpeningBal((p.opening_balance_paise || 0) / 100);
     setShowPartyModal(true);
   };
@@ -151,31 +179,32 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
   const handleSaveParty = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!company) return;
+    
+    const payload = {
+      partyName: pName.trim(),
+      partyType: pType,
+      gstin: pGstin.trim() || undefined,
+      pan: pType === 'CUSTOMER' ? undefined : (pPan.trim() || undefined),
+      addressLine1: pAddress.trim() || undefined,
+      city: pCity.trim() || undefined,
+      state: pState,
+      stateCode: pStateCode,
+      pincode: pPincode.trim() || undefined,
+      phone: pPhone.trim() || undefined,
+      email: pEmail.trim() || undefined,
+      bankName: pBankName.trim() || undefined,
+      bankAccountNo: pBankAccountNo.trim() || undefined,
+      bankIfsc: pBankIfsc.trim() || undefined,
+      openingBalancePaise: Math.round(pOpeningBal * 100)
+    };
+    
     try {
       if (editingParty) {
-        await api.updateParty(editingParty.party_id, {
-          partyName: pName.trim(),
-          partyType: pType,
-          gstin: pGstin.trim() || null,
-          pan: pType === 'CUSTOMER' ? null : (pPan.trim() || null),
-          city: pCity.trim(),
-          state: pState,
-          stateCode: '33',
-          openingBalancePaise: Math.round(pOpeningBal * 100)
-        });
+        await api.updateParty(editingParty.party_id, payload);
       } else {
         await api.createParty({
-          companyId: company.company_id,
-          partyName: pName.trim(),
-          partyType: pType,
-          gstin: pGstin.trim() || null,
-          pan: pType === 'CUSTOMER' ? null : (pPan.trim() || null),
-          addressLine1: 'Main Road',
-          city: pCity.trim(),
-          state: pState,
-          stateCode: '33',
-          pincode: '600001',
-          openingBalancePaise: Math.round(pOpeningBal * 100)
+          ...payload,
+          companyId: company.company_id
         });
       }
       setShowPartyModal(false);
@@ -204,7 +233,9 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
     setIUnit(units[0]?.unit_id || 'unit_nos');
     setIGst(18);
     setICost(0);
+    setICostIncl(0);
     setISell(0);
+    setISellIncl(0);
     setIQtyToAdd(0);
     setIHasSerialNo(false);
     setISerialNumbers('');
@@ -217,13 +248,44 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
     setIName(item.item_name || '');
     setIHsn(item.hsn_sac || '');
     setIUnit(item.unit_id || units[0]?.unit_id || 'unit_nos');
-    setIGst(item.gst_rate ?? 18);
-    setICost((item.purchase_rate_paise || 0) / 100);
-    setISell((item.selling_rate_paise || 0) / 100);
+    const gst = item.gst_rate ?? 18;
+    setIGst(gst);
+    const cost = (item.purchase_rate_paise || 0) / 100;
+    const sell = (item.selling_rate_paise || 0) / 100;
+    setICost(cost);
+    setICostIncl(Number((cost * (1 + gst / 100)).toFixed(2)));
+    setISell(sell);
+    setISellIncl(Number((sell * (1 + gst / 100)).toFixed(2)));
     setIQtyToAdd(0);
     setIHasSerialNo(Boolean(item.has_serial_no));
     setISerialNumbers(item.serial_numbers || '');
     setShowItemModal(true);
+  };
+
+  const handleCostChange = (val: number) => {
+    setICost(val);
+    setICostIncl(Number((val * (1 + iGst / 100)).toFixed(2)));
+  };
+
+  const handleCostInclChange = (val: number) => {
+    setICostIncl(val);
+    setICost(Number((val / (1 + iGst / 100)).toFixed(2)));
+  };
+
+  const handleSellChange = (val: number) => {
+    setISell(val);
+    setISellIncl(Number((val * (1 + iGst / 100)).toFixed(2)));
+  };
+
+  const handleSellInclChange = (val: number) => {
+    setISellIncl(val);
+    setISell(Number((val / (1 + iGst / 100)).toFixed(2)));
+  };
+
+  const handleGstChange = (val: number) => {
+    setIGst(val);
+    setICostIncl(Number((iCost * (1 + val / 100)).toFixed(2)));
+    setISellIncl(Number((iSell * (1 + val / 100)).toFixed(2)));
   };
 
   // Save Item (Create or Update)
@@ -302,8 +364,9 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
         bank_name: compBankName.trim(),
         bank_account_no: compBankAccountNo.trim(),
         bank_ifsc: compBankIfsc.trim(),
-        bank_branch: compBankBranch.trim(),
-        terms_and_conditions: compTerms.trim()
+        bank_branch: compBankBranch,
+        terms_and_conditions: compTerms,
+        logo_base64: compLogoBase64 || undefined
       });
       setCompanySaveSuccess(true);
       if (onCompanyUpdated) onCompanyUpdated();
@@ -950,6 +1013,34 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
                     style={{ width: '100%', padding: '8px 12px', resize: 'vertical' }}
                   />
                 </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    Company Logo
+                  </label>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setCompLogoBase64(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      style={{ padding: '8px', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}
+                    />
+                    {compLogoBase64 && (
+                      <img src={compLogoBase64} alt="Company Logo" style={{ height: '40px', maxWidth: '150px', objectFit: 'contain' }} />
+                    )}
+                    {compLogoBase64 && (
+                      <button type="button" onClick={() => setCompLogoBase64(null)} className="btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }}>Clear</button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -972,13 +1063,13 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
       {/* Party Modal (Add / Edit) */}
       {showPartyModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--modal-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div className="ledger-card" style={{ width: '540px', padding: '28px' }}>
+          <div className="ledger-card" style={{ width: '800px', maxHeight: '90vh', overflowY: 'auto', padding: '28px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '16px' }}>
               {editingParty ? 'Edit Party Master' : 'Add New Party'}
             </h3>
             <form onSubmit={handleSaveParty}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div style={{ gridColumn: 'span 2' }}>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Party Name *</label>
                   <input
                     type="text"
@@ -989,31 +1080,116 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
                     autoFocus
                   />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Type</label>
-                    <select
-                      value={pType}
-                      onChange={(e) => setPType(e.target.value as any)}
-                      style={{ width: '100%', padding: '8px 10px' }}
-                    >
-                      <option value="CUSTOMER">Customer</option>
-                      <option value="SUPPLIER">Supplier</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>GSTIN (Optional)</label>
-                    <input
-                      type="text"
-                      value={pGstin}
-                      onChange={(e) => setPGstin(e.target.value.toUpperCase())}
-                      placeholder="33AAAAA0000A1Z5"
-                      style={{ width: '100%', padding: '8px 10px' }}
-                    />
-                  </div>
+                
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Type</label>
+                  <select
+                    value={pType}
+                    onChange={(e) => setPType(e.target.value as any)}
+                    style={{ width: '100%', padding: '8px 10px' }}
+                  >
+                    <option value="CUSTOMER">Customer</option>
+                    <option value="SUPPLIER">Supplier</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Opening Balance (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={pOpeningBal}
+                    onChange={(e) => setPOpeningBal(Number(e.target.value))}
+                    style={{ width: '100%', padding: '8px 10px' }}
+                  />
                 </div>
 
-                {/* PAN Details: NOT shown for Customers, only shown for Suppliers */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Address</label>
+                  <input
+                    type="text"
+                    value={pAddress}
+                    onChange={(e) => setPAddress(e.target.value)}
+                    placeholder="Street Address"
+                    style={{ width: '100%', padding: '8px 10px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>City</label>
+                  <input
+                    type="text"
+                    value={pCity}
+                    onChange={(e) => setPCity(e.target.value)}
+                    placeholder="e.g. Chennai"
+                    style={{ width: '100%', padding: '8px 10px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Pincode</label>
+                  <input
+                    type="text"
+                    value={pPincode}
+                    onChange={(e) => setPPincode(e.target.value)}
+                    placeholder="600001"
+                    style={{ width: '100%', padding: '8px 10px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>State</label>
+                  <input
+                    type="text"
+                    value={pState}
+                    onChange={(e) => setPState(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>State Code</label>
+                  <input
+                    type="text"
+                    value={pStateCode}
+                    onChange={(e) => setPStateCode(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Mobile</label>
+                  <input
+                    type="text"
+                    value={pPhone}
+                    onChange={(e) => setPPhone(e.target.value)}
+                    placeholder="Mobile Number"
+                    style={{ width: '100%', padding: '8px 10px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Email</label>
+                  <input
+                    type="email"
+                    value={pEmail}
+                    onChange={(e) => setPEmail(e.target.value)}
+                    placeholder="Email Address"
+                    style={{ width: '100%', padding: '8px 10px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>GSTIN (Optional)</label>
+                  <input
+                    type="text"
+                    value={pGstin}
+                    onChange={(e) => setPGstin(e.target.value.toUpperCase())}
+                    placeholder="33AAAAA0000A1Z5"
+                    style={{ width: '100%', padding: '8px 10px' }}
+                  />
+                </div>
+
                 {pType === 'SUPPLIER' && (
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
@@ -1028,41 +1204,44 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
                     />
                   </div>
                 )}
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>City</label>
-                    <input
-                      type="text"
-                      value={pCity}
-                      onChange={(e) => setPCity(e.target.value)}
-                      placeholder="e.g. Chennai"
-                      style={{ width: '100%', padding: '8px 10px' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>State</label>
-                    <input
-                      type="text"
-                      value={pState}
-                      onChange={(e) => setPState(e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px' }}
-                    />
+                
+                {/* Banking details section */}
+                <div style={{ gridColumn: 'span 2', marginTop: '10px' }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px', marginBottom: '12px' }}>Banking Details</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Bank Name</label>
+                      <input
+                        type="text"
+                        value={pBankName}
+                        onChange={(e) => setPBankName(e.target.value)}
+                        placeholder="e.g. HDFC Bank"
+                        style={{ width: '100%', padding: '8px 10px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Account No.</label>
+                      <input
+                        type="text"
+                        value={pBankAccountNo}
+                        onChange={(e) => setPBankAccountNo(e.target.value)}
+                        placeholder="Account Number"
+                        style={{ width: '100%', padding: '8px 10px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>IFSC Code</label>
+                      <input
+                        type="text"
+                        value={pBankIfsc}
+                        onChange={(e) => setPBankIfsc(e.target.value)}
+                        placeholder="IFSC Code"
+                        style={{ width: '100%', padding: '8px 10px' }}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                    Opening Balance (₹)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={pOpeningBal}
-                    onChange={(e) => setPOpeningBal(Number(e.target.value))}
-                    style={{ width: '100%', padding: '8px 10px' }}
-                  />
-                </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px' }}>
@@ -1081,7 +1260,7 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
       {/* Stock Item Modal (Add / Edit) */}
       {showItemModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--modal-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div className="ledger-card" style={{ width: '540px', padding: '28px' }}>
+          <div className="ledger-card" style={{ width: '540px', maxHeight: '90vh', overflowY: 'auto', padding: '28px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '16px' }}>
               {editingItem ? 'Edit Stock Item' : 'Add Stock Item'}
             </h3>
@@ -1113,7 +1292,7 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>GST Rate</label>
                     <select
                       value={iGst}
-                      onChange={(e) => setIGst(Number(e.target.value))}
+                      onChange={(e) => handleGstChange(Number(e.target.value))}
                       style={{ width: '100%', padding: '8px 10px' }}
                     >
                       <option value={0}>0% (Exempt)</option>
@@ -1128,26 +1307,55 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      Purchase Cost (₹) *
+                      Purchase Cost (Excl. Tax)
                     </label>
                     <input
                       type="number"
                       step="0.01"
-                      value={iCost}
-                      onChange={(e) => setICost(Number(e.target.value))}
+                      value={iCost || ''}
+                      onChange={(e) => handleCostChange(Number(e.target.value))}
                       placeholder="0.00"
                       style={{ width: '100%', padding: '8px 10px' }}
                     />
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      Selling Price (₹) *
+                      Purchase Cost (Incl. Tax)
                     </label>
                     <input
                       type="number"
                       step="0.01"
-                      value={iSell}
-                      onChange={(e) => setISell(Number(e.target.value))}
+                      value={iCostIncl || ''}
+                      onChange={(e) => handleCostInclChange(Number(e.target.value))}
+                      placeholder="0.00"
+                      style={{ width: '100%', padding: '8px 10px' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                      Selling Price (Excl. Tax)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={iSell || ''}
+                      onChange={(e) => handleSellChange(Number(e.target.value))}
+                      placeholder="0.00"
+                      style={{ width: '100%', padding: '8px 10px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                      Selling Price (Incl. Tax)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={iSellIncl || ''}
+                      onChange={(e) => handleSellInclChange(Number(e.target.value))}
                       placeholder="0.00"
                       style={{ width: '100%', padding: '8px 10px' }}
                     />

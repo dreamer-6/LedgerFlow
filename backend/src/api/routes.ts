@@ -8,6 +8,10 @@ import { GstEngine } from '../domain/tax/gst-engine.js';
 import { InventoryEngine } from '../domain/inventory/valuation.js';
 import { initializeBusiness } from '../database/seed.js';
 
+import { AuthController } from '../controllers/auth.controller.js';
+
+import { BusinessController } from '../controllers/business.controller.js';
+
 const JWT_SECRET = process.env.JWT_SECRET || 'ledgerflow_secure_secret_key_2026';
 
 // Helper: Extract authenticated user from Authorization header
@@ -50,429 +54,24 @@ export function createApiRouter(db: DatabaseSync): Router {
   const router = Router();
 
   // ---------------- AUTHENTICATION & MULTI-TENANCY ----------------
-
-  // Sign Up / Register new SaaS account with first business
-  router.post('/auth/register', (req: Request, res: Response) => {
-    try {
-      const { email, password, fullName, businessName, companyName, legalName, gstin, state, stateCode } = req.body;
-      const finalBusinessName = (businessName || companyName || '').trim();
-
-      if (!email || !password || !fullName || !finalBusinessName) {
-        return res.status(400).json({ error: 'Email, password, full name, and business name are required.' });
-      }
-
-      const cleanEmail = email.trim().toLowerCase();
-      const existing = db.prepare('SELECT user_id FROM users WHERE LOWER(email) = ? OR LOWER(username) = ?')
-        .get(cleanEmail, cleanEmail) as any;
-
-      if (existing) {
-        return res.status(400).json({ error: 'An account with this email address already exists. Please sign in.' });
-      }
-
-      const userId = 'usr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-      const salt = bcrypt.genSaltSync(10);
-      const passwordHash = bcrypt.hashSync(password, salt);
-
-      // 1. Create User
-      db.prepare(`
-        INSERT INTO users (user_id, username, email, password_hash, full_name, role)
-        VALUES (?, ?, ?, ?, ?, 'ADMIN')
-      `).run(userId, cleanEmail, cleanEmail, passwordHash, fullName.trim());
-
-      // 2. Provision Isolated Business
-      const companyId = 'comp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-      initializeBusiness(db, {
-        companyId,
-        companyName: finalBusinessName,
-        legalName: (legalName || finalBusinessName).trim(),
-        gstin: gstin ? gstin.trim() : '',
-        state: state || 'Tamil Nadu',
-        stateCode: stateCode || '33',
-        ownerUserId: userId
-      });
-
-      const token = jwt.sign(
-        { userId, username: cleanEmail, role: 'ADMIN', name: fullName.trim(), email: cleanEmail },
-        JWT_SECRET,
-        { expiresIn: '30d' }
-      );
-
-      const businesses = db.prepare(`
-        SELECT c.*, ub.role
-        FROM companies c
-        JOIN user_businesses ub ON c.company_id = ub.company_id
-        WHERE ub.user_id = ?
-        ORDER BY c.created_at ASC
-      `).all(userId);
-
-      const createdCompany = businesses[0] || null;
-
-      res.status(201).json({
-        token,
-        user: {
-          userId,
-          email: cleanEmail,
-          fullName: fullName.trim(),
-          role: 'ADMIN'
-        },
-        activeCompanyId: companyId,
-        company: createdCompany,
-        businesses
-      });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Login to SaaS account
-  router.post('/auth/login', (req: Request, res: Response) => {
-    try {
-      const { username, email, emailOrUsername, password } = req.body;
-      const identifier = (emailOrUsername || email || username || '').trim().toLowerCase();
-
-      if (!identifier || !password) {
-        return res.status(400).json({ error: 'Email/username and password are required.' });
-      }
-
-      const user = db.prepare(`
-        SELECT user_id, username, email, password_hash, full_name, role
-        FROM users
-        WHERE (LOWER(username) = ? OR LOWER(email) = ?) AND is_active = 1
-      `).get(identifier, identifier) as any;
-
-      if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-        return res.status(401).json({ error: 'Invalid email or password.' });
-      }
-
-      const token = jwt.sign(
-        { userId: user.user_id, username: user.username, role: user.role, name: user.full_name, email: user.email },
-        JWT_SECRET,
-        { expiresIn: '30d' }
-      );
-
-      let businesses = db.prepare(`
-        SELECT c.*, ub.role
-        FROM companies c
-        JOIN user_businesses ub ON c.company_id = ub.company_id
-        WHERE ub.user_id = ?
-        ORDER BY c.created_at ASC
-      `).all(user.user_id) as any[];
-
-      // If user has no businesses linked yet, link to first company or create one
-      if (businesses.length === 0) {
-        const defCompany = db.prepare('SELECT * FROM companies LIMIT 1').get() as any;
-        if (defCompany) {
-          db.prepare('INSERT OR IGNORE INTO user_businesses (user_id, company_id, role) VALUES (?, ?, ?)')
-            .run(user.user_id, defCompany.company_id, 'OWNER');
-          businesses = [{ ...defCompany, role: 'OWNER' }];
-        }
-      }
-
-      res.json({
-        token,
-        user: {
-          userId: user.user_id,
-          email: user.email || user.username,
-          username: user.username,
-          fullName: user.full_name,
-          role: user.role
-        },
-        activeCompanyId: businesses[0]?.company_id || null,
-        businesses
-      });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Current User & Accessible Businesses
-  router.get('/auth/me', (req: Request, res: Response) => {
-    const user = getUserFromToken(req);
-    if (!user) return res.status(401).json({ error: 'Unauthorized' });
-
-    try {
-      const dbUser = db.prepare('SELECT user_id, username, email, full_name, role FROM users WHERE user_id = ?').get(user.userId) as any;
-      const businesses = db.prepare(`
-        SELECT c.*, ub.role
-        FROM companies c
-        JOIN user_businesses ub ON c.company_id = ub.company_id
-        WHERE ub.user_id = ?
-        ORDER BY c.created_at ASC
-      `).all(user.userId);
-
-      res.json({
-        user: dbUser || user,
-        businesses
-      });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
+  const authController = new AuthController(db);
+  router.post('/auth/register', authController.register);
+  router.post('/auth/login', authController.login);
+  router.get('/auth/me', authController.getMe);
 
   // ---------------- BUSINESSES (TENANTS) ----------------
-
-  // List all businesses for current user
-  router.get('/businesses', (req: Request, res: Response) => {
-    try {
-      const user = getUserFromToken(req);
-      let businesses: any[];
-      if (user?.userId) {
-        businesses = db.prepare(`
-          SELECT c.*, ub.role
-          FROM companies c
-          JOIN user_businesses ub ON c.company_id = ub.company_id
-          WHERE ub.user_id = ?
-          ORDER BY c.created_at ASC
-        `).all(user.userId);
-      } else {
-        businesses = db.prepare('SELECT * FROM companies ORDER BY created_at ASC').all();
-      }
-      res.json(businesses);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Create an additional isolated business for current user
-  router.post('/businesses', (req: Request, res: Response) => {
-    try {
-      const user = getUserFromToken(req);
-      if (!user?.userId) {
-        return res.status(401).json({ error: 'Authentication required to create a new business.' });
-      }
-
-      const { companyName, legalName, gstin, state, stateCode } = req.body;
-      if (!companyName || !companyName.trim()) {
-        return res.status(400).json({ error: 'Business name is required.' });
-      }
-
-      const companyId = 'comp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-      initializeBusiness(db, {
-        companyId,
-        companyName: companyName.trim(),
-        legalName: (legalName || companyName).trim(),
-        gstin: gstin ? gstin.trim() : '',
-        state: state || 'Tamil Nadu',
-        stateCode: stateCode || '33',
-        ownerUserId: user.userId
-      });
-
-      const newCompany = db.prepare('SELECT * FROM companies WHERE company_id = ?').get(companyId);
-      res.status(201).json({
-        company: newCompany,
-        message: 'Business created and isolated accounting initialized successfully.'
-      });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
+  const businessController = new BusinessController(db);
+  router.get('/businesses', businessController.getBusinesses);
+  router.post('/businesses', businessController.createBusiness);
+  
   // ---------------- COMPANY & FINANCIAL YEARS ----------------
-  router.get('/companies/current', (req: Request, res: Response) => {
-    try {
-      const user = getUserFromToken(req);
-      const companyId = resolveCompanyId(req, db, user);
-      if (!companyId) {
-        return res.json({ company: null, activeFinancialYear: null });
-      }
-      const company = db.prepare('SELECT * FROM companies WHERE company_id = ?').get(companyId);
-      const activeFy = db.prepare("SELECT * FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(companyId);
-      res.json({ company: company || null, activeFinancialYear: activeFy || null });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  router.put('/companies/current', (req: Request, res: Response) => {
-    try {
-      const user = getUserFromToken(req);
-      const companyId = resolveCompanyId(req, db, user);
-      const b = req.body;
-      const targetId = b.company_id || companyId;
-      if (!targetId) {
-        return res.status(400).json({ error: 'No company selected to update.' });
-      }
-
-      db.prepare(`
-        UPDATE companies SET
-          company_name = ?, legal_name = ?, gstin = ?, pan = ?,
-          address_line1 = ?, address_line2 = ?, city = ?, state = ?, state_code = ?, pincode = ?,
-          phone = ?, email = ?, bank_name = ?, bank_account_no = ?, bank_ifsc = ?, bank_branch = ?,
-          terms_and_conditions = ?
-        WHERE company_id = ?
-      `).run(
-        b.company_name, b.legal_name, b.gstin, b.pan,
-        b.address_line1, b.address_line2, b.city, b.state, b.state_code, b.pincode,
-        b.phone, b.email, b.bank_name, b.bank_account_no, b.bank_ifsc, b.bank_branch,
-        b.terms_and_conditions, targetId
-      );
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Permanently delete company and all isolated accounting records with password verification
-  router.post('/companies/:id/delete', (req: Request, res: Response) => {
-    try {
-      const user = getUserFromToken(req);
-      if (!user?.userId) {
-        return res.status(401).json({ error: 'Authentication required to delete company.' });
-      }
-
-      const { password } = req.body;
-      if (!password) {
-        return res.status(400).json({ error: 'Account password is required to verify company deletion.' });
-      }
-
-      // 1. Verify user password against database
-      const dbUser = db.prepare('SELECT user_id, password_hash FROM users WHERE user_id = ?').get(user.userId) as any;
-      if (!dbUser || !bcrypt.compareSync(password, dbUser.password_hash)) {
-        return res.status(401).json({ error: 'Incorrect account password. Company deletion rejected.' });
-      }
-
-      const targetCompanyId = req.params.id;
-
-      // 2. Verify access / ownership
-      const userBiz = db.prepare('SELECT role FROM user_businesses WHERE user_id = ? AND company_id = ?').get(user.userId, targetCompanyId) as any;
-      if (!userBiz) {
-        return res.status(403).json({ error: 'You do not have permission to delete this company.' });
-      }
-
-      // 3. Atomic cascade deletion of all company data
-      db.exec('BEGIN TRANSACTION;');
-      try {
-        // A. Delete stock entries
-        db.prepare(`
-          DELETE FROM stock_entries WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)
-          OR item_id IN (SELECT item_id FROM stock_items WHERE company_id = ?)
-        `).run(targetCompanyId, targetCompanyId);
-
-        // B. Delete voucher lines
-        db.prepare('DELETE FROM voucher_lines WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)').run(targetCompanyId);
-
-        // C. Delete ledger entries
-        db.prepare('DELETE FROM ledger_entries WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)').run(targetCompanyId);
-
-        // D. Delete vouchers
-        db.prepare('DELETE FROM vouchers WHERE company_id = ?').run(targetCompanyId);
-
-        // E. Delete stock items
-        db.prepare('DELETE FROM stock_items WHERE company_id = ?').run(targetCompanyId);
-
-        // F. Delete parties and addresses
-        db.prepare('DELETE FROM party_addresses WHERE party_id IN (SELECT party_id FROM parties WHERE company_id = ?)').run(targetCompanyId);
-        db.prepare('DELETE FROM parties WHERE company_id = ?').run(targetCompanyId);
-
-        // G. Delete godowns and units
-        db.prepare('DELETE FROM godowns WHERE company_id = ?').run(targetCompanyId);
-        db.prepare('DELETE FROM units WHERE company_id = ?').run(targetCompanyId);
-
-        // H. Delete financial years and ledgers
-        db.prepare('DELETE FROM financial_years WHERE company_id = ?').run(targetCompanyId);
-        db.prepare('DELETE FROM ledgers WHERE company_id = ?').run(targetCompanyId);
-
-        // I. Delete user_businesses association & company
-        db.prepare('DELETE FROM user_businesses WHERE company_id = ?').run(targetCompanyId);
-        db.prepare('DELETE FROM companies WHERE company_id = ?').run(targetCompanyId);
-
-        db.exec('COMMIT;');
-      } catch (delErr: any) {
-        db.exec('ROLLBACK;');
-        throw delErr;
-      }
-
-      // 4. Return remaining businesses
-      const remainingBusinesses = db.prepare(`
-        SELECT c.*, ub.role
-        FROM companies c
-        JOIN user_businesses ub ON c.company_id = ub.company_id
-        WHERE ub.user_id = ?
-        ORDER BY c.created_at ASC
-      `).all(user.userId) as any[];
-
-      const nextActiveId = remainingBusinesses.length > 0 ? remainingBusinesses[0].company_id : null;
-
-      res.json({
-        success: true,
-        message: 'Company and all associated data permanently deleted.',
-        remainingBusinesses,
-        nextActiveCompanyId: nextActiveId
-      });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  router.get('/financial-years', (req: Request, res: Response) => {
-    try {
-      const user = getUserFromToken(req);
-      const companyId = resolveCompanyId(req, db, user);
-      if (!companyId) return res.json([]);
-      const rows = db.prepare('SELECT * FROM financial_years WHERE company_id = ? ORDER BY start_date DESC').all(companyId);
-      res.json(rows);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  router.post('/financial-years', (req: Request, res: Response) => {
-    try {
-      const user = getUserFromToken(req);
-      const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, user);
-      if (!targetCompanyId) {
-        return res.status(400).json({ error: 'No company selected for financial year creation.' });
-      }
-
-      const { name, startDate, endDate, status } = req.body;
-      if (!name || !startDate || !endDate) {
-        return res.status(400).json({ error: 'Financial year name, start date, and end date are required.' });
-      }
-
-      const fyId = `${targetCompanyId}_fy_${name.trim().replace(/[^a-zA-Z0-9]/g, '_')}`;
-      let fyStatus = (status || 'OPEN').toUpperCase();
-      if (fyStatus === 'ACTIVE') fyStatus = 'OPEN';
-      if (!['OPEN', 'LOCKED', 'CLOSED'].includes(fyStatus)) {
-        fyStatus = 'OPEN';
-      }
-
-      db.prepare(`
-        INSERT INTO financial_years (fy_id, company_id, name, start_date, end_date, status)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(fyId, targetCompanyId, name.trim(), startDate, endDate, fyStatus);
-
-      const created = db.prepare('SELECT * FROM financial_years WHERE fy_id = ?').get(fyId);
-      res.status(201).json(created);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  router.put('/financial-years/:fyId', (req: Request, res: Response) => {
-    try {
-      const user = getUserFromToken(req);
-      const companyId = resolveCompanyId(req, db, user);
-      const { fyId } = req.params;
-      const { status } = req.body;
-
-      let fyStatus = (status || 'OPEN').toUpperCase();
-      if (fyStatus === 'ACTIVE') fyStatus = 'OPEN';
-      if (!['OPEN', 'LOCKED', 'CLOSED'].includes(fyStatus)) {
-        fyStatus = 'OPEN';
-      }
-
-      db.prepare(`
-        UPDATE financial_years
-        SET status = ?
-        WHERE fy_id = ? AND company_id = ?
-      `).run(fyStatus, fyId, companyId);
-
-      const updated = db.prepare('SELECT * FROM financial_years WHERE fy_id = ?').get(fyId);
-      res.json(updated);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
+  router.get('/companies/current', businessController.getCurrentCompanyInfo);
+  router.put('/companies/current', businessController.updateCurrentCompany);
+  router.post('/companies/:id/delete', businessController.deleteCompany);
+  
+  router.get('/financial-years', businessController.getFinancialYears);
+  router.post('/financial-years', businessController.createFinancialYear);
+  router.put('/financial-years/:fyId', businessController.updateFinancialYearStatus);
 
   // ---------------- MASTERS (TENANT ISOLATED) ----------------
   router.get('/masters/ledgers', (req: Request, res: Response) => {
@@ -557,7 +156,8 @@ export function createApiRouter(db: DatabaseSync): Router {
       const user = getUserFromToken(req);
       const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, user);
       const {
-        partyName, partyType, gstin, pan, phone, email, contactPerson, bankName,
+        partyName, partyType, gstin, pan, phone, email, contactPerson, 
+        bankingName, bankingAccountNo, bankingIfsc,
         addressLine1, addressLine2, city, state, stateCode, pincode, openingBalancePaise
       } = req.body;
 
@@ -590,9 +190,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
       // 2. Create Party
       db.prepare(`
-        INSERT INTO parties (party_id, company_id, ledger_id, party_type, party_name, gstin, pan, phone, email, contact_person, bank_name)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(partyId, targetCompanyId, ledgerId, partyType, partyName.trim(), gstin || null, derivedPan || null, phone || null, email || null, contactPerson || null, bankName || null);
+        INSERT INTO parties (party_id, company_id, ledger_id, party_type, party_name, gstin, pan, phone, email, contact_person, banking_name, banking_account_no, banking_ifsc)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(partyId, targetCompanyId, ledgerId, partyType, partyName.trim(), gstin || null, derivedPan || null, phone || null, email || null, contactPerson || null, bankingName || null, bankingAccountNo || null, bankingIfsc || null);
 
       // 3. Create Address
       db.prepare(`
@@ -621,7 +221,8 @@ export function createApiRouter(db: DatabaseSync): Router {
     try {
       const partyId = req.params.id;
       const {
-        partyName, partyType, gstin, pan, phone, email, contactPerson, bankName,
+        partyName, partyType, gstin, pan, phone, email, contactPerson, 
+        bankingName, bankingAccountNo, bankingIfsc,
         addressLine1, addressLine2, city, state, stateCode, pincode, openingBalancePaise
       } = req.body;
 
@@ -641,7 +242,9 @@ export function createApiRouter(db: DatabaseSync): Router {
           phone = ?,
           email = ?,
           contact_person = ?,
-          bank_name = ?
+          banking_name = ?,
+          banking_account_no = ?,
+          banking_ifsc = ?
         WHERE party_id = ?
       `).run(
         partyName ? partyName.trim() : null,
@@ -651,7 +254,9 @@ export function createApiRouter(db: DatabaseSync): Router {
         phone || null,
         email || null,
         contactPerson || null,
-        bankName || null,
+        bankingName || null,
+        bankingAccountNo || null,
+        bankingIfsc || null,
         partyId
       );
 
@@ -793,6 +398,12 @@ export function createApiRouter(db: DatabaseSync): Router {
           updatedSerials = updatedSerials
             ? `${updatedSerials}, ${b.serialNumbers.trim()}`
             : b.serialNumbers.trim();
+          
+          const serialsArr = b.serialNumbers.split(',').map((s: string) => s.trim()).filter(Boolean);
+          for (const s of serialsArr) {
+            db.prepare('INSERT OR IGNORE INTO stock_item_serials (serial_id, item_id, serial_number, status) VALUES (?, ?, ?, ?)')
+              .run('ser_' + Date.now().toString(36) + Math.random().toString(36).substring(2,6), existing.item_id, s, 'AVAILABLE');
+          }
         }
 
         db.prepare(`
@@ -874,7 +485,33 @@ export function createApiRouter(db: DatabaseSync): Router {
         `).run('se_opn_' + itemId, itemId, godownId, new Date().toISOString().split('T')[0], qty, rate, openingVal);
       }
 
+      // Add individual serials to the tracking table
+      if (b.serialNumbers && b.serialNumbers.trim()) {
+        const serialsArr = b.serialNumbers.split(',').map((s: string) => s.trim()).filter(Boolean);
+        for (const s of serialsArr) {
+          db.prepare('INSERT OR IGNORE INTO stock_item_serials (serial_id, item_id, serial_number, status) VALUES (?, ?, ?, ?)')
+            .run('ser_' + Date.now().toString(36) + Math.random().toString(36).substring(2,6), itemId, s, 'AVAILABLE');
+        }
+      }
+
       res.status(201).json({ itemId, itemName: b.itemName, updated: false, message: `Created stock item '${b.itemName}'.` });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/masters/items/:id/serials', (req: Request, res: Response) => {
+    try {
+      const user = getUserFromToken(req);
+      const companyId = resolveCompanyId(req, db, user);
+      if (!companyId) return res.json([]);
+      
+      const rows = db.prepare(`
+        SELECT serial_number FROM stock_item_serials
+        WHERE item_id = ? AND status = 'AVAILABLE'
+      `).all(req.params.id);
+      
+      res.json(rows.map((r: any) => r.serial_number));
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1079,6 +716,39 @@ export function createApiRouter(db: DatabaseSync): Router {
       res.status(400).json({ error: err.message });
     }
   });
+
+  router.delete('/vouchers/:id', (req: Request, res: Response) => {
+    try {
+      const vch = db.prepare('SELECT voucher_id, voucher_number, company_id FROM vouchers WHERE voucher_id = ?').get(req.params.id) as any;
+      if (!vch) return res.status(404).json({ error: 'Voucher not found' });
+      
+      db.exec('BEGIN TRANSACTION;');
+      db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(vch.voucher_id);
+      db.prepare('DELETE FROM stock_entries WHERE voucher_id = ?').run(vch.voucher_id);
+      db.prepare('DELETE FROM tax_entries WHERE voucher_id = ?').run(vch.voucher_id);
+      db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ?').run(vch.voucher_id);
+      db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(vch.voucher_id);
+      db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(vch.voucher_id);
+      
+      db.prepare(`
+        INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
+        VALUES (?, ?, ?, 'DELETE_VOUCHER', 'VOUCHER', ?, ?)
+      `).run(
+        'aud_' + Date.now().toString(36),
+        vch.company_id,
+        'admin',
+        vch.voucher_id,
+        JSON.stringify({ voucherNumber: vch.voucher_number, reason: 'Deleted by user' })
+      );
+      
+      db.exec('COMMIT;');
+      res.json({ success: true, message: 'Voucher deleted successfully.' });
+    } catch (err: any) {
+      db.exec('ROLLBACK;');
+      res.status(500).json({ error: err.message });
+    }
+  });
+
 
   // ---------------- REPORTS ----------------
   router.get('/reports/dashboard', (req: Request, res: Response) => {

@@ -291,14 +291,24 @@ class PostingEngine {
             line_id, voucher_id, line_number, item_id, ledger_id, godown_id, description,
             quantity, rate_paise, discount_percent, discount_amount_paise,
             taxable_amount_paise, gst_rate, cgst_amount_paise, sgst_amount_paise,
-            igst_amount_paise, total_amount_paise
+            igst_amount_paise, total_amount_paise, serial_number
           ) VALUES (
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?
+            ?, ?, ?
           )
-        `).run(lineId, voucherId, lineNum, pl.lineInput.itemId || null, pl.lineInput.ledgerId || null, lineGodownId, pl.lineInput.description || null, pl.lineInput.quantity || 0, pl.lineInput.ratePaise, pl.lineInput.discountPercent || 0, pl.taxResult.discountAmountPaise, pl.taxResult.taxableAmountPaise, pl.taxResult.cgstRate + pl.taxResult.sgstRate + pl.taxResult.igstRate, pl.taxResult.cgstAmountPaise, pl.taxResult.sgstAmountPaise, pl.taxResult.igstAmountPaise, pl.taxResult.totalAmountPaise);
+        `).run(lineId, voucherId, lineNum, pl.lineInput.itemId || null, pl.lineInput.ledgerId || null, lineGodownId, pl.lineInput.description || null, pl.lineInput.quantity || 0, pl.lineInput.ratePaise, pl.lineInput.discountPercent || 0, pl.taxResult.discountAmountPaise, pl.taxResult.taxableAmountPaise, pl.taxResult.cgstRate + pl.taxResult.sgstRate + pl.taxResult.igstRate, pl.taxResult.cgstAmountPaise, pl.taxResult.sgstAmountPaise, pl.taxResult.igstAmountPaise, pl.taxResult.totalAmountPaise, pl.lineInput.serialNumber || null);
+                if (pl.lineInput.itemId && pl.lineInput.serialNumber) {
+                    const s = pl.lineInput.serialNumber.trim();
+                    if (input.voucherType === 'SALES' || input.voucherType === 'PURCHASE_RETURN') {
+                        db.prepare(`UPDATE stock_item_serials SET status = 'SOLD' WHERE item_id = ? AND serial_number = ?`).run(pl.lineInput.itemId, s);
+                    }
+                    else if (input.voucherType === 'PURCHASE' || input.voucherType === 'SALES_RETURN') {
+                        db.prepare(`INSERT OR REPLACE INTO stock_item_serials (serial_id, item_id, serial_number, status) VALUES (?, ?, ?, 'AVAILABLE')`)
+                            .run('ser_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6), pl.lineInput.itemId, s);
+                    }
+                }
             }
             // C. Insert Ledger Entries
             for (const le of ledgerLines) {

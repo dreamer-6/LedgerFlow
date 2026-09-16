@@ -72,6 +72,47 @@ function getDatabase(customPath) {
     }
     catch { }
     try {
+        db.exec('ALTER TABLE companies ADD COLUMN mailing_name TEXT;');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE companies ADD COLUMN vault_password_hash TEXT;');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE companies ADD COLUMN logo_base64 TEXT;');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE parties ADD COLUMN banking_name TEXT;');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE parties ADD COLUMN banking_account_no TEXT;');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE parties ADD COLUMN banking_ifsc TEXT;');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE voucher_lines ADD COLUMN serial_number TEXT;');
+    }
+    catch { }
+    try {
+        db.exec(`
+      CREATE TABLE IF NOT EXISTS stock_item_serials (
+        serial_id TEXT PRIMARY KEY,
+        item_id TEXT NOT NULL REFERENCES stock_items(item_id) ON DELETE CASCADE,
+        serial_number TEXT NOT NULL,
+        status TEXT CHECK(status IN ('AVAILABLE', 'SOLD')) DEFAULT 'AVAILABLE',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(item_id, serial_number)
+      );
+    `);
+    }
+    catch { }
+    try {
         db.exec(`
       CREATE TABLE IF NOT EXISTS user_businesses (
         user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,

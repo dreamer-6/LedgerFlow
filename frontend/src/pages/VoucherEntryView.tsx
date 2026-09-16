@@ -88,7 +88,9 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
       rate: 0,
       rateInclTax: 0,
       discountPercent: 0,
-      gstRate: 18
+      gstRate: 18,
+      serialNumber: '',
+      availableSerials: [] as string[]
     }
   ]);
 
@@ -291,6 +293,20 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         const baseRate = voucherType === 'PURCHASE' ? cost : sp;
         cur.rate = baseRate;
         cur.rateInclTax = Math.round(baseRate * (1 + (item.gst_rate || 18) / 100) * 100) / 100;
+        
+        // Fetch serials asynchronously
+        if (item.has_serial_no) {
+          api.getAvailableSerials(item.item_id).then((serials: string[]) => {
+            setLines(prev => {
+              const newLines = [...prev];
+              newLines[idx].availableSerials = serials;
+              return newLines;
+            });
+          }).catch(console.error);
+        } else {
+          cur.availableSerials = [];
+          cur.serialNumber = '';
+        }
       }
     } else if (field === 'rate') {
       const r = Number(value) || 0;
@@ -332,7 +348,9 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         rate: baseRate,
         rateInclTax: Math.round(baseRate * (1 + gst / 100) * 100) / 100,
         discountPercent: 0,
-        gstRate: gst
+        gstRate: gst,
+        serialNumber: '',
+        availableSerials: []
       }
     ]);
   };
@@ -452,6 +470,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
             return {
               item_name: item?.item_name || l.description || 'Stock Item',
               description: l.description,
+              serial_number: l.serialNumber || undefined,
               hsn_sac: l.hsnSac || item?.hsn_sac || '85044029',
               quantity: qty,
               unit_symbol: l.unit || 'Nos',
@@ -502,6 +521,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
 
   // Submit Voucher
   const handlePostVoucher = async (andPrint: boolean = false) => {
+    if (isPosting) return;
     if (!company) {
       setErrorMessage('Active company required.');
       return;
@@ -533,31 +553,36 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
       if (isTrading) {
         payload.partyId = partyId;
         payload.lines = lines.map((l) => ({
-          itemId: l.itemId,
+          itemId: l.itemId || undefined,
           description: l.description || null,
           godownId: l.godownId || godowns[0]?.godown_id || undefined,
           quantity: Number(l.quantity),
           ratePaise: Math.round(Number(l.rate) * 100),
-          discountPercentPaise: Math.round(Number(l.discountPercent) * 100),
+          discountPercent: Number(l.discountPercent) || 0,
           gstRate: Number(l.gstRate) || 18,
-          isTaxInclusive: taxMode === 'INCLUSIVE'
+          isTaxInclusive: taxMode === 'INCLUSIVE',
+          serialNumber: l.serialNumber || undefined
         }));
       } else {
-        payload.financialEntries = ledgerLines.map((l) => ({
-          ledgerId: l.ledgerId,
-          type: l.type,
-          amountPaise: Math.round(Number(l.amount) * 100),
-          particulars: l.particulars
-        }));
+        // Financial vouchers: convert DR/CR ledger lines to debitPaise/creditPaise format
+        payload.lines = [];
+        payload.customLedgerLines = ledgerLines
+          .filter((l) => l.ledgerId && Number(l.amount) > 0)
+          .map((l) => ({
+            ledgerId: l.ledgerId,
+            debitPaise: l.type === 'DR' ? Math.round(Number(l.amount) * 100) : 0,
+            creditPaise: l.type === 'CR' ? Math.round(Number(l.amount) * 100) : 0,
+            particulars: l.particulars || null
+          }));
       }
 
       const res = await api.postVoucher(payload);
       setVoucherStatus('Posted');
       await fetchNextVoucherNumber();
       if (andPrint) {
-        onPostSuccess(res.voucher.voucher_id);
+        onPostSuccess(res.voucherId);
       } else {
-        alert(`Voucher ${res.voucher.voucher_number} posted successfully!`);
+        alert(`Voucher ${res.voucherNumber} posted successfully!`);
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to post voucher.');
@@ -589,7 +614,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
       });
       const updated = await api.getParties();
       setParties(updated);
-      handleSelectParty(res.party_id, res);
+      handleSelectParty(res.partyId, res);
       setShowPartyModal(false);
     } catch (err: any) {
       alert('Failed to create party: ' + err.message);
@@ -622,7 +647,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         const u = units.find((un) => un.unit_id === (newItemUnitId || units[0]?.unit_id));
         updatedLines[0] = {
           ...updatedLines[0],
-          itemId: res.item_id,
+          itemId: res.itemId,
           unit: u?.symbol || 'Nos',
           hsnSac: newItemHsn.trim(),
           gstRate: newItemGstRate,
@@ -1093,12 +1118,37 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                                 </option>
                               ))}
                             </select>
+                            {/* Serial Number Selection */}
+                            {stockItems.find(s => s.item_id === row.itemId)?.has_serial_no ? (
+                              <div style={{ display: 'flex', gap: '5px', marginBottom: '5px' }}>
+                                {voucherType === 'SALES' || (voucherType as string) === 'PURCHASE_RETURN' ? (
+                                  <select
+                                    value={row.serialNumber || ''}
+                                    onChange={(e) => updateLine(idx, 'serialNumber', e.target.value)}
+                                    style={{ width: '100%', height: '28px', padding: '4px 8px', fontSize: '11.5px', color: 'var(--text-secondary)' }}
+                                  >
+                                    <option value="">-- Select Available Serial No --</option>
+                                    {row.availableSerials?.map((s: string) => (
+                                      <option key={s} value={s}>{s}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={row.serialNumber || ''}
+                                    onChange={(e) => updateLine(idx, 'serialNumber', e.target.value)}
+                                    placeholder="Enter New Serial Number"
+                                    style={{ width: '100%', height: '28px', padding: '4px 8px', fontSize: '11.5px', color: 'var(--text-secondary)' }}
+                                  />
+                                )}
+                              </div>
+                            ) : null}
                             {/* Serial Number / Warranty / Line Remarks */}
                             <input
                               type="text"
                               value={row.description || ''}
                               onChange={(e) => updateLine(idx, 'description', e.target.value)}
-                              placeholder="Serial / Warranty / Notes (e.g. 3cb0720r3y, 1YR DEALER WRNTY, GPAY)"
+                              placeholder="Line Remarks / Warranty Notes (e.g. 1YR WRNTY)"
                               style={{ width: '100%', height: '28px', padding: '4px 8px', fontSize: '11.5px', color: 'var(--text-secondary)' }}
                             />
                           </td>

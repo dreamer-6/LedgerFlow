@@ -15,11 +15,17 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
   onLogout
 }) => {
   const [companyName, setCompanyName] = useState('');
+  const [mailingName, setMailingName] = useState('');
   const [legalName, setLegalName] = useState('');
+  const [address, setAddress] = useState('');
   const [gstin, setGstin] = useState('');
   const [state, setState] = useState('Tamil Nadu');
   const [stateCode, setStateCode] = useState('33');
-  const [financialYear] = useState('2026-2027');
+  const [country, setCountry] = useState('India');
+  const [mobile, setMobile] = useState('');
+  const [email, setEmail] = useState('');
+  const [financialYear, setFinancialYear] = useState('2026-04-01');
+  const [vaultPassword, setVaultPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,10 +53,16 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
     try {
       const res = await api.createBusiness({
         companyName: companyName.trim(),
+        mailingName: mailingName.trim() || companyName.trim(),
         legalName: legalName.trim() || companyName.trim(),
         gstin: gstin.trim() || undefined,
+        addressLine1: address.trim() || undefined,
         state,
-        stateCode
+        stateCode,
+        country,
+        phone: mobile.trim() || undefined,
+        email: email.trim() || undefined,
+        vaultPassword: vaultPassword || undefined
       });
       onBusinessCreated(res.company);
     } catch (err: any) {
@@ -244,6 +256,35 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
               color: 'var(--text-secondary)',
               marginBottom: '6px'
             }}>
+              Mailing Name
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Acme Technologies"
+              value={mailingName}
+              onChange={(e) => setMailingName(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '11px 14px',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--surface-elevated)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-primary)',
+                fontSize: '14px',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{
+              display: 'block',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              marginBottom: '6px'
+            }}>
               Legal Entity Name (Optional)
             </label>
             <input
@@ -251,6 +292,35 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
               placeholder="e.g. Acme Technologies Private Limited"
               value={legalName}
               onChange={(e) => setLegalName(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '11px 14px',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--surface-elevated)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-primary)',
+                fontSize: '14px',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{
+              display: 'block',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              marginBottom: '6px'
+            }}>
+              Primary Address
+            </label>
+            <input
+              type="text"
+              placeholder="Business Address"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
               style={{
                 width: '100%',
                 padding: '11px 14px',
@@ -335,6 +405,63 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
             </div>
           </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                marginBottom: '6px'
+              }}>
+                Country
+              </label>
+              <input
+                type="text"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'var(--surface-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                marginBottom: '6px'
+              }}>
+                Mobile No
+              </label>
+              <input
+                type="text"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'var(--surface-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          </div>
+          
           <div>
             <label style={{
               display: 'block',
@@ -343,24 +470,81 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
               color: 'var(--text-secondary)',
               marginBottom: '6px'
             }}>
-              Initial Financial Year
+              Email Address
             </label>
             <input
-              type="text"
-              readOnly
-              value={financialYear}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               style={{
                 width: '100%',
                 padding: '11px 14px',
                 borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--surface-hover)',
+                backgroundColor: 'var(--surface-elevated)',
                 border: '1px solid var(--border-subtle)',
-                color: 'var(--text-muted)',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '13px',
+                color: 'var(--text-primary)',
+                fontSize: '14px',
+                outline: 'none',
                 boxSizing: 'border-box'
               }}
             />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                marginBottom: '6px'
+              }}>
+                Financial Year Begins From
+              </label>
+              <input
+                type="date"
+                value={financialYear}
+                onChange={(e) => setFinancialYear(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'var(--surface-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-primary)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '13px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                marginBottom: '6px'
+              }}>
+                TallyVault Password
+              </label>
+              <input
+                type="password"
+                placeholder="(Optional)"
+                value={vaultPassword}
+                onChange={(e) => setVaultPassword(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '11px 14px',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'var(--surface-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-primary)',
+                  fontSize: '13px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
           </div>
 
           {/* Reassurance Badge */}

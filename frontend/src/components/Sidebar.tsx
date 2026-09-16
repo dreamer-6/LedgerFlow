@@ -61,11 +61,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         onClick={handleClick}
         className={`sidebar-nav-item ${isSelected ? 'active' : ''}`}
         style={{
-          padding: isReport ? '7px 12px 7px 16px' : '8px 12px',
-          fontSize: isReport ? '12.5px' : '13px'
+          padding: isReport ? '9px 12px 9px 18px' : '10px 14px',
+          fontSize: isReport ? '12.5px' : '13px',
+          marginBottom: '6px',
+          borderRadius: '8px'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span className="nav-icon">
             {icon}
           </span>

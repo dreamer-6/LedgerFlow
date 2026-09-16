@@ -16,7 +16,8 @@ import {
   Filter,
   ShoppingCart,
   ShoppingBag,
-  Eye
+  Eye,
+  Trash2
 } from 'lucide-react';
 
 interface ReportsViewProps {
@@ -40,6 +41,39 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [ledgers, setLedgers] = useState<any[]>([]);
   const [reportData, setReportData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [selectedVouchers, setSelectedVouchers] = useState<string[]>([]);
+
+  const handleToggleVoucherSelection = (voucherId: string) => {
+    setSelectedVouchers(prev => 
+      prev.includes(voucherId) 
+        ? prev.filter(id => id !== voucherId)
+        : [...prev, voucherId]
+    );
+  };
+
+  const handleSelectAllVouchers = (vouchers: any[]) => {
+    if (selectedVouchers.length === vouchers.length) {
+      setSelectedVouchers([]);
+    } else {
+      setSelectedVouchers(vouchers.map(v => v.voucher_id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedVouchers.length === 0) return;
+    if (window.confirm(`Are you sure you want to permanently delete ${selectedVouchers.length} selected vouchers?`)) {
+      try {
+        for (const id of selectedVouchers) {
+          await api.deleteVoucher(id);
+        }
+        alert('Selected vouchers deleted successfully.');
+        setSelectedVouchers([]);
+        fetchReport();
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete some vouchers');
+      }
+    }
+  };
 
   // Load Ledgers list for Ledger Statement
   useEffect(() => {
@@ -97,7 +131,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   useEffect(() => {
     fetchReport();
+    setSelectedVouchers([]); // Clear selection when changing tabs/dates
   }, [activeSubTab, selectedLedgerId, fromDate, toDate, companyId]);
+
+  const handleDeleteVoucher = async (id: string, number: string) => {
+    if (window.confirm(`Are you sure you want to permanently delete voucher ${number}?`)) {
+      try {
+        await api.deleteVoucher(id);
+        alert('Voucher deleted successfully.');
+        fetchReport();
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete voucher');
+      }
+    }
+  };
 
   const formatPaise = (paise: number) => {
     return (paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -378,6 +425,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 <table className="ledger-table">
                   <thead>
                     <tr>
+                      <th style={{ width: '40px', textAlign: 'center' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={filteredSales.length > 0 && selectedVouchers.length === filteredSales.length}
+                          onChange={() => handleSelectAllVouchers(filteredSales)}
+                        />
+                      </th>
                       <th style={{ width: '95px' }}>Date</th>
                       <th style={{ width: '130px' }}>Invoice No.</th>
                       <th>Customer / Buyer</th>
@@ -388,13 +442,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       <th style={{ textAlign: 'right', width: '95px' }}>IGST (₹)</th>
                       <th style={{ textAlign: 'right', width: '120px' }}>Total (₹)</th>
                       <th style={{ width: '90px' }}>Mode</th>
-                      <th style={{ width: '70px', textAlign: 'center' }}>Action</th>
+                      <th style={{ width: '100px', textAlign: 'center' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredSales.length > 0 ? (
                       filteredSales.map((v: any, i: number) => (
-                        <tr key={i} style={{ cursor: 'pointer' }} onClick={() => onViewVoucher(v.voucher_id)}>
+                        <tr key={i} style={{ cursor: 'pointer', backgroundColor: selectedVouchers.includes(v.voucher_id) ? 'var(--surface-hover)' : 'transparent' }} onClick={() => onViewVoucher(v.voucher_id)}>
+                          <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                            <input 
+                              type="checkbox" 
+                              checked={selectedVouchers.includes(v.voucher_id)}
+                              onChange={() => handleToggleVoucherSelection(v.voucher_id)}
+                            />
+                          </td>
                           <td className="tabular-nums" style={{ color: 'var(--text-secondary)' }}>{v.voucher_date}</td>
                           <td className="tabular-nums" style={{ fontWeight: 600, color: 'var(--blue)' }}>{v.voucher_number}</td>
                           <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{v.party_name || 'Counter Cash Sale'}</td>
@@ -411,21 +472,32 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                           <td>
                             <span className="badge-status badge-info" style={{ fontSize: '10.5px' }}>{v.payment_mode || 'CREDIT'}</span>
                           </td>
-                          <td style={{ textAlign: 'center' }} onClick={(e) => { e.stopPropagation(); onViewVoucher(v.voucher_id); }}>
-                            <button
-                              className="btn-secondary"
-                              style={{ padding: '3px 7px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                              title="View & Print Tax Invoice"
-                            >
-                              <Eye size={12} />
-                              <span>View</span>
-                            </button>
+                          <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                              <button
+                                className="btn-secondary"
+                                onClick={() => onViewVoucher(v.voucher_id)}
+                                style={{ padding: '3px 7px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                title="View & Print Tax Invoice"
+                              >
+                                <Eye size={12} />
+                                <span>View</span>
+                              </button>
+                              <button
+                                className="btn-secondary"
+                                onClick={() => handleDeleteVoucher(v.voucher_id, v.voucher_number)}
+                                style={{ padding: '3px 7px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: 'var(--coral)' }}
+                                title="Delete Voucher"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={11} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                        <td colSpan={12} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
                           No sales vouchers found for selected period.
                         </td>
                       </tr>
@@ -481,6 +553,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 <table className="ledger-table">
                   <thead>
                     <tr>
+                      <th style={{ width: '40px', textAlign: 'center' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={filteredPurchases.length > 0 && selectedVouchers.length === filteredPurchases.length}
+                          onChange={() => handleSelectAllVouchers(filteredPurchases)}
+                        />
+                      </th>
                       <th style={{ width: '95px' }}>Date</th>
                       <th style={{ width: '130px' }}>Bill / Ref No.</th>
                       <th>Supplier / Vendor</th>
@@ -491,13 +570,20 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       <th style={{ textAlign: 'right', width: '95px' }}>IGST (₹)</th>
                       <th style={{ textAlign: 'right', width: '120px' }}>Total (₹)</th>
                       <th style={{ width: '90px' }}>Status</th>
-                      <th style={{ width: '70px', textAlign: 'center' }}>Action</th>
+                      <th style={{ width: '100px', textAlign: 'center' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredPurchases.length > 0 ? (
                       filteredPurchases.map((v: any, i: number) => (
-                        <tr key={i} style={{ cursor: 'pointer' }} onClick={() => onViewVoucher(v.voucher_id)}>
+                        <tr key={i} style={{ cursor: 'pointer', backgroundColor: selectedVouchers.includes(v.voucher_id) ? 'var(--surface-hover)' : 'transparent' }} onClick={() => onViewVoucher(v.voucher_id)}>
+                          <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                            <input 
+                              type="checkbox" 
+                              checked={selectedVouchers.includes(v.voucher_id)}
+                              onChange={() => handleToggleVoucherSelection(v.voucher_id)}
+                            />
+                          </td>
                           <td className="tabular-nums" style={{ color: 'var(--text-secondary)' }}>{v.voucher_date}</td>
                           <td className="tabular-nums" style={{ fontWeight: 600, color: 'var(--orange)' }}>{v.voucher_number}</td>
                           <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{v.party_name || 'Direct Vendor Purchase'}</td>
@@ -514,21 +600,32 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                           <td>
                             <span className="badge-status badge-success" style={{ fontSize: '10.5px' }}>POSTED</span>
                           </td>
-                          <td style={{ textAlign: 'center' }} onClick={(e) => { e.stopPropagation(); onViewVoucher(v.voucher_id); }}>
-                            <button
-                              className="btn-secondary"
-                              style={{ padding: '3px 7px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-                              title="View Voucher"
-                            >
-                              <Eye size={12} />
-                              <span>View</span>
-                            </button>
+                          <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                              <button
+                                className="btn-secondary"
+                                onClick={() => onViewVoucher(v.voucher_id)}
+                                style={{ padding: '3px 7px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                title="View Voucher"
+                              >
+                                <Eye size={12} />
+                                <span>View</span>
+                              </button>
+                              <button
+                                className="btn-secondary"
+                                onClick={() => handleDeleteVoucher(v.voucher_id, v.voucher_number)}
+                                style={{ padding: '3px 7px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px', color: 'var(--coral)' }}
+                                title="Delete Voucher"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={11} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                        <td colSpan={12} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
                           No purchase bills found for selected period.
                         </td>
                       </tr>

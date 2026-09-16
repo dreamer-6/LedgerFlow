@@ -261,9 +261,18 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
           {/* Company Header & Invoice Details Row */}
           <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.2fr', gap: '20px', borderBottom: '1px solid #E2E8F0', paddingBottom: '14px', marginBottom: '14px' }}>
             {/* Supplier / Seller Header */}
-            <div>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#121B2E' }}>
-                {isPurchase ? (voucher.party_name || 'SUPPLIER') : (company?.company_name || 'ENTERPRISE')}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                {!isPurchase && company?.logo_base64 && (
+                  <img
+                    src={company.logo_base64}
+                    alt="Company Logo"
+                    style={{ maxHeight: '60px', maxWidth: '120px', objectFit: 'contain' }}
+                  />
+                )}
+                <div style={{ fontSize: '15px', fontWeight: 700, color: '#121B2E' }}>
+                  {isPurchase ? (voucher.party_name || 'SUPPLIER') : (company?.company_name || 'ENTERPRISE')}
+                </div>
               </div>
               <div style={{ color: '#555F73', fontSize: '11.5px', marginTop: '3px' }}>
                 {isPurchase
@@ -375,6 +384,11 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
                       <td style={{ padding: '7px 8px', textAlign: 'center', color: '#64748B' }}>{idx + 1}</td>
                       <td style={{ padding: '7px 8px' }}>
                         <div style={{ fontWeight: 600, color: '#121B2E' }}>{l.item_name || l.description || 'Stock Item'}</div>
+                        {l.serial_number && (
+                          <div style={{ fontSize: '10.5px', color: '#555F73', marginTop: '2px' }}>
+                            <strong>S/N:</strong> {l.serial_number}
+                          </div>
+                        )}
                         {l.description && l.description !== l.item_name && (
                           <div style={{ fontSize: '10.5px', color: '#555F73', whiteSpace: 'pre-line', marginTop: '2px' }}>
                             {l.description}
