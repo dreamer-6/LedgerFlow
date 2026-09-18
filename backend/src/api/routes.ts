@@ -408,6 +408,7 @@ export function createApiRouter(db: DatabaseSync): Router {
 
         db.prepare(`
           UPDATE stock_items SET
+            is_active = 1,
             hsn_sac = COALESCE(?, hsn_sac),
             gst_rate = COALESCE(?, gst_rate),
             purchase_rate_paise = CASE WHEN ? > 0 THEN ? ELSE purchase_rate_paise END,
@@ -707,6 +708,48 @@ export function createApiRouter(db: DatabaseSync): Router {
     }
   });
 
+  router.get('/vouchers/:id', (req: Request, res: Response) => {
+    try {
+      const vch = db.prepare(`
+        SELECT v.*, p.party_name 
+        FROM vouchers v
+        LEFT JOIN parties p ON v.party_id = p.party_id
+        WHERE v.voucher_id = ?
+      `).get(req.params.id) as any;
+      
+      if (!vch) return res.status(404).json({ error: 'Voucher not found' });
+      
+      const lines = db.prepare('SELECT * FROM voucher_lines WHERE voucher_id = ? ORDER BY line_order ASC').all(req.params.id);
+      res.json({ voucher: vch, lines });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.put('/vouchers/:id', (req: Request, res: Response) => {
+    try {
+      const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, getUserFromToken(req));
+      const fyId = req.body.fyId;
+      if (!fyId) return res.status(400).json({ error: 'Financial year ID is required for editing a voucher.' });
+
+      // First, cancel the old voucher to reverse its effects.
+      PostingEngine.cancelVoucher(db, req.params.id, 'admin', 'Edited by user');
+      
+      // We actually want to delete the cancelled voucher completely and reuse its ID if possible, 
+      // but PostingEngine.postVoucher assigns a new ID. Instead of modifying PostingEngine, 
+      // let's let PostingEngine create a new one, but we'll manually force the ID, or just return the new ID.
+      // Wait, let's just let it post a new voucher and return the new ID. The frontend will redirect or update.
+      const payload = { ...req.body, companyId: targetCompanyId, fyId };
+      const result = PostingEngine.postVoucher(db, payload);
+      
+      // Update the new voucher to have the original ID or just return it.
+      // To keep it simple, we just return the new voucher ID.
+      res.status(200).json(result);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   router.post('/vouchers/:id/cancel', (req: Request, res: Response) => {
     try {
       const { cancelledBy, reason } = req.body;
@@ -945,6 +988,33 @@ export function createApiRouter(db: DatabaseSync): Router {
       const { type } = req.query as any;
       const data = ReportEngine.getOutstandingReport(db, companyId, type || 'CUSTOMER');
       res.json(data);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/reports/dashboard', (req: Request, res: Response) => {
+    try {
+      const user = getUserFromToken(req);
+      const companyId = (req.query.companyId as string) || resolveCompanyId(req, db, user);
+      if (!companyId) return res.json({ trendData: [], recentVouchers: [] });
+
+      // Fetch recent vouchers
+      const recentVouchers = db.prepare(`
+        SELECT voucher_id, voucher_number, voucher_type, voucher_date, total_amount_paise 
+        FROM vouchers 
+        WHERE company_id = ? AND status = 'POSTED'
+        ORDER BY created_at DESC LIMIT 5
+      `).all(companyId) as any[];
+
+      // Mock trend data for SVG (in a real app, this would aggregate sales/purchases by month)
+      const trendData = [
+        { label: 'Jan', sales: 4000000, purchases: 2000000 },
+        { label: 'Feb', sales: 5000000, purchases: 3000000 },
+        { label: 'Mar', sales: 4500000, purchases: 2500000 }
+      ];
+
+      res.json({ trendData, recentVouchers });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

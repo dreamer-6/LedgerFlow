@@ -227,10 +227,12 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
 
   // Open Create Item Modal
   const handleOpenCreateItem = () => {
+    const nosUnit = units.find(u => u.symbol?.toUpperCase() === 'NOS');
+    const defaultUnitId = nosUnit ? nosUnit.unit_id : (units[0]?.unit_id || 'unit_nos');
     setEditingItem(null);
     setIName('');
     setIHsn('84716060');
-    setIUnit(units[0]?.unit_id || 'unit_nos');
+    setIUnit(defaultUnitId);
     setIGst(18);
     setICost(0);
     setICostIncl(0);
@@ -244,10 +246,12 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
 
   // Open Edit Item Modal
   const handleOpenEditItem = (item: any) => {
+    const nosUnit = units.find(u => u.symbol?.toUpperCase() === 'NOS');
+    const defaultUnitId = nosUnit ? nosUnit.unit_id : (units[0]?.unit_id || 'unit_nos');
     setEditingItem(item);
     setIName(item.item_name || '');
     setIHsn(item.hsn_sac || '');
-    setIUnit(item.unit_id || units[0]?.unit_id || 'unit_nos');
+    setIUnit(item.unit_id || defaultUnitId);
     const gst = item.gst_rate ?? 18;
     setIGst(gst);
     const cost = (item.purchase_rate_paise || 0) / 100;

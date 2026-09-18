@@ -138,7 +138,13 @@ export class AuthService {
     `).all(userId);
 
     return {
-      user: dbUser,
+      user: {
+        userId: dbUser.user_id,
+        username: dbUser.username,
+        email: dbUser.email,
+        fullName: dbUser.full_name,
+        role: dbUser.role
+      },
       businesses
     };
   }

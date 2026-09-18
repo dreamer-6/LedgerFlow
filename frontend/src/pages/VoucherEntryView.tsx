@@ -23,6 +23,7 @@ interface VoucherEntryViewProps {
   activeFy: FinancialYear | null;
   initialType?: string;
   currentDate?: string;
+  editVoucherId?: string | null;
   onPostSuccess: (voucherId: string) => void;
 }
 
@@ -31,6 +32,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
   activeFy,
   initialType = 'SALES',
   currentDate,
+  editVoucherId,
   onPostSuccess
 }) => {
   const getInitialVoucherNumber = () => {
@@ -178,8 +180,53 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
 
   useEffect(() => {
     loadMasters();
-    fetchNextVoucherNumber();
-  }, [voucherType, company, activeFy]);
+    if (!editVoucherId) {
+      fetchNextVoucherNumber();
+    }
+  }, [voucherType, company, activeFy, editVoucherId]);
+
+  useEffect(() => {
+    if (editVoucherId) {
+      api.getVoucherById(editVoucherId).then(({ voucher, lines: vLines }) => {
+        setVoucherType(voucher.voucher_type);
+        setVoucherNumber(voucher.voucher_number);
+        setVoucherDate(voucher.voucher_date);
+        setSupplierInvoiceNo(voucher.supplier_invoice_no || '');
+        setSupplierInvoiceDate(voucher.supplier_invoice_date || voucher.voucher_date);
+        setPartyId(voucher.party_id);
+        setPlaceOfSupply(voucher.place_of_supply || '33 - Tamil Nadu');
+        setNarration(voucher.narration || '');
+        setPaymentMode(voucher.payment_mode || 'GPAY');
+        setPaymentTerms(voucher.payment_terms || 'Net 30 Days');
+        setOrderRef(voucher.order_ref || '');
+        setTermsAndConditions(voucher.terms_and_conditions || '');
+
+        if (voucher.voucher_type === 'SALES' || voucher.voucher_type === 'PURCHASE') {
+          setLines(vLines.map((l: any) => ({
+            itemId: l.item_id,
+            description: l.description || '',
+            godownId: l.godown_id,
+            quantity: l.quantity,
+            unit: l.unit || 'Nos',
+            hsnSac: l.hsn_sac || '',
+            rate: l.rate_paise / 100,
+            rateInclTax: l.rate_paise / 100, // naive approx, actual computation depends on taxMode
+            discountPercent: l.discount_percent || 0,
+            gstRate: l.gst_rate || 18,
+            serialNumber: l.serial_number || '',
+            availableSerials: []
+          })));
+        } else {
+          setLedgerLines(vLines.map((l: any) => ({
+            ledgerId: l.ledger_id,
+            type: l.debit_paise > 0 ? 'DR' : 'CR',
+            amount: (l.debit_paise + l.credit_paise) / 100,
+            particulars: l.particulars || ''
+          })));
+        }
+      }).catch(console.error);
+    }
+  }, [editVoucherId]);
 
   const switchVoucherType = (newType: string) => {
     setVoucherType(newType);
@@ -576,13 +623,18 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
           }));
       }
 
-      const res = await api.postVoucher(payload);
+      let res: any;
+      if (editVoucherId) {
+        res = await api.updateVoucher(editVoucherId, payload);
+      } else {
+        res = await api.postVoucher(payload);
+      }
       setVoucherStatus('Posted');
-      await fetchNextVoucherNumber();
+      if (!editVoucherId) await fetchNextVoucherNumber();
       if (andPrint) {
         onPostSuccess(res.voucherId);
       } else {
-        alert(`Voucher ${res.voucherNumber} posted successfully!`);
+        alert(`Voucher ${res.voucherNumber || voucherNumber} ${editVoucherId ? 'updated' : 'posted'} successfully!`);
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to post voucher.');

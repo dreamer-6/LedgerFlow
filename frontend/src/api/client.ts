@@ -459,6 +459,19 @@ export const api = {
     return res.json();
   },
 
+  async updateVoucher(id: string, voucherData: any) {
+    const res = await fetch(`${API_BASE}/vouchers/${id}`, {
+      method: 'PUT',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(voucherData)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to update voucher' }));
+      throw new Error(err.error || 'Failed to update voucher');
+    }
+    return res.json();
+  },
+
   async cancelVoucher(id: string, reason: string) {
     const res = await fetch(`${API_BASE}/vouchers/${id}/cancel`, {
       method: 'POST',

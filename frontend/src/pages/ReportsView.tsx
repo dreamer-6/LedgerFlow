@@ -25,13 +25,15 @@ interface ReportsViewProps {
   activeSubTab: string;
   setActiveSubTab: (subTab: string) => void;
   onViewVoucher: (id: string) => void;
+  onEditVoucher?: (id: string) => void;
 }
 
 export const ReportsView: React.FC<ReportsViewProps> = ({
   companyId,
   activeSubTab,
   setActiveSubTab,
-  onViewVoucher
+  onViewVoucher,
+  onEditVoucher
 }) => {
   const [fromDate, setFromDate] = useState('2026-04-01');
   const [toDate, setToDate] = useState('2027-03-31');
@@ -326,7 +328,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
       {/* Report Tables Container */}
       {!loading && (
-        <div className="ledger-card table-responsive-wrapper" style={{ overflowX: 'auto' }}>
+        <div className="ledger-card table-responsive-wrapper print-area" style={{ overflowX: 'auto' }}>
           {/* 1. Day Book */}
           {activeSubTab === 'daybook' && (
             <table className="ledger-table">
@@ -344,28 +346,28 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                 {reportData && reportData.length > 0 ? (
                   reportData
                     .filter((v: any) => {
-                      if (voucherTypeFilter !== 'ALL' && v.voucher_type !== voucherTypeFilter) return false;
+                      if (voucherTypeFilter !== 'ALL' && v.voucherType !== voucherTypeFilter) return false;
                       if (!searchTerm) return true;
                       const q = searchTerm.toLowerCase();
                       return (
-                        (v.voucher_number && v.voucher_number.toLowerCase().includes(q)) ||
-                        (v.party_name && v.party_name.toLowerCase().includes(q)) ||
-                        (v.narration && v.narration.toLowerCase().includes(q))
+                        (v.voucherNumber && v.voucherNumber.toLowerCase().includes(q)) ||
+                        (v.partyName && v.partyName.toLowerCase().includes(q)) ||
+                        (v.particulars && v.particulars.toLowerCase().includes(q))
                       );
                     })
                     .map((v: any, i: number) => (
-                      <tr key={i} style={{ cursor: 'pointer' }} onClick={() => onViewVoucher(v.voucher_id)}>
-                        <td className="tabular-nums" style={{ color: 'var(--text-secondary)' }}>{v.voucher_date}</td>
-                        <td className="tabular-nums" style={{ fontWeight: 600, color: 'var(--primary-accent)' }}>{v.voucher_number}</td>
+                      <tr key={i} style={{ cursor: 'pointer' }} onClick={() => onViewVoucher(v.voucherId)}>
+                        <td className="tabular-nums" style={{ color: 'var(--text-secondary)' }}>{v.voucherDate}</td>
+                        <td className="tabular-nums" style={{ fontWeight: 600, color: 'var(--primary-accent)' }}>{v.voucherNumber}</td>
                         <td>
-                          <span className="badge-status badge-info">{v.voucher_type}</span>
+                          <span className="badge-status badge-info">{v.voucherType}</span>
                         </td>
-                        <td>{v.narration || v.party_name || 'Double-entry accounting transaction'}</td>
+                        <td>{v.particulars || 'Double-entry accounting transaction'}</td>
                         <td style={{ textAlign: 'right' }} className="tabular-nums">
-                          {v.voucher_type === 'PAYMENT' || v.voucher_type === 'PURCHASE' ? formatPaise(v.total_amount_paise) : '—'}
+                          {v.voucherType === 'PAYMENT' || v.voucherType === 'PURCHASE' ? formatPaise(v.totalAmountPaise) : '—'}
                         </td>
                         <td style={{ textAlign: 'right' }} className="tabular-nums">
-                          {v.voucher_type === 'RECEIPT' || v.voucher_type === 'SALES' ? formatPaise(v.total_amount_paise) : '—'}
+                          {v.voucherType === 'RECEIPT' || v.voucherType === 'SALES' ? formatPaise(v.totalAmountPaise) : '—'}
                         </td>
                       </tr>
                     ))
@@ -483,6 +485,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                                 <Eye size={12} />
                                 <span>View</span>
                               </button>
+                              {onEditVoucher && (
+                                <button
+                                  className="btn-secondary"
+                                  onClick={(e) => { e.stopPropagation(); onEditVoucher(v.voucher_id); }}
+                                  style={{ padding: '3px 7px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                  title="Edit Voucher"
+                                >
+                                  <span>Edit</span>
+                                </button>
+                              )}
                               <button
                                 className="btn-secondary"
                                 onClick={() => handleDeleteVoucher(v.voucher_id, v.voucher_number)}

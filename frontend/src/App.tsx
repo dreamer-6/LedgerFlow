@@ -46,6 +46,7 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [reportSubTab, setReportSubTab] = useState<string>('daybook');
   const [voucherInitialType, setVoucherInitialType] = useState<string>('SALES');
+  const [editVoucherId, setEditVoucherId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
   // Print Preview Modal
@@ -418,7 +419,11 @@ export const App: React.FC = () => {
                 activeFy={activeFy}
                 initialType={voucherInitialType}
                 currentDate={currentDate}
-                onPostSuccess={handleVoucherPostSuccess}
+                editVoucherId={editVoucherId}
+                onPostSuccess={(id) => {
+                  setEditVoucherId(null);
+                  handleVoucherPostSuccess(id);
+                }}
               />
             </div>
           )}
@@ -438,6 +443,10 @@ export const App: React.FC = () => {
                 activeSubTab={reportSubTab}
                 setActiveSubTab={setReportSubTab}
                 onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                onEditVoucher={(id) => {
+                  setEditVoucherId(id);
+                  setActiveTab('vouchers');
+                }}
               />
             </div>
           )}
