@@ -93,270 +93,97 @@ export const Navbar: React.FC<NavbarProps> = ({
     if (meta) meta.setAttribute('content', nextTheme);
   };
 
-  const todayStr = '12 Sep 2026';
 
   return (
-    <header
-      style={{
-        height: '58px',
-        backgroundColor: 'var(--header-bg)',
-        backdropFilter: 'blur(16px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-        borderBottom: '1px solid var(--border-subtle)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 20px',
-        position: 'sticky',
-        top: 0,
-        zIndex: 50
-      }}
-    >
-      {/* Left: Mobile Toggle | Logo | Company & GSTIN */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+    <header className="topbar">
+      {/* Left: Mobile Toggle & Company Context */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
         <button
           type="button"
           className="mobile-nav-toggle"
           onClick={onToggleSidebar}
           aria-label="Toggle Navigation Menu"
         >
-          <Menu size={19} />
+          <Menu size={18} />
         </button>
 
         <div
-          style={{ cursor: 'pointer' }}
-          onClick={() => setActiveTab('dashboard')}
-          title="Dashboard"
-        >
-          <Logo size="md" showSubtitle={true} />
-        </div>
-
-        <div
-          className="navbar-company-details"
-          style={{
-            height: '22px',
-            width: '1px',
-            backgroundColor: 'var(--border-subtle)',
-            margin: '0 2px'
-          }}
-        />
-
-        <button
-          type="button"
+          className="top-company navbar-company-details"
           onClick={onOpenBusinessSwitcher}
-          className="navbar-company-details"
-          title="Click or press Alt+B to switch or register business workspaces"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '4px 8px',
-            borderRadius: '6px',
-            transition: 'background-color 0.15s ease'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-subtle)'}
-          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          title="Click to switch business (Alt+B)"
+          style={{ cursor: 'pointer' }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', lineHeight: 1.25 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span
-                style={{
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  color: 'var(--text-primary)',
-                  letterSpacing: '-0.01em'
-                }}
-              >
-                {company?.company_name || 'Loading Business...'}
-              </span>
-              <ChevronDown size={13} color="var(--text-secondary)" />
-            </div>
-            <span
-              style={{
-                color: 'var(--text-muted)',
-                fontSize: '11px',
-                fontFamily: 'var(--font-mono)'
-              }}
-            >
-              {company?.gstin ? `GSTIN: ${company.gstin}` : 'Switch Business (Alt+B)'}
-            </span>
-          </div>
-        </button>
-      </div>
-
-      {/* Center: Minimalist Global Search Field */}
-      <div className="navbar-search-box" style={{ flex: 1, maxWidth: '440px', margin: '0 24px' }}>
-        <div
-          onClick={onOpenSearch}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '9px',
-            backgroundColor: 'var(--bg-app)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: '8px',
-            padding: '7px 14px',
-            cursor: 'pointer',
-            transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border-strong)';
-            e.currentTarget.style.backgroundColor = 'var(--bg-surface)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border-subtle)';
-            e.currentTarget.style.backgroundColor = 'var(--bg-app)';
-          }}
-        >
-          <Search size={14} color="var(--text-muted)" />
-          <span
-            style={{
-              fontSize: '12.5px',
-              color: 'var(--text-muted)',
-              flex: 1
-            }}
-          >
-            Quick find voucher, ledger, item, party…
+          <strong>{company?.company_name || 'DREAM TECH SOLUTIONS'}</strong>
+          <span>
+            {activeFy?.name || 'FY 2026–27'}
+            <i className="active-indicator" />
+            ACTIVE
           </span>
-          <kbd style={{ fontSize: '10px', padding: '1px 5px' }}>Ctrl + K</kbd>
         </div>
       </div>
 
-      {/* Right: Calendar | FY | Theme | Notifications | User Avatar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        {/* Interactive Calendar Date Button (F2) */}
+      {/* Center: Global Search Bar */}
+      <div className="global-search navbar-search-box" onClick={onOpenSearch} style={{ cursor: 'pointer' }}>
+        <span style={{ fontSize: '15px', color: 'var(--text-muted)' }}>⌕</span>
+        <input
+          type="text"
+          readOnly
+          placeholder="Search voucher, party, item, report..."
+          style={{ cursor: 'pointer' }}
+        />
+        <kbd>Ctrl K</kbd>
+      </div>
+
+      {/* Right: Date (F2) | Theme | Notifications | User Profile from LF_demo */}
+      <div className="top-actions">
+        {/* Working Date Button (F2) */}
         <button
           type="button"
           onClick={onOpenDateModal}
-          title="Change Current Working Date (Press F2)"
+          title="Change Working Date (Press F2)"
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '12px',
-            color: 'var(--text-secondary)',
-            padding: '4px 9px',
-            borderRadius: '6px',
-            border: '1px solid var(--border-subtle)',
-            backgroundColor: 'var(--surface)',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border-strong)';
-            e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border-subtle)';
-            e.currentTarget.style.backgroundColor = 'var(--surface)';
-          }}
-        >
-          <Calendar size={13} color="var(--blue)" />
-          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatDateDisplay(currentDate)}</span>
-          <kbd style={{ fontSize: '9.5px', padding: '1px 4px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}>F2</kbd>
-        </button>
-
-        {/* Interactive Financial Year Pill Button (Alt + F2) */}
-        <button
-          type="button"
-          onClick={onOpenFyModal}
-          title="Change Active Financial Year (Press Alt + F2)"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            backgroundColor: 'var(--surface)',
-            border: '1px solid var(--border-subtle)',
-            padding: '4px 10px',
-            borderRadius: '20px',
+            height: '34px',
+            padding: '0 9px',
             fontSize: '11px',
-            color: 'var(--text-primary)',
-            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-secondary)',
+            borderRadius: '8px',
             cursor: 'pointer',
-            transition: 'all 0.15s ease'
+            transition: 'background 0.15s ease'
           }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'var(--purple)';
-            e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border-subtle)';
-            e.currentTarget.style.backgroundColor = 'var(--surface)';
-          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >
-          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--green)' }} />
-          <span>FY {activeFy?.name || '2026-27'}</span>
-          <span
-            style={{
-              fontSize: '9px',
-              backgroundColor: 'rgba(32, 217, 163, 0.1)',
-              color: 'var(--green)',
-              border: '1px solid rgba(32, 217, 163, 0.25)',
-              padding: '1px 5px',
-              borderRadius: '8px',
-              fontWeight: 700
-            }}
-          >
-            ACTIVE
-          </span>
-          <kbd style={{ fontSize: '9px', padding: '0 3px', backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-subtle)', borderRadius: '3px' }}>Alt+F2</kbd>
+          <Calendar size={13} color="var(--primary)" />
+          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatDateDisplay(currentDate)}</span>
+          <kbd style={{ fontSize: '8.5px', padding: '1px 4px' }}>F2</kbd>
         </button>
 
         {/* Theme Toggle Button */}
         <button
+          className="top-button"
           onClick={toggleTheme}
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '8px',
-            backgroundColor: 'var(--bg-surface)',
-            border: '1px solid var(--border-subtle)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--text-secondary)'
-          }}
           title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
         >
           {theme === 'dark' ? <Sun size={15} color="#F59E0B" /> : <Moon size={15} color="#64748B" />}
         </button>
 
-        {/* Notification Icon & Dropdown Popover */}
+        {/* Notification Bell */}
         <div ref={notificationRef} style={{ position: 'relative' }}>
           <button
             type="button"
+            className="top-button"
             onClick={() => setShowNotifications(!showNotifications)}
-            style={{
-              position: 'relative',
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              backgroundColor: showNotifications ? 'var(--surface-hover)' : 'var(--bg-surface)',
-              border: '1px solid var(--border-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: showNotifications ? 'var(--text-primary)' : 'var(--text-secondary)',
-              cursor: 'pointer'
-            }}
-            title="System & Compliance Alerts"
+            title="System Alerts"
           >
             <Bell size={15} />
-            <span
-              style={{
-                position: 'absolute',
-                top: '7px',
-                right: '7px',
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--green)',
-                boxShadow: '0 0 6px var(--green)'
-              }}
-            />
+            <span className="notification-count">3</span>
           </button>
 
           {/* Interactive Notifications Popover */}
@@ -369,9 +196,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 right: 0,
                 width: '320px',
                 padding: '0',
-                boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
                 border: '1px solid var(--border)',
-                zIndex: 100,
+                zIndex: 200,
                 overflow: 'hidden',
                 animation: 'fadeIn 0.15s ease-out'
               }}

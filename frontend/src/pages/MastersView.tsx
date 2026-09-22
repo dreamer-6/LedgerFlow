@@ -393,65 +393,70 @@ export const MastersView: React.FC<MastersViewProps> = ({ company, onCompanyUpda
 
   return (
     <div className="page-container">
-      {/* Master Sub-Navigation Tabs */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '4px',
-          backgroundColor: 'var(--bg-subtle)',
-          padding: '4px',
-          borderRadius: '10px',
-          border: '1px solid var(--border-subtle)',
-          marginBottom: '20px',
-          overflowX: 'auto'
-        }}
-      >
+      {/* LF_demo Master Categories Tabs */}
+      <div className="master-tabs">
         {tabs.map((t) => {
           const isActive = activeTab === t.id;
           return (
             <button
               key={t.id}
+              type="button"
+              className={isActive ? 'active' : ''}
               onClick={() => {
                 setActiveTab(t.id as any);
                 setSearch('');
                 setFilterType('ALL');
               }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '8px 16px',
-                borderRadius: '7px',
-                backgroundColor: isActive ? 'var(--bg-surface)' : 'transparent',
-                color: isActive ? 'var(--primary-accent)' : 'var(--text-secondary)',
-                fontWeight: isActive ? 600 : 500,
-                fontSize: '12.5px',
-                whiteSpace: 'nowrap',
-                boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.06)' : 'none',
-                border: 'none',
-                transition: 'all 0.15s cubic-bezier(0.16, 1, 0.3, 1)'
-              }}
             >
               {t.icon}
               <span>{t.label}</span>
               {t.count !== undefined && (
-                <span
-                  className="tabular-nums"
-                  style={{
-                    fontSize: '11px',
-                    backgroundColor: isActive ? 'var(--bg-selected)' : 'var(--kbd-bg)',
-                    color: isActive ? 'var(--primary-accent)' : 'var(--text-muted)',
-                    padding: '1px 6px',
-                    borderRadius: '10px',
-                    fontWeight: 600
-                  }}
-                >
+                <b className="tabular-nums">
                   {t.count}
-                </span>
+                </b>
               )}
             </button>
           );
         })}
+      </div>
+
+      {/* LF_demo Summary Grid */}
+      <div className="summary-grid">
+        <div className="summary-card">
+          <div className="summary-icon blue">👥</div>
+          <div>
+            <span>Total Parties</span>
+            <strong>{parties.length}</strong>
+          </div>
+          <small>{parties.filter(p => p.party_type === 'CUSTOMER' || p.party_type === 'BOTH').length} clients</small>
+        </div>
+
+        <div className="summary-card">
+          <div className="summary-icon green">📦</div>
+          <div>
+            <span>Stock Items</span>
+            <strong>{items.length}</strong>
+          </div>
+          <small>{items.filter(i => i.has_serial_no || i.serial_numbers).length} serial-tracked</small>
+        </div>
+
+        <div className="summary-card">
+          <div className="summary-icon purple">📑</div>
+          <div>
+            <span>Ledgers</span>
+            <strong>{ledgers.length}</strong>
+          </div>
+          <small>Active CoA</small>
+        </div>
+
+        <div className="summary-card">
+          <div className="summary-icon orange">🏢</div>
+          <div>
+            <span>Godowns</span>
+            <strong>{godowns.length}</strong>
+          </div>
+          <small>{units.length} units</small>
+        </div>
       </div>
 
       {/* Header & Action Bar */}

@@ -393,7 +393,8 @@ export const App: React.FC = () => {
           style={{
             flex: 1,
             overflowY: 'auto',
-            height: 'calc(100vh - 58px)'
+            height: 'calc(100vh - 58px)',
+            background: 'var(--bg-app)'
           }}
         >
           {/* 1. Dashboard View */}
@@ -423,6 +424,10 @@ export const App: React.FC = () => {
                 onPostSuccess={(id) => {
                   setEditVoucherId(null);
                   handleVoucherPostSuccess(id);
+                }}
+                onNavigate={(tab, subTab) => {
+                  setActiveTab(tab);
+                  if (subTab) setReportSubTab(subTab);
                 }}
               />
             </div>

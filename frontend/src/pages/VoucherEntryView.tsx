@@ -11,12 +11,399 @@ import {
   AlertCircle,
   MoreVertical,
   ChevronDown,
+  ChevronRight,
   Printer,
   Eye,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Pencil,
+  Search,
+  X
 } from 'lucide-react';
 
+/* ──────────────────────────────────────────────────────────
+   Searchable Combobox for Customer / Supplier (Type & Select)
+   ────────────────────────────────────────────────────────── */
+interface PartySearchSelectProps {
+  partyId: string;
+  parties: any[];
+  placeholder?: string;
+  onSelect: (party: any) => void;
+  onAddNew?: (typedName: string) => void;
+}
+
+const PartySearchSelect: React.FC<PartySearchSelectProps> = ({
+  partyId,
+  parties,
+  placeholder = 'Type or search party…',
+  onSelect,
+  onAddNew
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [highlightIndex, setHighlightIndex] = useState(0);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const selectedParty = parties.find((p) => p.party_id === partyId);
+
+  const filtered = parties.filter((p) => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return (
+      (p.party_name && p.party_name.toLowerCase().includes(q)) ||
+      (p.phone && p.phone.toLowerCase().includes(q)) ||
+      (p.gstin && p.gstin.toLowerCase().includes(q)) ||
+      (p.city && p.city.toLowerCase().includes(q))
+    );
+  });
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!isOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        setIsOpen(true);
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightIndex((prev) => Math.min(prev + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightIndex((prev) => Math.max(prev - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filtered[highlightIndex]) {
+        onSelect(filtered[highlightIndex]);
+        setIsOpen(false);
+        setQuery('');
+      } else if (onAddNew && query.trim()) {
+        onAddNew(query.trim());
+        setIsOpen(false);
+      }
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
+  return (
+    <div className="vev2-combobox-wrap" ref={containerRef}>
+      <div className="vev2-combobox-input-wrap">
+        <span className="vev2-combobox-icon-left">
+          <Search size={14} />
+        </span>
+        <input
+          type="text"
+          className="vev2-combobox-input"
+          placeholder={placeholder}
+          value={isOpen ? query : (selectedParty?.party_name || '')}
+          onFocus={() => {
+            setIsOpen(true);
+            setQuery('');
+            setHighlightIndex(0);
+          }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setIsOpen(true);
+            setHighlightIndex(0);
+          }}
+          onKeyDown={handleKeyDown}
+        />
+        {selectedParty && !isOpen ? (
+          <button
+            type="button"
+            className="vev2-combobox-clear-btn"
+            title="Change party"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen(true);
+              setQuery('');
+            }}
+          >
+            <ChevronDown size={14} />
+          </button>
+        ) : query ? (
+          <button
+            type="button"
+            className="vev2-combobox-clear-btn"
+            title="Clear search"
+            onClick={(e) => {
+              e.stopPropagation();
+              setQuery('');
+            }}
+          >
+            <X size={13} />
+          </button>
+        ) : null}
+      </div>
+
+      {isOpen && (
+        <div className="vev2-combobox-dropdown">
+          {filtered.length > 0 ? (
+            filtered.slice(0, 30).map((p, idx) => {
+              const isSelected = p.party_id === partyId;
+              const isHighlighted = idx === highlightIndex;
+              return (
+                <div
+                  key={p.party_id}
+                  className={`vev2-combobox-option ${isSelected ? 'selected' : ''} ${isHighlighted ? 'highlighted' : ''}`}
+                  onClick={() => {
+                    onSelect(p);
+                    setIsOpen(false);
+                    setQuery('');
+                  }}
+                  onMouseEnter={() => setHighlightIndex(idx)}
+                >
+                  <div className="vev2-combobox-option-title">
+                    <span>{p.party_name}</span>
+                    <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', background: p.party_type === 'SUPPLIER' ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.15)', color: p.party_type === 'SUPPLIER' ? '#d97706' : '#059669', fontWeight: 700 }}>
+                      {p.party_type}
+                    </span>
+                  </div>
+                  <div className="vev2-combobox-option-meta">
+                    {p.phone && <span>📞 {p.phone}</span>}
+                    {p.gstin && <span>GSTIN: <strong style={{ fontFamily: 'var(--font-mono)' }}>{p.gstin}</strong></span>}
+                    {p.city && <span>📍 {p.city}</span>}
+                    {p.current_balance !== undefined && (
+                      <span style={{ marginLeft: 'auto', fontWeight: 600, color: (p.current_balance || 0) > 0 ? 'var(--danger-red)' : 'var(--success-emerald)' }}>
+                        Bal: ₹{Math.abs(p.current_balance || 0).toLocaleString('en-IN')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="vev2-combobox-empty">
+              No parties found matching "{query}".
+            </div>
+          )}
+
+          {onAddNew && query.trim() && (
+            <button
+              type="button"
+              className="vev2-combobox-add-btn"
+              onClick={() => {
+                onAddNew(query.trim());
+                setIsOpen(false);
+              }}
+            >
+              <Plus size={14} />
+              Add "{query.trim()}" as New Party
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ──────────────────────────────────────────────────────────
+   Searchable Combobox for Stock Items in Line Items
+   ────────────────────────────────────────────────────────── */
+interface ItemSearchSelectProps {
+  itemId: string;
+  stockItems: any[];
+  voucherType: string;
+  placeholder?: string;
+  onSelect: (item: any) => void;
+  onAddNew?: (typedName: string) => void;
+}
+
+const ItemSearchSelect: React.FC<ItemSearchSelectProps> = ({
+  itemId,
+  stockItems,
+  voucherType,
+  placeholder = 'Type to search item…',
+  onSelect,
+  onAddNew
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [highlightIndex, setHighlightIndex] = useState(0);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const selectedItem = stockItems.find((s) => s.item_id === itemId);
+
+  const filtered = stockItems.filter((s) => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return (
+      (s.item_name && s.item_name.toLowerCase().includes(q)) ||
+      (s.hsn_sac && s.hsn_sac.toLowerCase().includes(q)) ||
+      (s.sku && s.sku.toLowerCase().includes(q)) ||
+      (s.item_code && s.item_code.toLowerCase().includes(q))
+    );
+  });
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!isOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        setIsOpen(true);
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightIndex((prev) => Math.min(prev + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightIndex((prev) => Math.max(prev - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filtered[highlightIndex]) {
+        onSelect(filtered[highlightIndex]);
+        setIsOpen(false);
+        setQuery('');
+      } else if (onAddNew && query.trim()) {
+        onAddNew(query.trim());
+        setIsOpen(false);
+      }
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
+  return (
+    <div className="vev2-combobox-wrap" ref={containerRef}>
+      <div className="vev2-combobox-input-wrap">
+        <span className="vev2-combobox-icon-left">
+          <Search size={13} />
+        </span>
+        <input
+          type="text"
+          className="vev2-combobox-input"
+          style={{ height: '34px', fontSize: '13.5px', fontWeight: selectedItem ? 600 : 400 }}
+          placeholder={placeholder}
+          value={isOpen ? query : (selectedItem?.item_name || '')}
+          onFocus={() => {
+            setIsOpen(true);
+            setQuery('');
+            setHighlightIndex(0);
+          }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setIsOpen(true);
+            setHighlightIndex(0);
+          }}
+          onKeyDown={handleKeyDown}
+        />
+        {selectedItem && !isOpen ? (
+          <button
+            type="button"
+            className="vev2-combobox-clear-btn"
+            title="Change item"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen(true);
+              setQuery('');
+            }}
+          >
+            <ChevronDown size={13} />
+          </button>
+        ) : query ? (
+          <button
+            type="button"
+            className="vev2-combobox-clear-btn"
+            title="Clear search"
+            onClick={(e) => {
+              e.stopPropagation();
+              setQuery('');
+            }}
+          >
+            <X size={12} />
+          </button>
+        ) : null}
+      </div>
+
+      {isOpen && (
+        <div className="vev2-combobox-dropdown" style={{ minWidth: '320px' }}>
+          {filtered.length > 0 ? (
+            filtered.slice(0, 30).map((s, idx) => {
+              const isSelected = s.item_id === itemId;
+              const isHighlighted = idx === highlightIndex;
+              const isSerialized = Boolean(s.has_serial_no || s.serial_numbers);
+              const price = voucherType === 'PURCHASE' ? (s.purchase_rate_paise || 0) / 100 : (s.selling_rate_paise || 0) / 100;
+              return (
+                <div
+                  key={s.item_id}
+                  className={`vev2-combobox-option ${isSelected ? 'selected' : ''} ${isHighlighted ? 'highlighted' : ''}`}
+                  onClick={() => {
+                    onSelect(s);
+                    setIsOpen(false);
+                    setQuery('');
+                  }}
+                  onMouseEnter={() => setHighlightIndex(idx)}
+                >
+                  <div className="vev2-combobox-option-title">
+                    <span>{s.item_name}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      {isSerialized && (
+                        <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', background: 'rgba(59,130,246,0.15)', color: '#2563eb', fontWeight: 700 }}>
+                          🏷️ S/N
+                        </span>
+                      )}
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        ₹{price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="vev2-combobox-option-meta">
+                    {s.hsn_sac && <span>HSN: <strong style={{ fontFamily: 'var(--font-mono)' }}>{s.hsn_sac}</strong></span>}
+                    {s.unit_symbol && <span>Unit: {s.unit_symbol}</span>}
+                    {s.gst_rate !== undefined && <span>GST: {s.gst_rate}%</span>}
+                    {s.closing_qty !== undefined && (
+                      <span style={{ marginLeft: 'auto', fontWeight: 600, color: s.closing_qty > 0 ? 'var(--success-emerald)' : 'var(--text-muted)' }}>
+                        Stock: {s.closing_qty}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="vev2-combobox-empty">
+              No stock items found matching "{query}".
+            </div>
+          )}
+
+          {onAddNew && query.trim() && (
+            <button
+              type="button"
+              className="vev2-combobox-add-btn"
+              onClick={() => {
+                onAddNew(query.trim());
+                setIsOpen(false);
+              }}
+            >
+              <Plus size={14} />
+              Create "{query.trim()}" as New Item
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface VoucherEntryViewProps {
   company: Company | null;
@@ -25,6 +412,7 @@ interface VoucherEntryViewProps {
   currentDate?: string;
   editVoucherId?: string | null;
   onPostSuccess: (voucherId: string) => void;
+  onNavigate?: (tab: string, subTab?: string) => void;
 }
 
 export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
@@ -33,7 +421,8 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
   initialType = 'SALES',
   currentDate,
   editVoucherId,
-  onPostSuccess
+  onPostSuccess,
+  onNavigate
 }) => {
   const getInitialVoucherNumber = () => {
     if (!company?.company_name) return 'DTS-0001';
@@ -125,8 +514,14 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
   const [newItemPurchaseCost, setNewItemPurchaseCost] = useState<number>(0);
   const [newItemPurchaseCostIncl, setNewItemPurchaseCostIncl] = useState<number>(0);
   const [newItemSellingPrice, setNewItemSellingPrice] = useState<number>(0);
+  const [newItemHasSerialNo, setNewItemHasSerialNo] = useState<boolean>(false);
+  const [newItemSerialNumbers, setNewItemSerialNumbers] = useState<string>('');
 
-  const [isPosting, setIsPosting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const isPosting = isSaving; // alias for backwards compatibility
+  const setIsPosting = setIsSaving;
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [lastSavedVoucherId, setLastSavedVoucherId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Load Masters
@@ -228,6 +623,31 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
     }
   }, [editVoucherId]);
 
+  // Auto-fetch available serial numbers for any line item that has serial tracking
+  useEffect(() => {
+    if (stockItems.length > 0 && lines.length > 0) {
+      lines.forEach((l, idx) => {
+        if (l.itemId && (!l.availableSerials || l.availableSerials.length === 0)) {
+          const item = stockItems.find((s) => s.item_id === l.itemId);
+          if (item && (item.has_serial_no || item.serial_numbers)) {
+            api.getAvailableSerials(item.item_id).then((serials: string[]) => {
+              let finalSerials = Array.isArray(serials) ? serials : [];
+              if (finalSerials.length === 0 && item.serial_numbers) {
+                finalSerials = item.serial_numbers.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
+              }
+              setLines((prev) => {
+                if (!prev[idx] || (prev[idx].availableSerials && prev[idx].availableSerials.length > 0)) return prev;
+                const next = [...prev];
+                next[idx] = { ...next[idx], availableSerials: finalSerials };
+                return next;
+              });
+            }).catch(console.error);
+          }
+        }
+      });
+    }
+  }, [stockItems, lines.map(l => l.itemId).join(',')]);
+
   const switchVoucherType = (newType: string) => {
     setVoucherType(newType);
     setLines((prevLines) =>
@@ -298,10 +718,10 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         setShowLivePreview((prev) => !prev);
         return;
       }
-      // Ctrl + A: Quick Post Voucher
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+      // Ctrl + S, Ctrl + A, or F10: Save Voucher
+      if (((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'a' || e.key.toLowerCase() === 's')) || e.key === 'F10') {
         e.preventDefault();
-        handlePostVoucher(false);
+        handleSaveVoucher(false);
         return;
       }
     };
@@ -340,16 +760,35 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         const baseRate = voucherType === 'PURCHASE' ? cost : sp;
         cur.rate = baseRate;
         cur.rateInclTax = Math.round(baseRate * (1 + (item.gst_rate || 18) / 100) * 100) / 100;
+        cur.serialNumber = '';
         
         // Fetch serials asynchronously
-        if (item.has_serial_no) {
+        if (item.has_serial_no || item.serial_numbers) {
           api.getAvailableSerials(item.item_id).then((serials: string[]) => {
+            let finalSerials = Array.isArray(serials) ? serials : [];
+            if (finalSerials.length === 0 && item.serial_numbers) {
+              finalSerials = item.serial_numbers.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
+            }
             setLines(prev => {
               const newLines = [...prev];
-              newLines[idx].availableSerials = serials;
+              if (newLines[idx]) {
+                newLines[idx].availableSerials = finalSerials;
+              }
               return newLines;
             });
-          }).catch(console.error);
+          }).catch((err) => {
+            console.error('Error fetching available serials:', err);
+            if (item.serial_numbers) {
+              const fallback = item.serial_numbers.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
+              setLines(prev => {
+                const newLines = [...prev];
+                if (newLines[idx]) {
+                  newLines[idx].availableSerials = fallback;
+                }
+                return newLines;
+              });
+            }
+          });
         } else {
           cur.availableSerials = [];
           cur.serialNumber = '';
@@ -386,7 +825,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
     setLines([
       ...lines,
       {
-        itemId: defaultItem ? defaultItem.item_id : '',
+        itemId: '',
         description: '',
         godownId: godowns[0]?.godown_id || '',
         quantity: 1,
@@ -434,24 +873,25 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         taxable = gross - disc;
 
         if (isInterState) {
-          lineIgst = Math.round(taxable * gst) / 100;
+          lineIgst = taxable * (gst / 100);
         } else {
-          lineCgst = Math.round(taxable * (gst / 2)) / 100;
-          lineSgst = Math.round(taxable * (gst / 2)) / 100;
+          lineCgst = taxable * (gst / 200);
+          lineSgst = taxable * (gst / 200);
         }
       } else {
         const rateIncl = Number(l.rateInclTax || l.rate) || 0;
-        const gross = qty * rateIncl;
-        const disc = gross * (discPercent / 100);
-        const net = gross - disc;
-        taxable = Math.round((net / (1 + gst / 100)) * 100) / 100;
-        const taxTotal = net - taxable;
+        const grossIncl = qty * rateIncl;
+        const disc = grossIncl * (discPercent / 100);
+        const netIncl = grossIncl - disc;
+
+        taxable = netIncl / (1 + gst / 100);
+        const taxAmount = netIncl - taxable;
 
         if (isInterState) {
-          lineIgst = taxTotal;
+          lineIgst = taxAmount;
         } else {
-          lineCgst = Math.floor((taxTotal / 2) * 100) / 100;
-          lineSgst = Math.round((taxTotal - lineCgst) * 100) / 100;
+          lineCgst = taxAmount / 2;
+          lineSgst = taxAmount / 2;
         }
       }
 
@@ -461,35 +901,54 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
       totalIgst += lineIgst;
     });
 
-    const subTotal = taxableTotal + totalCgst + totalSgst + totalIgst;
-    const roundedGrand = Math.round(subTotal);
-    const roundOff = roundedGrand - subTotal;
+    const rawGrandTotal = taxableTotal + totalCgst + totalSgst + totalIgst;
+    const roundedGrandTotal = Math.round(rawGrandTotal);
+    const roundOff = Math.round((roundedGrandTotal - rawGrandTotal) * 100) / 100;
 
     return {
-      taxableValue: taxableTotal,
-      cgst: totalCgst,
-      sgst: totalSgst,
-      igst: totalIgst,
-      totalTax: totalCgst + totalSgst + totalIgst,
+      taxableValue: Math.round(taxableTotal * 100) / 100,
+      taxableTotal: Math.round(taxableTotal * 100) / 100,
+      cgst: Math.round(totalCgst * 100) / 100,
+      sgst: Math.round(totalSgst * 100) / 100,
+      igst: Math.round(totalIgst * 100) / 100,
+      totalTax: Math.round((totalCgst + totalSgst + totalIgst) * 100) / 100,
       roundOff,
-      grandTotal: roundedGrand
+      grandTotal: roundedGrandTotal
     };
   };
 
-  const totals = calculateTotals();
+  // Financial voucher calculations
+  const calculateFinancialTotals = () => {
+    let totalDebit = 0;
+    let totalCredit = 0;
 
-  // Prepare Live Data for Instant Print Preview
+    ledgerLines.forEach((l) => {
+      const amt = Number(l.amount) || 0;
+      if (l.type === 'DR') totalDebit += amt;
+      if (l.type === 'CR') totalCredit += amt;
+    });
+
+    return {
+      totalDebit: Math.round(totalDebit * 100) / 100,
+      totalCredit: Math.round(totalCredit * 100) / 100,
+      isBalanced: Math.abs(totalDebit - totalCredit) < 0.01
+    };
+  };
+
+  // Helper: Prepare live voucher data for InvoicePrintModal
   const prepareLiveVoucherData = () => {
-    const calc = calculateTotals();
+    const calc = isTrading ? calculateTotals() : { grandTotal: 0, taxableValue: 0, taxableTotal: 0, cgst: 0, sgst: 0, igst: 0, totalTax: 0, roundOff: 0 };
     return {
       voucher: {
-        voucher_id: 'live_preview',
+        voucher_id: editVoucherId || 'live_preview',
         voucher_type: voucherType,
         voucher_number: voucherNumber,
         voucher_date: voucherDate,
         reference_number: supplierInvoiceNo || voucherNumber,
         reference_date: supplierInvoiceDate || voucherDate,
         payment_mode: paymentMode,
+        payment_terms: paymentTerms,
+        order_ref: orderRef,
         terms_conditions: termsAndConditions,
         party_name: selectedParty?.party_name || (voucherType === 'PURCHASE' ? 'Supplier Account' : 'Counter Cash Customer'),
         party_gstin: selectedParty?.gstin || '',
@@ -566,15 +1025,36 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
     return str + ' Only';
   };
 
-  // Submit Voucher
-  const handlePostVoucher = async (andPrint: boolean = false) => {
-    if (isPosting) return;
+  // Submit / Save Voucher
+  const handleSaveVoucher = async (andPrint: boolean = false) => {
+    if (isSaving) return;
     if (!company) {
       setErrorMessage('Active company required.');
       return;
     }
 
-    setIsPosting(true);
+    // Validation 1: Party required for trading vouchers
+    if (isTrading && !partyId) {
+      setErrorMessage(`Please select a ${voucherType === 'PURCHASE' ? 'supplier' : 'customer'} party.`);
+      return;
+    }
+
+    // Validation 2: At least one item required for trading vouchers
+    const filled = lines.filter((l) => l.itemId);
+    if (isTrading && filled.length === 0) {
+      setErrorMessage('Please add at least one stock item to the voucher.');
+      return;
+    }
+
+    // Validation 3: Positive quantity
+    for (const l of filled) {
+      if ((Number(l.quantity) || 0) <= 0) {
+        setErrorMessage('Item quantity must be greater than zero.');
+        return;
+      }
+    }
+
+    setIsSaving(true);
     setErrorMessage(null);
 
     try {
@@ -593,7 +1073,6 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         paymentTerms,
         orderRef,
         termsConditions: termsAndConditions,
-        termsAndConditions,
         narration
       };
 
@@ -603,7 +1082,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
           itemId: l.itemId || undefined,
           description: l.description || null,
           godownId: l.godownId || godowns[0]?.godown_id || undefined,
-          quantity: Number(l.quantity),
+          quantity: Number(l.quantity) || 1,
           ratePaise: Math.round(Number(l.rate) * 100),
           discountPercent: Number(l.discountPercent) || 0,
           gstRate: Number(l.gstRate) || 18,
@@ -630,18 +1109,47 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         res = await api.postVoucher(payload);
       }
       setVoucherStatus('Posted');
-      if (!editVoucherId) await fetchNextVoucherNumber();
+      setLastSavedVoucherId(res.voucherId);
+
+      if (!editVoucherId) {
+        await fetchNextVoucherNumber();
+      }
+
       if (andPrint) {
         onPostSuccess(res.voucherId);
       } else {
-        alert(`Voucher ${res.voucherNumber || voucherNumber} ${editVoucherId ? 'updated' : 'posted'} successfully!`);
+        setSuccessMessage(`Voucher ${res.voucherNumber || voucherNumber} ${editVoucherId ? 'updated' : 'saved'} successfully!`);
+        if (!editVoucherId) {
+          // Reset lines for next entry
+          setLines([
+            {
+              itemId: '',
+              description: '',
+              godownId: godowns[0]?.godown_id || '',
+              quantity: 1,
+              unit: 'Nos',
+              hsnSac: '85044029',
+              rate: 0,
+              rateInclTax: 0,
+              discountPercent: 0,
+              gstRate: 18,
+              serialNumber: '',
+              availableSerials: []
+            }
+          ]);
+          setNarration('');
+          setOrderRef('');
+          setSupplierInvoiceNo('');
+        }
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to post voucher.');
+      setErrorMessage(err.message || 'Failed to save voucher.');
     } finally {
-      setIsPosting(false);
+      setIsSaving(false);
     }
   };
+
+  const handlePostVoucher = handleSaveVoucher; // keep backward compatibility
 
   // Quick Party Creation Modal Save
   const handleCreateQuickParty = async (e: React.FormEvent) => {
@@ -678,6 +1186,10 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
     e.preventDefault();
     if (!company) return;
     try {
+      const serialsList = newItemHasSerialNo
+        ? newItemSerialNumbers.split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean)
+        : [];
+
       const res = await api.createStockItem({
         companyId: company.company_id,
         itemName: newItemName.trim(),
@@ -686,10 +1198,13 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         gstRate: newItemGstRate,
         purchaseRatePaise: Math.round(newItemPurchaseCost * 100),
         sellingRatePaise: Math.round(newItemSellingPrice * 100),
-        openingQty: 0,
-        openingValuationPaise: 0,
-        reorderLevel: 5
-      });
+        openingQty: serialsList.length,
+        openingValuationPaise: Math.round(newItemPurchaseCost * 100) * serialsList.length,
+        reorderLevel: 5,
+        hasSerialNo: newItemHasSerialNo,
+        serialNumbers: newItemHasSerialNo ? newItemSerialNumbers.trim() : undefined
+      } as any);
+
       const updated = await api.getStockItems();
       setStockItems(updated);
       // Select newly created item on current line with rate appropriate for voucherType
@@ -704,7 +1219,9 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
           hsnSac: newItemHsn.trim(),
           gstRate: newItemGstRate,
           rate: activeRate,
-          rateInclTax: Math.round(activeRate * (1 + newItemGstRate / 100) * 100) / 100
+          rateInclTax: Math.round(activeRate * (1 + newItemGstRate / 100) * 100) / 100,
+          availableSerials: serialsList,
+          serialNumber: serialsList.length > 0 && voucherType === 'SALES' ? serialsList[0] : ''
         };
         setLines(updatedLines);
       }
@@ -718,880 +1235,792 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
     }
   };
 
+  // Helper: get voucher type meta
+  const voucherMeta: Record<string, { label: string; subtitle: string; icon: string; iconClass: string }> = {
+    SALES:    { label: 'Sales Invoice',    subtitle: 'Create and record your sales transaction',      icon: '🧾', iconClass: 'sales' },
+    PURCHASE: { label: 'Purchase Invoice', subtitle: 'Record supplier bills and stock purchases',      icon: '📦', iconClass: 'purchase' },
+    RECEIPT:  { label: 'Receipt',          subtitle: 'Record payments received from customers',        icon: '💰', iconClass: 'receipt' },
+    PAYMENT:  { label: 'Payment',          subtitle: 'Record payments made to suppliers/vendors',      icon: '💸', iconClass: 'payment' },
+    CONTRA:   { label: 'Contra',           subtitle: 'Transfer between cash and bank accounts',        icon: '↔️', iconClass: 'contra' },
+    JOURNAL:  { label: 'Journal',          subtitle: 'Manual double-entry accounting adjustment',      icon: '📓', iconClass: 'journal' },
+  };
+  const meta = voucherMeta[voucherType] || voucherMeta.SALES;
+
+  // State for sidebar accordions
+  const [paymentOpen, setPaymentOpen] = React.useState(true);
+  const [termsOpen, setTermsOpen] = React.useState(true);
+  const [itemSearch, setItemSearch] = React.useState('');
+
+  // Filtered lines for search (search applies to display only)
+  const filteredLineIndices = lines.map((l: any, i: number) => {
+    if (!itemSearch.trim()) return i;
+    const item = stockItems.find((s: any) => s.item_id === l.itemId);
+    const name = item?.item_name || l.description || '';
+    return name.toLowerCase().includes(itemSearch.toLowerCase()) ? i : -1;
+  }).filter((i: number) => i >= 0);
+
+  const totalQty = lines.reduce((sum: number, l: any) => sum + (Number(l.quantity) || 0), 0);
+  const filledLines = lines.filter((l: any) => l.itemId || l.description);
+  const totals = calculateTotals();
+
   return (
-    <div className="page-container" style={{ padding: '16px 20px', maxWidth: '100%', minHeight: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column' }}>
-      {/* Header Area & Voucher Dock Slidebar */}
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '14px',
-          paddingBottom: '16px',
-          borderBottom: '1px solid var(--border-subtle)',
-          marginBottom: '20px'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          {/* Voucher Type Slidebar / Dock */}
-          <div className="voucher-dock-bar" role="tablist">
-            {[
-              { type: 'SALES', label: 'Sales', fkey: 'F8' },
-              { type: 'PURCHASE', label: 'Purchase', fkey: 'F9' },
-              { type: 'RECEIPT', label: 'Receipt', fkey: 'F6' },
-              { type: 'PAYMENT', label: 'Payment', fkey: 'F5' },
-              { type: 'CONTRA', label: 'Contra', fkey: 'F4' },
-              { type: 'JOURNAL', label: 'Journal', fkey: 'F7' },
-            ].map((item) => (
-              <button
-                key={item.type}
-                type="button"
-                className={`voucher-dock-btn ${voucherType === item.type ? 'active' : ''}`}
-                onClick={() => switchVoucherType(item.type)}
-                title={`Switch to ${item.label} (${item.fkey})`}
-              >
-                <span className="voucher-dock-fkey">{item.fkey}</span>
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </div>
+    <div className="vev2-page">
 
-          {/* Voucher Number Pill */}
-          <div
-            className="tabular-nums"
-            style={{
-              fontSize: '13px',
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              backgroundColor: 'var(--bg-subtle)',
-              padding: '6px 12px',
-              borderRadius: '6px',
-              border: '1px solid var(--border-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>NO:</span>
-            <span>{voucherNumber}</span>
-          </div>
+      {/* ── Breadcrumb (Interactive & Working) ── */}
+      <div className="vev2-breadcrumb">
+        <button
+          type="button"
+          className="vev2-bc-btn"
+          onClick={() => onNavigate ? onNavigate('dashboard') : null}
+          title="Go to Dashboard"
+        >
+          <span>Dashboard</span>
+        </button>
+        <ChevronRight size={13} className="vev2-bc-sep" />
+        <button
+          type="button"
+          className="vev2-bc-btn"
+          onClick={() => onNavigate ? onNavigate('reports', 'daybook') : null}
+          title="View Daybook / All Vouchers"
+        >
+          <span>Daybook (All Vouchers)</span>
+        </button>
+        <ChevronRight size={13} className="vev2-bc-sep" />
+        <span className="vev2-bc-current">{meta.label}</span>
+      </div>
 
-          {/* Status Badge */}
-          <span
-            className={`badge-status ${voucherStatus === 'Posted' ? 'badge-success' : 'badge-warning'}`}
-            style={{ fontSize: '11px', textTransform: 'uppercase' }}
-          >
-            {voucherStatus}
-          </span>
+      {/* ── Title Row ── */}
+      <div className="vev2-title-row">
+        {/* Left: Icon + Title */}
+        <div className="vev2-title-left">
+          <div className={`vev2-type-icon ${meta.iconClass}`} style={{ fontSize: '22px' }}>
+            {meta.icon}
+          </div>
+          <div className="vev2-title-text">
+            <div className="vev2-page-title">{meta.label}</div>
+            <div className="vev2-page-subtitle">{meta.subtitle}</div>
+          </div>
         </div>
 
-        {/* Top Actions: Print Preview, Save, Save & Print */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        {/* Center: Voucher type switcher dock */}
+        <div className="vev2-type-dock" role="tablist">
+          {[
+            { type: 'SALES', label: 'Sales', fkey: 'F8' },
+            { type: 'PURCHASE', label: 'Purchase', fkey: 'F9' },
+            { type: 'RECEIPT', label: 'Receipt', fkey: 'F6' },
+            { type: 'PAYMENT', label: 'Payment', fkey: 'F5' },
+            { type: 'CONTRA', label: 'Contra', fkey: 'F4' },
+            { type: 'JOURNAL', label: 'Journal', fkey: 'F7' },
+          ].map((item) => (
+            <button
+              key={item.type}
+              type="button"
+              className={`vev2-type-dock-btn ${voucherType === item.type ? 'active' : ''}`}
+              onClick={() => switchVoucherType(item.type)}
+              title={`${item.label} (${item.fkey})`}
+            >
+              <span className="vev2-fkey">{item.fkey}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Right: Number pill + status + actions */}
+        <div className="vev2-title-pills">
+          <div className="vev2-number-pill" title="Voucher Number">
+            {voucherNumber}
+            <Pencil size={12} />
+          </div>
+          <span className={`vev2-status-badge ${voucherStatus === 'Posted' ? 'posted' : ''}`}>
+            {voucherStatus === 'Posted' ? 'Saved' : 'Draft'}
+            <ChevronDown size={12} />
+          </span>
           <button
             type="button"
-            className="btn-secondary"
+            className="vev2-post-btn"
+            onClick={() => handleSaveVoucher(false)}
+            disabled={isSaving}
+            title="Save Voucher (Ctrl+A or F10)"
+          >
+            <Check size={15} />
+            {isSaving ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            type="button"
+            className="vev2-more-btn"
             onClick={() => setShowLivePreview(true)}
             title="Print Preview (Alt+P)"
           >
-            <Eye size={14} />
-            <span>Print Preview</span>
-            <kbd style={{ fontSize: '10px', padding: '1px 4px' }}>Alt+P</kbd>
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => handlePostVoucher(false)}
-            disabled={isPosting}
-            title="Save Voucher (Ctrl+A)"
-          >
-            <span>Save</span>
-            <kbd style={{ fontSize: '10px', padding: '1px 4px' }}>Ctrl+A</kbd>
-          </button>
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => handlePostVoucher(true)}
-            disabled={isPosting}
-          >
-            <Printer size={14} />
-            <span>Save & Print</span>
+            <MoreVertical size={16} />
           </button>
         </div>
       </div>
 
+      {/* ── Success Toast Banner ── */}
+      {successMessage && (
+        <div className="vev2-success-toast">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>✓</span>
+            <span>{successMessage}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {lastSavedVoucherId && (
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ padding: '4px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => onPostSuccess(lastSavedVoucherId)}
+              >
+                <Printer size={13} />
+                Print Voucher
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setSuccessMessage(null)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: '4px' }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Error Banner ── */}
       {errorMessage && (
-        <div
-          style={{
-            backgroundColor: 'var(--danger-bg)',
-            color: 'var(--danger-red)',
-            border: '1px solid rgba(239, 68, 68, 0.2)',
-            padding: '10px 14px',
-            borderRadius: '6px',
-            fontSize: '12.5px',
-            marginBottom: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
+        <div className="vev2-error">
           <AlertCircle size={15} />
           <span>{errorMessage}</span>
         </div>
       )}
 
-      {/* Main Form Layout: 2 Columns (Form on left, Summary on right) */}
-      <div className={`voucher-main-layout ${!isTrading || !isSummaryExpanded ? 'no-summary' : ''}`}>
-        {/* Left Column: Voucher Metadata, Customer Info, Item Grid, Footer */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Metadata Card: Date, Party, Bill No, Tax Mode, Place of Supply */}
-          <div className="ledger-card" style={{ padding: '18px 20px' }}>
-            <div className={voucherType === 'PURCHASE' ? 'voucher-meta-grid-purchase' : 'voucher-meta-grid-sales'}>
-              {/* Supplier Invoice No & Date for Purchase */}
-              {voucherType === 'PURCHASE' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--primary-accent)', marginBottom: '5px' }}>
-                    Supplier Invoice No. *
-                  </label>
-                  <input
-                    type="text"
-                    value={supplierInvoiceNo}
-                    onChange={(e) => setSupplierInvoiceNo(e.target.value)}
-                    placeholder="e.g. CL/26-27/1126"
-                    style={{ width: '100%', fontWeight: 600, borderColor: supplierInvoiceNo ? 'var(--primary-accent)' : undefined }}
-                  />
-                </div>
-              )}
+      {/* ── Main 2-Col Layout ── */}
+      <div className="vev2-layout">
 
-              {voucherType === 'PURCHASE' && (
-                <div>
-                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                    Supplier Bill Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={supplierInvoiceDate}
-                    onChange={(e) => setSupplierInvoiceDate(e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                </div>
-              )}
+        {/* ════ LEFT: Form ════ */}
+        <div className="vev2-form">
 
-              {/* Party Selector */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {voucherType === 'PURCHASE' ? 'Supplier Party *' : 'Customer Party *'}
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewPartyType(voucherType === 'PURCHASE' ? 'SUPPLIER' : 'CUSTOMER');
-                      setShowPartyModal(true);
-                    }}
-                    style={{
-                      background: 'none',
-                      color: 'var(--primary-accent)',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      padding: 0
-                    }}
-                  >
-                    + New Party
-                  </button>
-                </div>
-                <select
-                  value={partyId}
-                  onChange={(e) => handleSelectParty(e.target.value)}
-                  style={{ width: '100%', fontWeight: 500 }}
-                >
-                  <option value="">-- Select Party --</option>
-                  {parties.map((p) => (
-                    <option key={p.party_id} value={p.party_id}>
-                      {p.party_name} ({p.party_type})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Place of Supply */}
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Place of Supply
-                </label>
-                <input
-                  type="text"
-                  value={placeOfSupply}
-                  onChange={(e) => setPlaceOfSupply(e.target.value)}
-                  style={{ width: '100%' }}
-                />
-              </div>
-            </div>
-
-            {/* Sub-row: Entry Date, Reference No, and Tax Calculation Mode */}
-            <div className="voucher-subrow-grid">
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Book Entry Date
-                </label>
-                <input
-                  type="date"
-                  id="voucher-date-input"
-                  value={voucherDate}
-                  onChange={(e) => setVoucherDate(e.target.value)}
-                  style={{ width: '100%', padding: '6px 8px', fontSize: '12px' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Order / Ref No. & Date
-                </label>
-                <input
-                  type="text"
-                  value={orderRef}
-                  onChange={(e) => setOrderRef(e.target.value)}
-                  placeholder="e.g. 1126 dt. 7-May-26"
-                  style={{ width: '100%', padding: '6px 8px', fontSize: '12px' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  Tax Calculation Mode
-                </label>
-                <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setTaxMode('EXCLUSIVE')}
-                    style={{
-                      flex: 1,
-                      padding: '5px 8px',
-                      fontSize: '11.5px',
-                      fontWeight: taxMode === 'EXCLUSIVE' ? 700 : 500,
-                      borderRadius: '5px',
-                      border: '1px solid',
-                      borderColor: taxMode === 'EXCLUSIVE' ? 'var(--primary-accent)' : 'var(--border-subtle)',
-                      backgroundColor: taxMode === 'EXCLUSIVE' ? 'var(--bg-card)' : 'transparent',
-                      color: taxMode === 'EXCLUSIVE' ? 'var(--primary-accent)' : 'var(--text-secondary)'
-                    }}
-                  >
-                    Tax Exclusive (GST Added)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTaxMode('INCLUSIVE')}
-                    style={{
-                      flex: 1,
-                      padding: '5px 8px',
-                      fontSize: '11.5px',
-                      fontWeight: taxMode === 'INCLUSIVE' ? 700 : 500,
-                      borderRadius: '5px',
-                      border: '1px solid',
-                      borderColor: taxMode === 'INCLUSIVE' ? 'var(--primary-accent)' : 'var(--border-subtle)',
-                      backgroundColor: taxMode === 'INCLUSIVE' ? 'var(--bg-card)' : 'transparent',
-                      color: taxMode === 'INCLUSIVE' ? 'var(--primary-accent)' : 'var(--text-secondary)'
-                    }}
-                  >
-                    Tax Inclusive (MRP)
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Compact Customer / Supplier Information Panel */}
-            {selectedParty && (
-              <div
-                style={{
-                  marginTop: '12px',
-                  paddingTop: '10px',
-                  borderTop: '1px dashed var(--border-subtle)',
-                  display: 'grid',
-                  gridTemplateColumns: selectedParty.pan ? '1.8fr 1.2fr 1fr 1fr 1fr' : '2fr 1.4fr 1.2fr 1fr',
-                  gap: '12px',
-                  fontSize: '11.5px'
-                }}
-              >
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>Address</span>
-                  <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
-                    {selectedParty.address_line1 || selectedParty.city || 'Counter Party'}
-                  </span>
-                </div>
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>GSTIN / UIN</span>
-                  <span className="tabular-nums" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                    {selectedParty.gstin || 'Unregistered'}
-                  </span>
-                </div>
-                {selectedParty.pan && (
-                  <div>
-                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>PAN</span>
-                    <span className="tabular-nums" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                      {selectedParty.pan}
-                    </span>
-                  </div>
-                )}
-                {selectedParty.bank_name && (
-                  <div>
-                    <span style={{ color: 'var(--text-muted)', display: 'block' }}>Bank</span>
-                    <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                      {selectedParty.bank_name}
-                    </span>
-                  </div>
-                )}
-                <div>
-                  <span style={{ color: 'var(--text-muted)', display: 'block' }}>Ledger Balance</span>
-                  <span
-                    className="tabular-nums"
-                    style={{
-                      color: selectedParty.current_balance_paise >= 0 ? 'var(--success-emerald)' : 'var(--danger-red)',
-                      fontWeight: 700
-                    }}
-                  >
-                    ₹{((selectedParty.current_balance_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {selectedParty.current_balance_paise >= 0 ? 'Dr' : 'Cr'}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Item Grid (Spreadsheet-Style Table) */}
           {isTrading ? (
-            <div className="ledger-card" style={{ padding: '20px 22px', minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '14px'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Item Details & Bill Breakdown
-                  </h3>
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                    ({taxMode === 'EXCLUSIVE' ? 'Tax Exclusive — GST added on taxable value' : 'Tax Inclusive — GST extracted from gross'})
-                  </span>
+            <>
+              {/* ── Meta Card ── */}
+              <div className="vev2-meta-card">
+
+                {/* Row 1: Invoice Date | Customer | Place of Supply */}
+                <div className={voucherType === 'PURCHASE' ? 'vev2-meta-row-purchase' : 'vev2-meta-row'}>
+                  {/* Supplier Invoice No (Purchase only) */}
+                  {voucherType === 'PURCHASE' && (
+                    <div className="vev2-field">
+                      <label>Supplier Invoice No. *</label>
+                      <input
+                        type="text"
+                        value={supplierInvoiceNo}
+                        onChange={(e) => setSupplierInvoiceNo(e.target.value)}
+                        placeholder="e.g. CL/26-27/1126"
+                        style={{ width: '100%', fontWeight: 600, borderColor: supplierInvoiceNo ? 'var(--primary-accent)' : undefined }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Invoice Date */}
+                  <div className="vev2-field">
+                    <label>Invoice Date *</label>
+                    <input
+                      type="date"
+                      id="voucher-date-input"
+                      value={voucherDate}
+                      onChange={(e) => setVoucherDate(e.target.value)}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  {/* Customer / Supplier */}
+                  <div className="vev2-field">
+                    <label>{voucherType === 'PURCHASE' ? 'Supplier *' : 'Customer *'}</label>
+                    <div className="vev2-customer-row">
+                      <PartySearchSelect
+                        partyId={partyId}
+                        parties={parties.filter((p: any) =>
+                          (voucherType as string) === 'PURCHASE' || (voucherType as string) === 'PAYMENT'
+                            ? p.party_type === 'SUPPLIER' || p.party_type === 'BOTH'
+                            : p.party_type === 'CUSTOMER' || p.party_type === 'BOTH'
+                        )}
+                        placeholder={voucherType === 'PURCHASE' ? 'Type to search supplier…' : 'Type to search customer…'}
+                        onSelect={(p) => handleSelectParty(p.party_id, p)}
+                        onAddNew={(typedName) => {
+                          setNewPartyName(typedName);
+                          setNewPartyType(voucherType === 'PURCHASE' ? 'SUPPLIER' : 'CUSTOMER');
+                          setShowPartyModal(true);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="vev2-add-btn"
+                        title="Create new party"
+                        onClick={() => {
+                          setNewPartyType(voucherType === 'PURCHASE' ? 'SUPPLIER' : 'CUSTOMER');
+                          setShowPartyModal(true);
+                        }}
+                      >
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Place of Supply */}
+                  <div className="vev2-field">
+                    <label>Place of Supply *</label>
+                    <input
+                      type="text"
+                      value={placeOfSupply}
+                      onChange={(e) => setPlaceOfSupply(e.target.value)}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setIsSummaryExpanded(!isSummaryExpanded)}
-                    className="btn-secondary"
-                    style={{ fontSize: '11.5px', padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '5px' }}
-                    title={isSummaryExpanded ? 'Collapse summary panel to give maximum space to table' : 'Show summary panel'}
-                  >
-                    {isSummaryExpanded ? <Maximize2 size={13} /> : <Minimize2 size={13} />}
-                    <span>{isSummaryExpanded ? 'Full Width Grid' : 'Dock Summary'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickItemModal(true)}
-                    style={{
-                      background: 'none',
-                      color: 'var(--primary-accent)',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px'
-                    }}
-                  >
-                    <PackagePlus size={14} />
-                    <span>+ New Item Master</span>
-                  </button>
+
+                {/* Row 2: Invoice No | Reference No | Payment Terms | Supplier Bill Date */}
+                <div className="vev2-meta-row-2">
+                  <div className="vev2-field">
+                    <label>Invoice No.</label>
+                    <input
+                      type="text"
+                      value={voucherNumber}
+                      onChange={(e) => setVoucherNumber(e.target.value)}
+                      style={{ width: '100%', fontFamily: 'var(--font-mono)', fontWeight: 600 }}
+                    />
+                  </div>
+                  <div className="vev2-field">
+                    <label>Reference No.</label>
+                    <input
+                      type="text"
+                      value={orderRef}
+                      onChange={(e) => setOrderRef(e.target.value)}
+                      placeholder="PO / Reference No."
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div className="vev2-field">
+                    <label>Payment Terms</label>
+                    <input
+                      type="text"
+                      value={paymentTerms}
+                      onChange={(e) => setPaymentTerms(e.target.value)}
+                      placeholder="e.g. 30 Days / Immediate"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div className="vev2-field">
+                    <label>{voucherType === 'PURCHASE' ? 'Supplier Bill Date' : 'Due Date'}</label>
+                    <input
+                      type="date"
+                      value={supplierInvoiceDate}
+                      onChange={(e) => setSupplierInvoiceDate(e.target.value)}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Spreadsheet Table (Desktop View) */}
-              <div className="voucher-table-desktop" style={{ overflowX: 'auto', flex: 1, minHeight: '280px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
-                <table className="voucher-grid-table" style={{ width: '100%', minWidth: '1380px' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '38px', minWidth: '38px', textAlign: 'center' }}>#</th>
-                      <th style={{ minWidth: '340px', width: '380px' }}>Item Name & Line Details (Serial / Warranty / Notes)</th>
-                      <th style={{ width: '110px', minWidth: '110px', textAlign: 'center' }}>HSN / SAC</th>
-                      <th style={{ width: '85px', minWidth: '85px', textAlign: 'right' }}>Qty</th>
-                      <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>Unit</th>
-                      <th style={{ width: '140px', minWidth: '140px', textAlign: 'right' }}>
-                        Rate Excl. (₹) {taxMode === 'EXCLUSIVE' && <span style={{ color: 'var(--primary-accent)', fontSize: '10px' }}>● BASE</span>}
-                      </th>
-                      <th style={{ width: '140px', minWidth: '140px', textAlign: 'right' }}>
-                        Rate Incl. (₹) {taxMode === 'INCLUSIVE' && <span style={{ color: 'var(--primary-accent)', fontSize: '10px' }}>● BASE</span>}
-                      </th>
-                      <th style={{ width: '75px', minWidth: '75px', textAlign: 'right' }}>Disc %</th>
-                      <th style={{ width: '90px', minWidth: '90px', textAlign: 'center' }}>GST %</th>
-                      <th style={{ width: '125px', minWidth: '125px', textAlign: 'right' }}>Taxable (₹)</th>
-                      <th style={{ width: '135px', minWidth: '135px', textAlign: 'right' }}>Amount (₹)</th>
-                      <th style={{ width: '44px', minWidth: '44px', textAlign: 'center' }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((row, idx) => {
-                      const qty = Number(row.quantity) || 0;
-                      const gst = Number(row.gstRate) || 18;
-                      const discPercent = Number(row.discountPercent) || 0;
+                {/* Row 3: Sales Ledger + Tax Mode */}
+                <div className="vev2-meta-row-3" style={{ marginBottom: 0 }}>
+                  <div className="vev2-field">
+                    <label>Payment Mode</label>
+                    <input
+                      type="text"
+                      value={paymentMode}
+                      onChange={(e) => setPaymentMode(e.target.value)}
+                      placeholder="e.g. GPAY / NEFT / Cash"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div className="vev2-field">
+                    <label>Tax Calculation Mode</label>
+                    <div className="vev2-taxmode-group">
+                      <button
+                        type="button"
+                        className={`vev2-taxmode-btn ${taxMode === 'EXCLUSIVE' ? 'active' : ''}`}
+                        onClick={() => setTaxMode('EXCLUSIVE')}
+                      >
+                        Tax Exclusive (GST Added)
+                      </button>
+                      <button
+                        type="button"
+                        className={`vev2-taxmode-btn ${taxMode === 'INCLUSIVE' ? 'active' : ''}`}
+                        onClick={() => setTaxMode('INCLUSIVE')}
+                      >
+                        Tax Inclusive (MRP)
+                      </button>
+                    </div>
+                  </div>
+                </div>
 
-                      let lineTaxable = 0;
-                      let lineTotal = 0;
-
-                      if (taxMode === 'EXCLUSIVE') {
-                        const r = Number(row.rate) || 0;
-                        const gross = qty * r;
-                        const disc = gross * (discPercent / 100);
-                        lineTaxable = gross - disc;
-                        const tax = lineTaxable * (gst / 100);
-                        lineTotal = lineTaxable + tax;
-                      } else {
-                        const rIncl = Number(row.rateInclTax || row.rate) || 0;
-                        const gross = qty * rIncl;
-                        const disc = gross * (discPercent / 100);
-                        lineTotal = gross - disc;
-                        lineTaxable = lineTotal / (1 + gst / 100);
-                      }
-
-                      return (
-                        <tr key={idx}>
-                          <td style={{ textAlign: 'center', color: 'var(--text-muted)', paddingTop: '12px' }} className="tabular-nums">
-                            {idx + 1}
-                          </td>
-                          <td>
-                            <select
-                              value={row.itemId}
-                              onChange={(e) => updateLine(idx, 'itemId', e.target.value)}
-                              style={{ width: '100%', height: '34px', padding: '5px 8px', fontSize: '13px', fontWeight: 600, marginBottom: '5px' }}
-                            >
-                              <option value="">-- Select Stock Item --</option>
-                              {stockItems.map((stk) => (
-                                <option key={stk.item_id} value={stk.item_id}>
-                                  {stk.item_name}
-                                </option>
-                              ))}
-                            </select>
-                            {/* Serial Number Selection */}
-                            {stockItems.find(s => s.item_id === row.itemId)?.has_serial_no ? (
-                              <div style={{ display: 'flex', gap: '5px', marginBottom: '5px' }}>
-                                {voucherType === 'SALES' || (voucherType as string) === 'PURCHASE_RETURN' ? (
-                                  <select
-                                    value={row.serialNumber || ''}
-                                    onChange={(e) => updateLine(idx, 'serialNumber', e.target.value)}
-                                    style={{ width: '100%', height: '28px', padding: '4px 8px', fontSize: '11.5px', color: 'var(--text-secondary)' }}
-                                  >
-                                    <option value="">-- Select Available Serial No --</option>
-                                    {row.availableSerials?.map((s: string) => (
-                                      <option key={s} value={s}>{s}</option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <input
-                                    type="text"
-                                    value={row.serialNumber || ''}
-                                    onChange={(e) => updateLine(idx, 'serialNumber', e.target.value)}
-                                    placeholder="Enter New Serial Number"
-                                    style={{ width: '100%', height: '28px', padding: '4px 8px', fontSize: '11.5px', color: 'var(--text-secondary)' }}
-                                  />
-                                )}
-                              </div>
-                            ) : null}
-                            {/* Serial Number / Warranty / Line Remarks */}
-                            <input
-                              type="text"
-                              value={row.description || ''}
-                              onChange={(e) => updateLine(idx, 'description', e.target.value)}
-                              placeholder="Line Remarks / Warranty Notes (e.g. 1YR WRNTY)"
-                              style={{ width: '100%', height: '28px', padding: '4px 8px', fontSize: '11.5px', color: 'var(--text-secondary)' }}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="text"
-                              value={row.hsnSac || ''}
-                              onChange={(e) => updateLine(idx, 'hsnSac', e.target.value)}
-                              placeholder="85044029"
-                              style={{ width: '100%', height: '34px', textAlign: 'center', padding: '6px 8px', fontSize: '12.5px', fontFamily: 'var(--font-mono)' }}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={row.quantity}
-                              onChange={(e) => updateLine(idx, 'quantity', e.target.value)}
-                              style={{ width: '100%', height: '34px', textAlign: 'right', padding: '6px 8px', fontSize: '13px', fontWeight: 600 }}
-                              className="tabular-nums"
-                            />
-                          </td>
-                          <td style={{ textAlign: 'center', paddingTop: '14px' }}>
-                            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                              {row.unit || 'nos'}
-                            </span>
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={row.rate}
-                              onChange={(e) => updateLine(idx, 'rate', e.target.value)}
-                              style={{
-                                width: '100%',
-                                height: '34px',
-                                textAlign: 'right',
-                                padding: '6px 8px',
-                                fontSize: '13px',
-                                fontWeight: 600,
-                                backgroundColor: taxMode === 'EXCLUSIVE' ? 'var(--bg-app)' : undefined,
-                                borderColor: taxMode === 'EXCLUSIVE' ? 'var(--primary-accent)' : undefined
-                              }}
-                              className="tabular-nums"
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={row.rateInclTax}
-                              onChange={(e) => updateLine(idx, 'rateInclTax', e.target.value)}
-                              style={{
-                                width: '100%',
-                                height: '34px',
-                                textAlign: 'right',
-                                padding: '6px 8px',
-                                fontSize: '13px',
-                                fontWeight: 600,
-                                backgroundColor: taxMode === 'INCLUSIVE' ? 'var(--bg-app)' : undefined,
-                                borderColor: taxMode === 'INCLUSIVE' ? 'var(--primary-accent)' : undefined
-                              }}
-                              className="tabular-nums"
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={row.discountPercent}
-                              onChange={(e) => updateLine(idx, 'discountPercent', e.target.value)}
-                              style={{ width: '100%', height: '34px', textAlign: 'right', padding: '6px 8px', fontSize: '13px' }}
-                              className="tabular-nums"
-                            />
-                          </td>
-                          <td>
-                            <select
-                              value={row.gstRate || 18}
-                              onChange={(e) => updateLine(idx, 'gstRate', Number(e.target.value))}
-                              style={{ width: '100%', height: '34px', padding: '6px 6px', fontSize: '12.5px', textAlign: 'center' }}
-                            >
-                              <option value={0}>0%</option>
-                              <option value={5}>5%</option>
-                              <option value={12}>12%</option>
-                              <option value={18}>18%</option>
-                              <option value={28}>28%</option>
-                            </select>
-                          </td>
-                          <td style={{ textAlign: 'right', paddingTop: '14px' }} className="tabular-nums">
-                            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                              ₹{lineTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'right', paddingTop: '14px' }} className="tabular-nums">
-                            <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                              ₹{lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'center', paddingTop: '10px' }}>
-                            <button
-                              type="button"
-                              onClick={() => removeLine(idx)}
-                              disabled={lines.length === 1}
-                              style={{
-                                background: 'none',
-                                color: lines.length === 1 ? 'var(--text-muted)' : 'var(--danger-red)',
-                                padding: '6px',
-                                borderRadius: '4px',
-                                opacity: lines.length === 1 ? 0.3 : 1
-                              }}
-                              title="Delete Line"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile Touch Cards View (Responsive < 860px) */}
-              <div className="voucher-cards-mobile">
-                {lines.map((row, idx) => {
-                  const qty = Number(row.quantity) || 0;
-                  const gst = Number(row.gstRate) || 18;
-                  const discPercent = Number(row.discountPercent) || 0;
-
-                  let lineTaxable = 0;
-                  let lineTotal = 0;
-
-                  if (taxMode === 'EXCLUSIVE') {
-                    const r = Number(row.rate) || 0;
-                    const gross = qty * r;
-                    const disc = gross * (discPercent / 100);
-                    lineTaxable = gross - disc;
-                    const tax = lineTaxable * (gst / 100);
-                    lineTotal = lineTaxable + tax;
-                  } else {
-                    const rIncl = Number(row.rateInclTax || row.rate) || 0;
-                    const gross = qty * rIncl;
-                    const disc = gross * (discPercent / 100);
-                    lineTotal = gross - disc;
-                    lineTaxable = lineTotal / (1 + gst / 100);
-                  }
-
-                  return (
-                    <div 
-                      key={idx} 
-                      style={{ 
-                        background: 'var(--surface)', 
-                        border: '1px solid var(--border)', 
-                        borderRadius: 'var(--radius-lg)', 
-                        padding: '14px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '10px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--primary-accent)' }}>
-                          ITEM #{idx + 1}
-                        </span>
-                        {lines.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeLine(idx)}
-                            style={{
-                              background: 'rgba(255, 119, 126, 0.1)',
-                              border: '1px solid rgba(255, 119, 126, 0.25)',
-                              color: 'var(--danger)',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '11px'
-                            }}
-                          >
-                            <Trash2 size={12} />
-                            <span>Remove</span>
-                          </button>
+                {/* Party info card (shows when party is selected) */}
+                {selectedParty && (
+                  <div className="vev2-party-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <div className="vev2-party-name">{selectedParty.party_name}</div>
+                        {(selectedParty.address_line1 || selectedParty.city) && (
+                          <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            {[selectedParty.address_line1, selectedParty.city, selectedParty.state].filter(Boolean).join(', ')}
+                          </div>
                         )}
                       </div>
-
-                      {/* Stock Item Selector */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                          STOCK ITEM *
-                        </label>
-                        <select
-                          value={row.itemId}
-                          onChange={(e) => updateLine(idx, 'itemId', e.target.value)}
-                          style={{ width: '100%', height: '36px', fontSize: '13px', fontWeight: 600 }}
-                        >
-                          <option value="">-- Select Stock Item --</option>
-                          {stockItems.map((stk) => (
-                            <option key={stk.item_id} value={stk.item_id}>
-                              {stk.item_name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Line Remarks / S/N */}
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
-                          SERIAL / NOTES / WARRANTY
-                        </label>
-                        <input
-                          type="text"
-                          value={row.description || ''}
-                          onChange={(e) => updateLine(idx, 'description', e.target.value)}
-                          placeholder="e.g. SN-8921, 1 Yr Warranty"
-                          style={{ width: '100%', height: '32px', fontSize: '12px' }}
-                        />
-                      </div>
-
-                      {/* Qty, Unit, HSN */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.8fr 1fr', gap: '8px' }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                            QTY
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={row.quantity}
-                            onChange={(e) => updateLine(idx, 'quantity', e.target.value)}
-                            style={{ width: '100%', height: '34px', textAlign: 'right', fontWeight: 600 }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                            UNIT
-                          </label>
-                          <div style={{ height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-elevated)', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>
-                            {row.unit || 'nos'}
-                          </div>
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                            HSN / SAC
-                          </label>
-                          <input
-                            type="text"
-                            value={row.hsnSac || ''}
-                            onChange={(e) => updateLine(idx, 'hsnSac', e.target.value)}
-                            style={{ width: '100%', height: '34px', textAlign: 'center', fontSize: '12px' }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Rates: Excl and Incl */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                            RATE EXCL. (₹) {taxMode === 'EXCLUSIVE' && '●'}
-                          </label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={row.rate}
-                            onChange={(e) => updateLine(idx, 'rate', e.target.value)}
-                            style={{ width: '100%', height: '34px', textAlign: 'right', fontWeight: 600 }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                            RATE INCL. (₹) {taxMode === 'INCLUSIVE' && '●'}
-                          </label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={row.rateInclTax}
-                            onChange={(e) => updateLine(idx, 'rateInclTax', e.target.value)}
-                            style={{ width: '100%', height: '34px', textAlign: 'right', fontWeight: 600 }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Discount and GST Rate */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                            DISCOUNT %
-                          </label>
-                          <input
-                            type="number"
-                            step="0.1"
-                            value={row.discountPercent}
-                            onChange={(e) => updateLine(idx, 'discountPercent', e.target.value)}
-                            style={{ width: '100%', height: '34px', textAlign: 'right' }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                            GST %
-                          </label>
-                          <select
-                            value={row.gstRate || 18}
-                            onChange={(e) => updateLine(idx, 'gstRate', Number(e.target.value))}
-                            style={{ width: '100%', height: '34px' }}
-                          >
-                            <option value={0}>0% (Nil)</option>
-                            <option value={5}>5%</option>
-                            <option value={12}>12%</option>
-                            <option value={18}>18%</option>
-                            <option value={28}>28%</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Card Summary Bar */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px dashed var(--border-subtle)', marginTop: '2px' }}>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                          Taxable: <strong style={{ color: 'var(--text-primary)' }}>₹{lineTaxable.toFixed(2)}</strong>
-                        </span>
-                        <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--green)' }}>
-                          Line Total: ₹{lineTotal.toFixed(2)}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span className={`vev2-party-balance ${(selectedParty.current_balance_paise || 0) >= 0 ? 'credit' : 'debit'}`}>
+                          ₹{Math.abs((selectedParty.current_balance_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {(selectedParty.current_balance_paise || 0) >= 0 ? 'Dr' : 'Cr'}
                         </span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* Add Line Button & Inline Bottom Summary when sidebar collapsed */}
-              <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                <button
-                  type="button"
-                  onClick={addLine}
-                  className="btn-secondary"
-                  style={{ fontSize: '12.5px', padding: '7px 16px', fontWeight: 600 }}
-                >
-                  <Plus size={14} />
-                  <span>+ Add Item Row</span>
-                </button>
-
-                {!isSummaryExpanded && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '18px',
-                      padding: '8px 16px',
-                      backgroundColor: 'var(--bg-app)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: '6px',
-                      fontSize: '12.5px'
-                    }}
-                  >
-                    <span>Taxable: <strong className="tabular-nums">₹{totals.taxableValue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                    <span>CGST: <strong className="tabular-nums">₹{totals.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                    <span>SGST: <strong className="tabular-nums">₹{totals.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                    {totals.roundOff !== 0 && (
-                      <span style={{ color: totals.roundOff < 0 ? 'var(--danger-red)' : 'var(--text-primary)' }}>
-                        Round Off: <strong className="tabular-nums">{totals.roundOff < 0 ? `(-)₹${Math.abs(totals.roundOff).toFixed(2)}` : `₹${totals.roundOff.toFixed(2)}`}</strong>
-                      </span>
-                    )}
-                    <div style={{ paddingLeft: '10px', borderLeft: '1px solid var(--border-subtle)' }}>
-                      <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', marginRight: '6px' }}>Total:</span>
-                      <strong className="tabular-nums" style={{ fontSize: '16px', color: 'var(--primary-accent)' }}>
-                        ₹{totals.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </strong>
+                    <div className="vev2-party-meta">
+                      {selectedParty.gstin && (
+                        <div><span>GSTIN&nbsp;</span><strong style={{ fontFamily: 'var(--font-mono)' }}>{selectedParty.gstin}</strong></div>
+                      )}
+                      {selectedParty.pan && (
+                        <div><span>PAN&nbsp;</span><strong style={{ fontFamily: 'var(--font-mono)' }}>{selectedParty.pan}</strong></div>
+                      )}
+                      {selectedParty.phone && (
+                        <div><span>Ph&nbsp;</span><strong>{selectedParty.phone}</strong></div>
+                      )}
+                      {selectedParty.bank_name && (
+                        <div><span>Bank&nbsp;</span><strong>{selectedParty.bank_name}</strong></div>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
-            </div>
+
+              {/* ── Items Section ── */}
+              <div className="vev2-items-section">
+                {/* Items header */}
+                <div className="vev2-items-header">
+                  <span className="vev2-items-title">Items</span>
+                  <div className="vev2-item-search-wrap">
+                    <Search size={13} />
+                    <input
+                      type="text"
+                      className="vev2-item-search"
+                      placeholder="Search or type to add an item…"
+                      value={itemSearch}
+                      onChange={(e) => setItemSearch(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="vev2-add-item-btn"
+                    onClick={addLine}
+                  >
+                    <Plus size={13} />
+                    Add Item
+                  </button>
+                  <button
+                    type="button"
+                    className="vev2-more-btn"
+                    onClick={() => setShowQuickItemModal(true)}
+                    title="Create new stock item master"
+                    style={{ width: '32px', height: '32px', borderRadius: '6px' }}
+                  >
+                    <MoreVertical size={14} />
+                  </button>
+                </div>
+
+                {/* Items table */}
+                <div className="vev2-table-wrap">
+                  <table className="vev2-items-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '36px', textAlign: 'center' }}>#</th>
+                        <th style={{ minWidth: '240px' }}>Item</th>
+                        <th style={{ width: '100px', textAlign: 'center' }}>HSN/SAC</th>
+                        <th style={{ width: '70px', textAlign: 'right' }}>Qty</th>
+                        <th style={{ width: '60px', textAlign: 'center' }}>Unit</th>
+                        <th style={{ width: '130px', textAlign: 'right' }}>
+                          Rate (₹) {taxMode === 'INCLUSIVE' ? <span style={{ color: 'var(--primary-accent)', fontSize: '9px' }}>INCL.</span> : <span style={{ color: 'var(--text-muted)', fontSize: '9px' }}>EXCL.</span>}
+                        </th>
+                        <th style={{ width: '75px', textAlign: 'right' }}>Disc. (%)</th>
+                        <th style={{ width: '80px', textAlign: 'center' }}>GST (%)</th>
+                        <th style={{ width: '120px', textAlign: 'right' }}>Amount (₹)</th>
+                        <th style={{ width: '36px' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredLineIndices.map((idx: number) => {
+                        const row = lines[idx];
+                        const qty = Number(row.quantity) || 0;
+                        const gst = Number(row.gstRate) || 18;
+                        const discPercent = Number(row.discountPercent) || 0;
+                        let lineTotal = 0;
+
+                        if (taxMode === 'EXCLUSIVE') {
+                          const r = Number(row.rate) || 0;
+                          const gross = qty * r;
+                          const disc = gross * (discPercent / 100);
+                          const taxable = gross - disc;
+                          lineTotal = taxable + taxable * (gst / 100);
+                        } else {
+                          const rIncl = Number(row.rateInclTax || row.rate) || 0;
+                          const gross = qty * rIncl;
+                          lineTotal = gross - gross * (discPercent / 100);
+                        }
+
+                        return (
+                          <tr key={idx}>
+                            {/* # */}
+                            <td className="vev2-line-number">{idx + 1}</td>
+
+                            {/* Item name cell */}
+                            <td style={{ minWidth: '260px' }}>
+                              <ItemSearchSelect
+                                itemId={row.itemId}
+                                stockItems={stockItems}
+                                voucherType={voucherType}
+                                placeholder="Type to search stock item…"
+                                onSelect={(stk) => updateLine(idx, 'itemId', stk.item_id)}
+                                onAddNew={(typedName) => {
+                                  setNewItemName(typedName);
+                                  setShowQuickItemModal(true);
+                                }}
+                              />
+
+                              {/* Serial number tracking */}
+                              {(() => {
+                                if (!row.itemId) return null;
+                                const itemDef = stockItems.find((s: any) => s.item_id === row.itemId);
+                                const isSerialTracked = Boolean(itemDef?.has_serial_no) || Boolean(itemDef?.serial_numbers);
+                                if (!isSerialTracked) {
+                                  return (
+                                    <input
+                                      type="text"
+                                      value={row.description || ''}
+                                      onChange={(e) => updateLine(idx, 'description', e.target.value)}
+                                      placeholder="Line remarks / warranty notes (optional)…"
+                                      style={{ width: '100%', height: '26px', fontSize: '12px', marginTop: '4px', color: 'var(--text-secondary)' }}
+                                    />
+                                  );
+                                }
+                                const availList: string[] = row.availableSerials || [];
+                                const selectedSerials: string[] = (row.serialNumber || '').split(/[\n,]+/).map((s: string) => s.trim()).filter(Boolean);
+                                const targetQty = Math.max(1, Math.round(Number(row.quantity) || 1));
+                                const isMet = selectedSerials.length === targetQty;
+
+                                const toggleSerial = (serial: string) => {
+                                  let next: string[];
+                                  if (selectedSerials.includes(serial)) {
+                                    next = selectedSerials.filter((s: string) => s !== serial);
+                                  } else {
+                                    next = targetQty === 1 ? [serial] : [...selectedSerials, serial].slice(0, targetQty);
+                                  }
+                                  updateLine(idx, 'serialNumber', next.join(', '));
+                                };
+
+                                const isSalesOrOutward = voucherType === 'SALES';
+
+                                return (
+                                  <div className="serial-number-box" style={{ marginTop: '6px' }}>
+                                    <div className="serial-box-header">
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '11px' }}>
+                                          {isSalesOrOutward ? '🏷️ Available S/N Stock:' : '📦 Incoming Serial Numbers:'}
+                                        </span>
+                                        {isSalesOrOutward && (
+                                          <span className={`serial-badge-count ${availList.length > 0 ? 'success' : ''}`}>
+                                            {availList.length} in Stock
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span style={{ fontSize: '10px', color: isMet ? 'var(--success-emerald)' : 'var(--primary-accent)', fontWeight: 700 }}>
+                                        {selectedSerials.length} / {targetQty} {isSalesOrOutward ? 'Selected' : 'Entered'} {isMet ? '✓' : ''}
+                                      </span>
+                                    </div>
+
+                                    {/* Quick chips for Sales / Outward */}
+                                    {isSalesOrOutward && availList.length > 0 && (
+                                      <div>
+                                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '3px', display: 'flex', justifyContent: 'space-between' }}>
+                                          <span>Click chip to select serial:</span>
+                                          {targetQty > 1 && (
+                                            <button
+                                              type="button"
+                                              onClick={() => updateLine(idx, 'serialNumber', availList.slice(0, targetQty).join(', '))}
+                                              style={{ background: 'none', border: 'none', color: 'var(--primary-accent)', fontSize: '10px', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                                            >
+                                              Pick First {targetQty}
+                                            </button>
+                                          )}
+                                        </div>
+                                        <div className="serial-chip-list">
+                                          {availList.map((sn: string) => {
+                                            const isSelected = selectedSerials.includes(sn);
+                                            return (
+                                              <button
+                                                key={sn}
+                                                type="button"
+                                                onClick={() => toggleSerial(sn)}
+                                                className={`serial-chip ${isSelected ? 'selected' : ''}`}
+                                                title={isSelected ? 'Click to deselect' : 'Click to select'}
+                                              >
+                                                <span>{sn}</span>
+                                                {isSelected && <span style={{ fontSize: '10px' }}>✓</span>}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {availList.length === 0 && isSalesOrOutward && (
+                                      <div className="serial-warning-badge" style={{ marginTop: '4px' }}>
+                                        <span>⚠️</span>
+                                        <span>0 serial numbers currently in stock. Type manual serials below or update stock.</span>
+                                      </div>
+                                    )}
+
+                                    {/* Direct comma-separated input */}
+                                    <input
+                                      type="text"
+                                      value={row.serialNumber || ''}
+                                      onChange={(e) => updateLine(idx, 'serialNumber', e.target.value)}
+                                      placeholder={isSalesOrOutward ? 'Selected serials or type manual serial…' : 'Enter serial number(s) e.g. SN-001, SN-002…'}
+                                      style={{ width: '100%', height: '28px', fontSize: '12px', fontFamily: 'var(--font-mono)', marginTop: '5px' }}
+                                    />
+                                  </div>
+                                );
+                              })()}
+                            </td>
+
+                            {/* HSN/SAC */}
+                            <td>
+                              <input
+                                type="text"
+                                value={row.hsnSac || ''}
+                                onChange={(e) => updateLine(idx, 'hsnSac', e.target.value)}
+                                placeholder="85044029"
+                                style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                              />
+                            </td>
+
+                            {/* Qty */}
+                            <td>
+                              <input
+                                type="number"
+                                min="0.01"
+                                step="1"
+                                value={row.quantity}
+                                onChange={(e) => updateLine(idx, 'quantity', e.target.value)}
+                                style={{ textAlign: 'right', fontWeight: 700, fontSize: '14px' }}
+                                className="tabular-nums"
+                              />
+                            </td>
+
+                            {/* Unit */}
+                            <td style={{ textAlign: 'center' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                                {row.unit || 'Nos'}
+                              </span>
+                            </td>
+
+                            {/* Rate */}
+                            <td>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={taxMode === 'INCLUSIVE' ? row.rateInclTax : row.rate}
+                                onChange={(e) => updateLine(idx, taxMode === 'INCLUSIVE' ? 'rateInclTax' : 'rate', e.target.value)}
+                                style={{
+                                  textAlign: 'right',
+                                  fontWeight: 600,
+                                  fontSize: '14px',
+                                  borderColor: 'var(--border-subtle)',
+                                  backgroundColor: 'var(--surface-soft)'
+                                }}
+                                className="tabular-nums"
+                              />
+                            </td>
+
+                            {/* Discount % */}
+                            <td>
+                              <input
+                                type="number"
+                                step="0.1"
+                                min="0"
+                                max="100"
+                                value={row.discountPercent}
+                                onChange={(e) => updateLine(idx, 'discountPercent', e.target.value)}
+                                style={{ textAlign: 'right' }}
+                                className="tabular-nums"
+                              />
+                            </td>
+
+                            {/* GST % */}
+                            <td>
+                              <select
+                                value={row.gstRate || 18}
+                                onChange={(e) => updateLine(idx, 'gstRate', Number(e.target.value))}
+                                style={{ textAlign: 'center', fontSize: '13px' }}
+                              >
+                                <option value={0}>0%</option>
+                                <option value={5}>5%</option>
+                                <option value={12}>12%</option>
+                                <option value={18}>18%</option>
+                                <option value={28}>28%</option>
+                              </select>
+                            </td>
+
+                            {/* Amount */}
+                            <td>
+                              <span className="vev2-amount-cell">
+                                ₹{lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </td>
+
+                            {/* Delete */}
+                            <td style={{ textAlign: 'center' }}>
+                              <button
+                                type="button"
+                                className="vev2-delete-btn"
+                                onClick={() => removeLine(idx)}
+                                disabled={lines.length === 1}
+                                title="Remove line"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {/* Empty row hint */}
+                      <tr>
+                        <td colSpan={10} style={{ padding: '8px 12px' }}>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ opacity: 0.4 }}>+</span>
+                            <span style={{ opacity: 0.5 }}>Search or select an item to add…</span>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Table footer: Add Row | Scan | Tax Inclusive toggle | Round Off */}
+                <div className="vev2-table-footer">
+                  <button type="button" className="vev2-add-row-btn" onClick={addLine}>
+                    <Plus size={13} />
+                    Add Row
+                  </button>
+                  <button
+                    type="button"
+                    className="vev2-scan-btn"
+                    onClick={() => setShowQuickItemModal(true)}
+                    title="Create new stock item"
+                  >
+                    <PackagePlus size={13} />
+                    New Item
+                  </button>
+
+                  <div className="vev2-table-footer-right">
+                    <label className="vev2-tax-toggle" title="Toggle between Tax Exclusive (GST added) and Tax Inclusive (MRP)">
+                      Tax Inclusive
+                      <label className="vev2-toggle-switch">
+                        <input
+                          type="checkbox"
+                          checked={taxMode === 'INCLUSIVE'}
+                          onChange={(e) => setTaxMode(e.target.checked ? 'INCLUSIVE' : 'EXCLUSIVE')}
+                        />
+                        <span className="vev2-toggle-track"></span>
+                        <span className="vev2-toggle-thumb"></span>
+                      </label>
+                    </label>
+
+                    <div className="vev2-round-off">
+                      Round Off
+                      <select defaultValue="nearest1">
+                        <option value="nearest1">Nearest ₹1</option>
+                        <option value="nearest10">Nearest ₹10</option>
+                        <option value="none">None</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Footer: Narration + Terms ── */}
+              <div className="vev2-footer-card">
+                <div className="vev2-footer-grid">
+                  <div className="vev2-footer-field">
+                    <label>Narration</label>
+                    <textarea
+                      rows={3}
+                      value={narration}
+                      onChange={(e) => setNarration(e.target.value)}
+                      placeholder="e.g. Purchase of HP 65W Blue Adapter, Serial: 3cb0720r3y, 1Yr Dealer Wrnty..."
+                    />
+                  </div>
+                  <div className="vev2-footer-field">
+                    <label>Terms & Conditions</label>
+                    <textarea
+                      rows={3}
+                      value={termsAndConditions}
+                      onChange={(e) => setTermsAndConditions(e.target.value)}
+                      placeholder="e.g. Goods once sold no return. Warranty from service center only."
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
           ) : (
-            /* Financial Voucher Lines (Receipt / Payment / Contra / Journal) */
-            <div className="ledger-card" style={{ padding: '16px 18px' }}>
-              <h3 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px' }}>
-                Accounting Ledger Postings (Double Entry)
-              </h3>
-              <div className="voucher-table-desktop">
-                <table className="ledger-table">
+            /* ════ Financial Voucher (Receipt / Payment / Contra / Journal) ════ */
+            <>
+              {/* Meta row for financial vouchers */}
+              <div className="vev2-meta-card">
+                <div className="vev2-meta-row">
+                  <div className="vev2-field">
+                    <label>Entry Date *</label>
+                    <input
+                      type="date"
+                      id="voucher-date-input"
+                      value={voucherDate}
+                      onChange={(e) => setVoucherDate(e.target.value)}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div className="vev2-field">
+                    <label>Voucher Number</label>
+                    <input
+                      type="text"
+                      value={voucherNumber}
+                      onChange={(e) => setVoucherNumber(e.target.value)}
+                      style={{ width: '100%', fontFamily: 'var(--font-mono)', fontWeight: 600 }}
+                    />
+                  </div>
+                  <div className="vev2-field">
+                    <label>Payment Mode / Ref</label>
+                    <input
+                      type="text"
+                      value={paymentMode}
+                      onChange={(e) => setPaymentMode(e.target.value)}
+                      placeholder="e.g. GPAY / ICICI Bank / NEFT"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Ledger posting table */}
+              <div className="vev2-ledger-card">
+                <h3 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '14px' }}>
+                  Accounting Ledger Postings (Double Entry)
+                </h3>
+                <table className="ledger-table" style={{ width: '100%' }}>
                   <thead>
                     <tr>
-                      <th style={{ width: '60px' }}>Type</th>
+                      <th style={{ width: '70px' }}>Type</th>
                       <th>Account Ledger</th>
-                      <th style={{ width: '140px', textAlign: 'right' }}>Amount (₹)</th>
+                      <th style={{ width: '150px', textAlign: 'right' }}>Amount (₹)</th>
                       <th>Particulars</th>
+                      <th style={{ width: '40px' }}></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {ledgerLines.map((row, idx) => (
+                    {ledgerLines.map((row: any, idx: number) => (
                       <tr key={idx}>
                         <td>
                           <select
@@ -1601,7 +2030,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                               updated[idx].type = e.target.value;
                               setLedgerLines(updated);
                             }}
-                            style={{ padding: '4px 6px', fontWeight: 700 }}
+                            style={{ padding: '4px 8px', fontWeight: 700 }}
                           >
                             <option value="DR">Dr</option>
                             <option value="CR">Cr</option>
@@ -1617,8 +2046,8 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                             }}
                             style={{ width: '100%' }}
                           >
-                            <option value="">-- Select Account Ledger --</option>
-                            {ledgers.map((l) => (
+                            <option value="">— Select Account Ledger —</option>
+                            {ledgers.map((l: any) => (
                               <option key={l.ledger_id} value={l.ledger_id}>
                                 {l.ledger_name} ({l.group_name})
                               </option>
@@ -1652,342 +2081,253 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                             style={{ width: '100%' }}
                           />
                         </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            className="vev2-delete-btn"
+                            onClick={() => {
+                              if (ledgerLines.length > 2) {
+                                setLedgerLines(ledgerLines.filter((_: any, i: number) => i !== idx));
+                              }
+                            }}
+                            disabled={ledgerLines.length <= 2}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-
-              {/* Mobile Touch Cards View for Financial Vouchers */}
-              <div className="voucher-cards-mobile">
-                {ledgerLines.map((row, idx) => (
-                  <div 
-                    key={idx}
-                    style={{
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-md)',
-                      padding: '12px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '8px'
-                    }}
+                <div style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="vev2-add-row-btn"
+                    onClick={() => setLedgerLines([...ledgerLines, { ledgerId: '', type: 'DR', amount: 0, particulars: '' }])}
                   >
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <select
-                        value={row.type}
-                        onChange={(e) => {
-                          const updated = [...ledgerLines];
-                          updated[idx].type = e.target.value;
-                          setLedgerLines(updated);
-                        }}
-                        style={{ width: '80px', height: '34px', fontWeight: 700 }}
-                      >
-                        <option value="DR">Dr</option>
-                        <option value="CR">Cr</option>
-                      </select>
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Amount (₹)"
-                        value={row.amount}
-                        onChange={(e) => {
-                          const updated = [...ledgerLines];
-                          updated[idx].amount = Number(e.target.value);
-                          setLedgerLines(updated);
-                        }}
-                        style={{ flex: 1, height: '34px', textAlign: 'right', fontWeight: 600 }}
-                      />
-                    </div>
-                    <div>
-                      <select
-                        value={row.ledgerId}
-                        onChange={(e) => {
-                          const updated = [...ledgerLines];
-                          updated[idx].ledgerId = e.target.value;
-                          setLedgerLines(updated);
-                        }}
-                        style={{ width: '100%', height: '34px' }}
-                      >
-                        <option value="">-- Select Account Ledger --</option>
-                        {ledgers.map((l) => (
-                          <option key={l.ledger_id} value={l.ledger_id}>
-                            {l.ledger_name} ({l.group_name})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <input
-                        type="text"
-                        value={row.particulars}
-                        onChange={(e) => {
-                          const updated = [...ledgerLines];
-                          updated[idx].particulars = e.target.value;
-                          setLedgerLines(updated);
-                        }}
-                        placeholder="Reference note / particulars"
-                        style={{ width: '100%', height: '32px', fontSize: '12px' }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                    <Plus size={13} /> Add Row
+                  </button>
+                </div>
+                {/* Narration for financial */}
+                <div style={{ marginTop: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' }}>
+                    Narration
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={narration}
+                    onChange={(e) => setNarration(e.target.value)}
+                    placeholder="Enter narration / reference notes..."
+                    style={{ width: '100%', resize: 'vertical' }}
+                  />
+                </div>
               </div>
-            </div>
+            </>
           )}
-
-          {/* Voucher Footer: Narration, Payment Details, Terms */}
-          <div className="ledger-card" style={{ padding: '16px 18px' }}>
-            <div className="voucher-footer-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Narration & Notes
-                </label>
-                <textarea
-                  rows={3}
-                  value={narration}
-                  onChange={(e) => setNarration(e.target.value)}
-                  placeholder="e.g. Purchase of HP 65W Blue Adapter, Serial: 3cb0720r3y, 1Yr Dealer Wrnty..."
-                  style={{ width: '100%', resize: 'vertical' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Payment Mode & Reference
-                </label>
-                <input
-                  type="text"
-                  value={paymentMode}
-                  onChange={(e) => setPaymentMode(e.target.value)}
-                  placeholder="e.g. GPAY / ICICI Bank / NEFT"
-                  style={{ width: '100%', marginBottom: '8px' }}
-                />
-                <input
-                  type="text"
-                  value={paymentTerms}
-                  onChange={(e) => setPaymentTerms(e.target.value)}
-                  placeholder="Terms: e.g. Immediate / Net 30 Days"
-                  style={{ width: '100%' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                  Declaration / Terms & Conditions
-                </label>
-                <textarea
-                  rows={3}
-                  value={termsAndConditions}
-                  onChange={(e) => setTermsAndConditions(e.target.value)}
-                  placeholder="e.g. 01-Once product sold no cancel or return. 02=Product warranty is from service center only..."
-                  style={{ width: '100%', resize: 'vertical' }}
-                />
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* Right Column: Invoice Summary (Compact Panel) */}
-        {isTrading && isSummaryExpanded && (
-          <div>
-            <div
-              className="ledger-card"
-              style={{
-                padding: '18px 20px',
-                position: 'sticky',
-                top: '78px'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <h3
-                  style={{
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    color: 'var(--text-primary)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.04em',
-                    margin: 0
-                  }}
-                >
-                  Bill Summary
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setIsSummaryExpanded(false)}
-                  style={{
-                    background: 'none',
-                    color: 'var(--text-muted)',
-                    fontSize: '11px',
-                    padding: '2px 6px',
-                    borderRadius: '4px'
-                  }}
-                  title="Hide summary panel to expand item grid"
-                >
-                  Hide ✕
-                </button>
+        {/* ════ RIGHT: Sticky Sidebar ════ */}
+        {isTrading && (
+          <div className="vev2-sidebar">
+
+            {/* Invoice Summary card */}
+            <div className="vev2-summary-card">
+              <div className="vev2-summary-title">Invoice Summary</div>
+
+              {/* Counts */}
+              <div className="vev2-summary-counts">
+                <div className="vev2-summary-count">
+                  <span>Total Items</span>
+                  <strong>{filledLines.length}</strong>
+                </div>
+                <div className="vev2-summary-count">
+                  <span>Total Qty</span>
+                  <strong>{totalQty}</strong>
+                </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12.5px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Taxable Value</span>
-                  <span className="tabular-nums" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                    ₹{totals.taxableValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
+              {/* Rows */}
+              <div className="vev2-summary-rows">
+                <div className="vev2-summary-row">
+                  <span>Taxable Value (Base)</span>
+                  <span>₹{totals.taxableValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>CGST (9%)</span>
-                  <span className="tabular-nums" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                    ₹{totals.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>SGST (9%)</span>
-                  <span className="tabular-nums" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                    ₹{totals.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-
-                {totals.igst > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: 'var(--text-secondary)' }}>IGST (18%)</span>
-                    <span className="tabular-nums" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                      ₹{totals.igst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
+                {totals.cgst > 0 && (
+                  <div className="vev2-summary-row">
+                    <span>CGST</span>
+                    <span>₹{totals.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 )}
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Round Off</span>
-                  <span className="tabular-nums" style={{ fontWeight: 600, color: totals.roundOff < 0 ? 'var(--danger-red)' : 'var(--text-primary)' }}>
+                {totals.sgst > 0 && (
+                  <div className="vev2-summary-row">
+                    <span>SGST</span>
+                    <span>₹{totals.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                {totals.igst > 0 && (
+                  <div className="vev2-summary-row">
+                    <span>IGST</span>
+                    <span>₹{totals.igst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                <hr className="vev2-summary-divider" />
+                <div className="vev2-summary-row">
+                  <span>Total Tax</span>
+                  <span>₹{totals.totalTax.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="vev2-summary-row">
+                  <span>Round Off</span>
+                  <span style={{ color: totals.roundOff < 0 ? 'var(--danger-red)' : 'var(--text-primary)' }}>
                     {totals.roundOff < 0 ? `(-)₹${Math.abs(totals.roundOff).toFixed(2)}` : `₹${totals.roundOff.toFixed(2)}`}
                   </span>
                 </div>
+              </div>
 
-                {/* Grand Total (Highlighted) */}
-                <div
-                  style={{
-                    margin: '12px 0',
-                    padding: '12px 14px',
-                    borderRadius: '6px',
-                    backgroundColor: 'var(--bg-app)',
-                    border: '1px solid var(--border-subtle)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'baseline'
-                  }}
-                >
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Total Amount
-                  </span>
-                  <span
-                    className="tabular-nums"
-                    style={{
-                      fontSize: '20px',
-                      fontWeight: 800,
-                      color: 'var(--primary-accent)'
-                    }}
-                  >
-                    ₹{totals.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-
-                {/* Amount in Words */}
-                <div
-                  style={{
-                    fontSize: '11px',
-                    color: 'var(--text-secondary)',
-                    backgroundColor: 'var(--bg-subtle)',
-                    padding: '10px 12px',
-                    borderRadius: '6px',
-                    lineHeight: 1.4
-                  }}
-                >
-                  <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '2px' }}>
-                    Amount Chargeable (in words):
-                  </strong>
-                  {numberToWords(totals.grandTotal)}
-                </div>
-
-                {/* Tax Amount in Words */}
-                <div
-                  style={{
-                    fontSize: '11px',
-                    color: 'var(--text-secondary)',
-                    backgroundColor: 'var(--bg-subtle)',
-                    padding: '10px 12px',
-                    borderRadius: '6px',
-                    lineHeight: 1.4
-                  }}
-                >
-                  <strong style={{ color: 'var(--text-primary)', display: 'block', marginBottom: '2px' }}>
-                    Tax Amount (in words):
-                  </strong>
-                  {numberToWords(totals.totalTax)}
+              {/* Grand Total */}
+              <div className="vev2-grand-total-block">
+                <div className="vev2-grand-total-label">Grand Total</div>
+                <div className="vev2-grand-total-amount">
+                  ₹{totals.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </div>
               </div>
+
+              {/* Amount in words */}
+              <div className="vev2-amount-words">
+                <strong>Amount in Words</strong>
+                {numberToWords(totals.grandTotal)}
+              </div>
             </div>
+
+            {/* Payment Details accordion */}
+            <div className="vev2-accordion-card">
+              <div
+                className="vev2-accordion-header"
+                onClick={() => setPaymentOpen((o) => !o)}
+              >
+                <span>Payment Details</span>
+                <ChevronDown size={14} style={{ transform: paymentOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+              </div>
+              {paymentOpen && (
+                <div className="vev2-accordion-body">
+                  <div style={{ paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Mode</label>
+                      <input
+                        type="text"
+                        value={paymentMode}
+                        onChange={(e) => setPaymentMode(e.target.value)}
+                        placeholder="GPAY / NEFT / Cash"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Terms</label>
+                      <input
+                        type="text"
+                        value={paymentTerms}
+                        onChange={(e) => setPaymentTerms(e.target.value)}
+                        placeholder="Immediate / Net 30 Days"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Terms & Conditions accordion */}
+            <div className="vev2-accordion-card">
+              <div
+                className="vev2-accordion-header"
+                onClick={() => setTermsOpen((o) => !o)}
+              >
+                <span>Terms & Conditions</span>
+                <ChevronDown size={14} style={{ transform: termsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+              </div>
+              {termsOpen && (
+                <div className="vev2-accordion-body">
+                  {termsAndConditions ? (
+                    <ol className="vev2-terms-list">
+                      {termsAndConditions.split(/\d+[-=.]/).filter(Boolean).map((t: string, i: number) => (
+                        <li key={i}>{t.trim()}</li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <div style={{ paddingTop: '8px', color: 'var(--text-muted)', fontSize: '11.5px', fontStyle: 'italic' }}>
+                      Add terms in the Narration section below…
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
           </div>
         )}
       </div>
 
-      {/* Bottom Action Bar */}
-      <div
-        style={{
-          marginTop: '24px',
-          paddingTop: '16px',
-          borderTop: '1px solid var(--border-subtle)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}
-      >
-        <button
-          className="btn-secondary"
-          onClick={() => {
-            if (confirm('Cancel voucher entry?')) {
-              setLines([{ itemId: '', description: '', quantity: 1, unit: 'Nos', hsnSac: '85044029', rate: 0, rateInclTax: 0, discountPercent: 0, gstRate: 18 }]);
-            }
-          }}
-        >
-          Cancel
-        </button>
-
-        <div style={{ display: 'flex', gap: '10px' }}>
+      {/* ── Sticky Bottom Action Bar ── */}
+      <div className="vev2-action-bar">
+        <div className="vev2-action-left">
+          <button
+            type="button"
+            className="vev2-cancel-btn"
+            onClick={() => {
+              if (confirm('Cancel voucher entry?')) {
+                setLines([{ itemId: '', description: '', quantity: 1, unit: 'Nos', hsnSac: '85044029', rate: 0, rateInclTax: 0, discountPercent: 0, gstRate: 18, godownId: '', serialNumber: '', availableSerials: [] }]);
+                setNarration('');
+              }
+            }}
+          >
+            Cancel
+          </button>
           <button
             type="button"
             className="btn-secondary"
+            style={{ height: '40px', padding: '0 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
             onClick={() => setShowLivePreview(true)}
             title="Print Preview (Alt+P)"
           >
             <Eye size={14} />
-            <span>Print Preview</span>
-            <kbd style={{ fontSize: '10px', padding: '1px 4px' }}>Alt+P</kbd>
+            Preview
           </button>
+        </div>
+        <div className="vev2-action-right">
           <button
             type="button"
-            className="btn-secondary"
-            onClick={() => handlePostVoucher(false)}
-            disabled={isPosting}
+            className="vev2-draft-btn"
+            onClick={() => handleSaveVoucher(false)}
+            disabled={isSaving}
           >
-            Save (Ctrl+A)
+            Save as Draft
           </button>
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => handlePostVoucher(true)}
-            disabled={isPosting}
-            style={{ padding: '9px 20px', fontSize: '13.5px' }}
-          >
-            <Printer size={15} />
-            <span>Save & Print</span>
-          </button>
+          <div className="vev2-save-print-group" style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              className="vev2-btn-save"
+              onClick={() => handleSaveVoucher(false)}
+              disabled={isSaving}
+              style={{ padding: '8px 22px', fontSize: '13.5px', fontWeight: 700, height: '40px' }}
+              title="Save Voucher (Ctrl+A, Ctrl+S or F10)"
+            >
+              <Check size={16} />
+              {isSaving ? 'Saving…' : 'Save Voucher'}
+            </button>
+            <button
+              type="button"
+              className="vev2-save-print-btn"
+              onClick={() => handleSaveVoucher(true)}
+              disabled={isSaving}
+              style={{ padding: '8px 18px', fontSize: '13px', fontWeight: 600, height: '40px' }}
+              title="Save and open print preview"
+            >
+              <Printer size={15} />
+              {isSaving ? 'Saving…' : 'Save & Print'}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Quick Party Creation Modal */}
+      {/* ── Quick Party Modal ── */}
       {showPartyModal && (
         <div
           style={{
@@ -2039,7 +2379,6 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                       style={{ width: '100%', padding: '8px 10px' }}
                     />
                   </div>
-                  {/* PAN Details: Only shown for Supplier */}
                   {newPartyType === 'SUPPLIER' && (
                     <div>
                       <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
@@ -2057,95 +2396,43 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      Phone / Mobile
-                    </label>
-                    <input
-                      type="text"
-                      value={newPartyPhone}
-                      onChange={(e) => setNewPartyPhone(e.target.value)}
-                      placeholder="+91 93600 34774"
-                      style={{ width: '100%', padding: '8px 10px' }}
-                    />
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Phone / Mobile</label>
+                    <input type="text" value={newPartyPhone} onChange={(e) => setNewPartyPhone(e.target.value)} placeholder="+91 93600 34774" style={{ width: '100%', padding: '8px 10px' }} />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      value={newPartyEmail}
-                      onChange={(e) => setNewPartyEmail(e.target.value)}
-                      placeholder="clarityinfo20@gmail.com"
-                      style={{ width: '100%', padding: '8px 10px' }}
-                    />
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Email Address</label>
+                    <input type="email" value={newPartyEmail} onChange={(e) => setNewPartyEmail(e.target.value)} placeholder="info@example.com" style={{ width: '100%', padding: '8px 10px' }} />
                   </div>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                    Address
-                  </label>
-                  <input
-                    type="text"
-                    value={newPartyAddress1}
-                    onChange={(e) => setNewPartyAddress1(e.target.value)}
-                    placeholder="SECOND FLOOR, ROOM NO 001, KPRS Towers, TENNURE HIGH ROAD"
-                    style={{ width: '100%', padding: '8px 10px' }}
-                  />
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Address</label>
+                  <input type="text" value={newPartyAddress1} onChange={(e) => setNewPartyAddress1(e.target.value)} placeholder="Street, Building" style={{ width: '100%', padding: '8px 10px' }} />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      City
-                    </label>
-                    <input
-                      type="text"
-                      value={newPartyCity}
-                      onChange={(e) => setNewPartyCity(e.target.value)}
-                      placeholder="Tiruchirappalli"
-                      style={{ width: '100%', padding: '8px 10px' }}
-                    />
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>City</label>
+                    <input type="text" value={newPartyCity} onChange={(e) => setNewPartyCity(e.target.value)} placeholder="Chennai" style={{ width: '100%', padding: '8px 10px' }} />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      Pincode
-                    </label>
-                    <input
-                      type="text"
-                      value={newPartyPincode}
-                      onChange={(e) => setNewPartyPincode(e.target.value)}
-                      placeholder="620017"
-                      style={{ width: '100%', padding: '8px 10px' }}
-                    />
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Pincode</label>
+                    <input type="text" value={newPartyPincode} onChange={(e) => setNewPartyPincode(e.target.value)} placeholder="600001" style={{ width: '100%', padding: '8px 10px' }} />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      Bank Name
-                    </label>
-                    <input
-                      type="text"
-                      value={newPartyBankName}
-                      onChange={(e) => setNewPartyBankName(e.target.value)}
-                      placeholder="ICICI BANK"
-                      style={{ width: '100%', padding: '8px 10px' }}
-                    />
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Bank Name</label>
+                    <input type="text" value={newPartyBankName} onChange={(e) => setNewPartyBankName(e.target.value)} placeholder="ICICI BANK" style={{ width: '100%', padding: '8px 10px' }} />
                   </div>
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowPartyModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary" style={{ padding: '8px 18px' }}>
-                  Create Party
-                </button>
+                <button type="button" className="btn-secondary" onClick={() => setShowPartyModal(false)}>Cancel</button>
+                <button type="submit" className="btn-primary" style={{ padding: '8px 18px' }}>Create Party</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Quick Item Creation Modal */}
+      {/* ── Quick Item Modal ── */}
       {showQuickItemModal && (
         <div
           style={{
@@ -2180,37 +2467,19 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      HSN / SAC Code
-                    </label>
-                    <input
-                      type="text"
-                      value={newItemHsn}
-                      onChange={(e) => setNewItemHsn(e.target.value)}
-                      placeholder="85044029"
-                      style={{ width: '100%', padding: '8px 10px' }}
-                    />
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>HSN / SAC Code</label>
+                    <input type="text" value={newItemHsn} onChange={(e) => setNewItemHsn(e.target.value)} placeholder="85044029" style={{ width: '100%', padding: '8px 10px' }} />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      Unit
-                    </label>
-                    <select
-                      value={newItemUnitId}
-                      onChange={(e) => setNewItemUnitId(e.target.value)}
-                      style={{ width: '100%', padding: '8px 10px' }}
-                    >
-                      {units.map((u) => (
-                        <option key={u.unit_id} value={u.unit_id}>
-                          {u.symbol} ({u.unit_name})
-                        </option>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Unit</label>
+                    <select value={newItemUnitId} onChange={(e) => setNewItemUnitId(e.target.value)} style={{ width: '100%', padding: '8px 10px' }}>
+                      {units.map((u: any) => (
+                        <option key={u.unit_id} value={u.unit_id}>{u.symbol} ({u.unit_name})</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      GST Rate %
-                    </label>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>GST Rate %</label>
                     <select
                       value={newItemGstRate}
                       onChange={(e) => {
@@ -2232,9 +2501,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      Cost Excl. Tax (₹) *
-                    </label>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Cost Excl. Tax (₹) *</label>
                     <input
                       type="number"
                       step="0.01"
@@ -2244,18 +2511,14 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                         const val = Number(e.target.value);
                         setNewItemPurchaseCost(val);
                         setNewItemPurchaseCostIncl(Math.round(val * (1 + newItemGstRate / 100) * 100) / 100);
-                        if (newItemSellingPrice === 0) {
-                          setNewItemSellingPrice(Math.round(val * (1 + newItemGstRate / 100) * 100) / 100);
-                        }
+                        if (newItemSellingPrice === 0) setNewItemSellingPrice(Math.round(val * (1 + newItemGstRate / 100) * 100) / 100);
                       }}
                       placeholder="550.85"
                       style={{ width: '100%', padding: '8px 10px' }}
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      Cost Incl. Tax (₹)
-                    </label>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Cost Incl. Tax (₹)</label>
                     <input
                       type="number"
                       step="0.01"
@@ -2264,18 +2527,14 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                         const val = Number(e.target.value);
                         setNewItemPurchaseCostIncl(val);
                         setNewItemPurchaseCost(Math.round((val / (1 + newItemGstRate / 100)) * 100) / 100);
-                        if (newItemSellingPrice === 0) {
-                          setNewItemSellingPrice(val);
-                        }
+                        if (newItemSellingPrice === 0) setNewItemSellingPrice(val);
                       }}
                       placeholder="650.00"
                       style={{ width: '100%', padding: '8px 10px' }}
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
-                      Selling Price (₹) *
-                    </label>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>Selling Price (₹) *</label>
                     <input
                       type="number"
                       step="0.01"
@@ -2287,21 +2546,51 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                     />
                   </div>
                 </div>
+
+                {/* Serial Number Tracking Toggle & Initial Serials Box */}
+                <div style={{ marginTop: '8px', padding: '12px 14px', background: 'var(--surface-soft)', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>
+                    <input
+                      type="checkbox"
+                      checked={newItemHasSerialNo}
+                      onChange={(e) => setNewItemHasSerialNo(e.target.checked)}
+                      style={{ width: '16px', height: '16px', accentColor: 'var(--primary-accent)' }}
+                    />
+                    <span>🏷️ Track Serial Numbers (S/N / IMEI) for this Item</span>
+                  </label>
+                  <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginLeft: '24px', marginTop: '2px' }}>
+                    Enable for serialized stock (laptops, printers, desktops, monitors, or hardware).
+                  </div>
+
+                  {newItemHasSerialNo && (
+                    <div style={{ marginTop: '10px', marginLeft: '24px' }}>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '5px' }}>
+                        Initial Stock Serial Numbers (Optional, comma-separated)
+                      </label>
+                      <input
+                        type="text"
+                        value={newItemSerialNumbers}
+                        onChange={(e) => setNewItemSerialNumbers(e.target.value)}
+                        placeholder="e.g. SN-LP01, SN-LP02, SN-LP03"
+                        style={{ width: '100%', padding: '8px 10px', fontSize: '12.5px', fontFamily: 'var(--font-mono)' }}
+                      />
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        Each serial number will be entered as available in stock upon saving.
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '24px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowQuickItemModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary" style={{ padding: '8px 18px' }}>
-                  Save Item
-                </button>
+                <button type="button" className="btn-secondary" onClick={() => setShowQuickItemModal(false)}>Cancel</button>
+                <button type="submit" className="btn-primary" style={{ padding: '8px 18px' }}>Save Item</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Live Print Preview Modal */}
+      {/* ── Live Print Preview Modal ── */}
       {showLivePreview && (
         <InvoicePrintModal
           liveVoucherData={prepareLiveVoucherData()}

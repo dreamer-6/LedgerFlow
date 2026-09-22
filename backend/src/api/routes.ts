@@ -510,9 +510,25 @@ export function createApiRouter(db: DatabaseSync): Router {
       const rows = db.prepare(`
         SELECT serial_number FROM stock_item_serials
         WHERE item_id = ? AND status = 'AVAILABLE'
-      `).all(req.params.id);
+      `).all(req.params.id) as any[];
       
-      res.json(rows.map((r: any) => r.serial_number));
+      let list = rows.map((r: any) => r.serial_number);
+      if (list.length === 0) {
+        const it = db.prepare('SELECT serial_numbers FROM stock_items WHERE item_id = ?').get(req.params.id) as any;
+        if (it?.serial_numbers) {
+          const soldRows = db.prepare(`
+            SELECT serial_number FROM stock_item_serials
+            WHERE item_id = ? AND status = 'SOLD'
+          `).all(req.params.id) as any[];
+          const soldSet = new Set(soldRows.map((r: any) => r.serial_number));
+          
+          list = it.serial_numbers
+            .split(/[\n,]+/)
+            .map((s: string) => s.trim())
+            .filter((s: string) => Boolean(s) && !soldSet.has(s));
+        }
+      }
+      res.json(list);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -819,6 +835,13 @@ export function createApiRouter(db: DatabaseSync): Router {
         WHERE company_id = ? AND voucher_type = 'SALES' AND voucher_date = ? AND status = 'POSTED'
       `).get(companyId, today) as { total: number };
 
+      // Today Purchases
+      const todayPurchases = db.prepare(`
+        SELECT COALESCE(SUM(total_amount_paise), 0) as total
+        FROM vouchers
+        WHERE company_id = ? AND voucher_type = 'PURCHASE' AND voucher_date = ? AND status = 'POSTED'
+      `).get(companyId, today) as { total: number };
+
       // Total Receivables
       const receivables = db.prepare(`
         SELECT COALESCE(SUM(le.debit_paise - le.credit_paise), 0) as balance
@@ -869,7 +892,7 @@ export function createApiRouter(db: DatabaseSync): Router {
           status: item.currentStock === 0 ? 'critical' : 'warning'
         }));
 
-      // Monthly Trend (Actual posted vouchers)
+      // Monthly Trend — actual posted vouchers grouped by YYYY-MM and type
       const trendData = db.prepare(`
         SELECT 
           substr(voucher_date, 1, 7) as month,
@@ -878,10 +901,12 @@ export function createApiRouter(db: DatabaseSync): Router {
         FROM vouchers
         WHERE company_id = ? AND status = 'POSTED' AND voucher_type IN ('SALES', 'PURCHASE')
         GROUP BY substr(voucher_date, 1, 7), voucher_type
+        ORDER BY month ASC
       `).all(companyId) as { month: string; voucher_type: string; total: number }[];
 
       res.json({
         todaySalesPaise: todaySales.total,
+        todayPurchasesPaise: todayPurchases.total,
         receivablesPaise: Math.max(0, receivables.balance),
         payablesPaise: Math.max(0, payables.balance),
         cashBankPaise: Math.max(0, cashBank.balance),

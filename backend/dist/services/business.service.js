@@ -61,7 +61,7 @@ class BusinessService {
         logo_base64 = COALESCE(?, logo_base64),
         vault_password_hash = COALESCE(?, vault_password_hash)
       WHERE company_id = ?
-    `).run(payload.company_name, payload.legal_name, payload.gstin, payload.pan, payload.address_line1, payload.address_line2, payload.city, payload.state, payload.state_code, payload.pincode, payload.phone, payload.email, payload.bank_name, payload.bank_account_no, payload.bank_ifsc, payload.bank_branch, payload.terms_and_conditions, payload.mailing_name || payload.company_name, payload.logo_base64 || null, vaultPasswordHash || null, companyId);
+    `).run(payload.company_name || null, payload.legal_name || null, payload.gstin || null, payload.pan || null, payload.address_line1 || null, payload.address_line2 || null, payload.city || null, payload.state || null, payload.state_code || null, payload.pincode || null, payload.phone || null, payload.email || null, payload.bank_name || null, payload.bank_account_no || null, payload.bank_ifsc || null, payload.bank_branch || null, payload.terms_and_conditions || null, payload.mailing_name || payload.company_name || null, payload.logo_base64 || null, vaultPasswordHash || null, companyId);
     }
     static deleteCompany(db, userId, companyId) {
         const userBiz = db.prepare('SELECT role FROM user_businesses WHERE user_id = ? AND company_id = ?').get(userId, companyId);

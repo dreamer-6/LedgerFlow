@@ -116,6 +116,73 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
     }
   };
 
+  const handlePrint = () => {
+    const printTarget = document.getElementById('printable-tax-invoice');
+    if (!printTarget) return;
+
+    const pageSize =
+      format === 'A4' ? 'A4 portrait'
+      : format === 'A5_LANDSCAPE' ? 'A5 landscape'
+      : format === 'A5_PORTRAIT' ? 'A5 portrait'
+      : '80mm auto';
+    const pageMargin = format === 'THERMAL' ? '2mm' : '8mm';
+    const isThermal = format === 'THERMAL';
+
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!iframeDoc) { document.body.removeChild(iframe); return; }
+
+    iframeDoc.open();
+    iframeDoc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Invoice Print — ${voucher.voucher_number}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    @page { size: ${pageSize}; margin: ${pageMargin}; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: ${isThermal ? "'JetBrains Mono','Courier New',monospace" : "'Roboto','Helvetica Neue',Arial,sans-serif"};
+      font-size: ${isThermal ? '11px' : '12px'};
+      color: #121B2E;
+      background: #fff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    #printable-tax-invoice {
+      width: 100% !important;
+      max-width: 100% !important;
+      box-shadow: none !important;
+      border: none !important;
+      padding: ${isThermal ? '4px' : (format === 'A5_LANDSCAPE' || format === 'A5_PORTRAIT') ? '12px 16px' : '20px 24px'} !important;
+      border-radius: 0 !important;
+    }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { padding: 4px 8px; }
+  </style>
+</head>
+<body>
+${printTarget.outerHTML}
+</body>
+</html>`);
+    iframeDoc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) document.body.removeChild(iframe);
+        }, 1500);
+      }
+    }, 400);
+  };
+
   return (
     <div
       style={{
@@ -219,7 +286,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
         </div>
 
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn-primary" onClick={() => window.print()} style={{ height: '34px', padding: '0 14px' }}>
+          <button className="btn-primary" onClick={handlePrint} style={{ height: '34px', padding: '0 14px' }}>
             <Printer size={14} />
             <span>Print</span>
           </button>
