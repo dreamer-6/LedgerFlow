@@ -11,7 +11,8 @@ const routes_js_1 = require("./api/routes.js");
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
 app.use((0, cors_1.default)());
-app.use(express_1.default.json());
+app.use(express_1.default.json({ limit: '15mb' }));
+app.use(express_1.default.urlencoded({ extended: true, limit: '15mb' }));
 // Initialize Database & Seeds
 const db = (0, connection_js_1.getDatabase)();
 (0, seed_js_1.seedInitialData)(db);

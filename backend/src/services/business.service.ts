@@ -55,27 +55,66 @@ export class BusinessService {
   }
 
   static updateCurrentCompany(db: DatabaseSync, companyId: string, payload: any) {
+    const existing = db.prepare('SELECT * FROM companies WHERE company_id = ?').get(companyId) as any;
+    if (!existing) {
+      throw new Error('Company not found.');
+    }
+
     let vaultPasswordHash = undefined;
     if (payload.vault_password) {
       const bcrypt = require('bcryptjs');
       vaultPasswordHash = bcrypt.hashSync(payload.vault_password, 10);
     }
 
+    const hasLogoUpdate = payload.logo_base64 !== undefined;
+    const logoVal = payload.logo_base64 || null;
+
     db.prepare(`
       UPDATE companies SET
-        company_name = ?, legal_name = ?, gstin = ?, pan = ?,
-        address_line1 = ?, address_line2 = ?, city = ?, state = ?, state_code = ?, pincode = ?,
-        phone = ?, email = ?, bank_name = ?, bank_account_no = ?, bank_ifsc = ?, bank_branch = ?,
-        terms_and_conditions = ?, mailing_name = ?, 
-        logo_base64 = COALESCE(?, logo_base64),
+        company_name = ?,
+        legal_name = ?,
+        gstin = ?,
+        pan = ?,
+        address_line1 = ?,
+        address_line2 = ?,
+        city = ?,
+        state = ?,
+        state_code = ?,
+        pincode = ?,
+        phone = ?,
+        email = ?,
+        bank_name = ?,
+        bank_account_no = ?,
+        bank_ifsc = ?,
+        bank_branch = ?,
+        terms_and_conditions = ?,
+        mailing_name = ?, 
+        logo_base64 = CASE WHEN ? = 1 THEN ? ELSE logo_base64 END,
         vault_password_hash = COALESCE(?, vault_password_hash)
       WHERE company_id = ?
     `).run(
-      payload.company_name || null, payload.legal_name || null, payload.gstin || null, payload.pan || null,
-      payload.address_line1 || null, payload.address_line2 || null, payload.city || null, payload.state || null, payload.state_code || null, payload.pincode || null,
-      payload.phone || null, payload.email || null, payload.bank_name || null, payload.bank_account_no || null, payload.bank_ifsc || null, payload.bank_branch || null,
-      payload.terms_and_conditions || null, payload.mailing_name || payload.company_name || null,
-      payload.logo_base64 || null, vaultPasswordHash || null, companyId
+      payload.company_name || existing.company_name,
+      payload.legal_name || payload.company_name || existing.legal_name || existing.company_name || 'Business Enterprise',
+      payload.gstin !== undefined ? (payload.gstin || null) : existing.gstin,
+      payload.pan !== undefined ? (payload.pan || null) : existing.pan,
+      payload.address_line1 !== undefined ? (payload.address_line1 || existing.address_line1 || 'Main Business Office') : (existing.address_line1 || 'Main Business Office'),
+      payload.address_line2 !== undefined ? (payload.address_line2 || null) : existing.address_line2,
+      payload.city !== undefined ? (payload.city || existing.city || 'Chennai') : (existing.city || 'Chennai'),
+      payload.state !== undefined ? (payload.state || existing.state || 'Tamil Nadu') : (existing.state || 'Tamil Nadu'),
+      payload.state_code !== undefined ? (payload.state_code || existing.state_code || '33') : (existing.state_code || '33'),
+      payload.pincode !== undefined ? (payload.pincode || existing.pincode || '600001') : (existing.pincode || '600001'),
+      payload.phone !== undefined ? (payload.phone || null) : existing.phone,
+      payload.email !== undefined ? (payload.email || null) : existing.email,
+      payload.bank_name !== undefined ? (payload.bank_name || null) : existing.bank_name,
+      payload.bank_account_no !== undefined ? (payload.bank_account_no || null) : existing.bank_account_no,
+      payload.bank_ifsc !== undefined ? (payload.bank_ifsc || null) : existing.bank_ifsc,
+      payload.bank_branch !== undefined ? (payload.bank_branch || null) : existing.bank_branch,
+      payload.terms_and_conditions !== undefined ? (payload.terms_and_conditions || null) : existing.terms_and_conditions,
+      payload.mailing_name || payload.company_name || existing.mailing_name || existing.company_name,
+      hasLogoUpdate ? 1 : 0,
+      logoVal,
+      vaultPasswordHash || null,
+      companyId
     );
   }
 

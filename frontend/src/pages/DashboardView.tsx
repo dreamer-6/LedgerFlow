@@ -91,13 +91,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const sDash = (sPct / 100) * C;
 
   const card: React.CSSProperties = {
-    background: "var(--surface)", border: "1px solid var(--border)",
     borderRadius: 16, overflow: "hidden",
-    boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
     display: "flex", flexDirection: "column",
+    transition: "box-shadow 0.22s ease, transform 0.2s ease, border-color 0.2s ease",
   };
+  const kpiClasses = ["kpi-card-sales", "kpi-card-receivable", "kpi-card-payable", "kpi-card-cash"];
   const vDot: Record<string, string> = {
     SALES: ACCENT, PURCHASE: "#5685F5", RECEIPT: "#20D9A3", PAYMENT: "#FFB45F"
+
   };
 
   const addServiceJob = () => {
@@ -159,11 +160,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           { title:"Payables",      value:fmt(data?.payablesPaise),    badge:data?.payablesPaise>0?"Due":"Clear",        good:(data?.payablesPaise??0)===0,    icon:<Wallet size={26} strokeWidth={1.5} color="#FFB45F"/>, tab:"outstanding" },
           { title:"Cash & Bank",   value:fmt(data?.cashBankPaise),    badge:"Liquid",                                   good:true,                            icon:<Boxes size={26} strokeWidth={1.5} color="#20D9A3"/>, tab:"trial_balance" },
         ].map((k, i) => (
-          <div key={i} style={card}>
+          <div key={i} className={`kpi-card ${kpiClasses[i]}`} style={{ ...card, cursor: "pointer" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-3px)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; }}
+          >
             <div style={{ padding:"20px 20px 14px", flex:1 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
                 <span style={{ fontSize:13, fontWeight:600, color:"var(--text-secondary)" }}>{k.title}</span>
-                <div style={{ width:46, height:46, borderRadius:12, background:"var(--bg-subtle)", display:"flex", alignItems:"center", justifyContent:"center" }}>{k.icon}</div>
+                <div className="kpi-icon-chip" style={{ width:46, height:46, borderRadius:12, background:"var(--bg-subtle)", display:"flex", alignItems:"center", justifyContent:"center" }}>{k.icon}</div>
               </div>
               <div style={{ fontSize:23, fontWeight:800, letterSpacing:"-0.03em", color:"var(--text-primary)", marginBottom:8, fontVariantNumeric:"tabular-nums" }}>{k.value}</div>
               <div style={{ display:"flex", alignItems:"center", gap:5 }}>
@@ -188,7 +192,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* ROW 2: BAR CHART + RECENT ACTIVITY */}
       <div style={{ display:"grid", gridTemplateColumns:"1.55fr 1fr", gap:16, marginBottom:20 }}>
-        <div style={card}>
+        <div className="dash-panel" style={{ ...card }}>
           <div style={{ padding:"20px 24px 14px", borderBottom:"1px solid var(--border)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div>
               <div style={{ fontSize:14, fontWeight:700, color:"var(--text-primary)" }}>Sales & Purchase Trend</div>
@@ -243,7 +247,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div style={card}>
+        <div className="dash-panel" style={{ ...card }}>
           <div style={{ padding:"20px 20px 14px", borderBottom:"1px solid var(--border)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div>
               <div style={{ fontSize:14, fontWeight:700, color:"var(--text-primary)" }}>Recent Activity</div>
@@ -252,6 +256,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <button onClick={() => onNavigateReports("daybook")}
               style={{ background:"none", border:"none", color:ACCENT, fontSize:12, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:3 }}>
               Day Book <ChevronRight size={13}/>
+
             </button>
           </div>
           <div style={{ flex:1, overflowY:"auto" }}>
@@ -295,7 +300,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div style={{ display:"grid", gridTemplateColumns:"1.6fr 1fr", gap:16 }}>
 
         {/* SERVICE JOBS */}
-        <div style={card}>
+        <div className="dash-panel" style={card}>
           <div style={{ padding:"18px 24px 14px", borderBottom:"1px solid var(--border)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div>
               <div style={{ fontSize:14, fontWeight:700, color:"var(--text-primary)" }}>Service Jobs</div>
@@ -391,7 +396,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* TODAY'S SPLIT */}
-        <div style={card}>
+        <div className="dash-panel" style={card}>
           <div style={{ padding:"20px 20px 14px", borderBottom:"1px solid var(--border)" }}>
             <div style={{ fontSize:14, fontWeight:700, color:"var(--text-primary)" }}>Today's Split</div>
             <div style={{ fontSize:12, color:"var(--text-muted)", marginTop:2 }}>Sales vs Purchases</div>

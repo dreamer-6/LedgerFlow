@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Company, FinancialYear, UserSession } from '../api/client';
-import { Logo } from './Logo';
 import {
   Search,
   Calendar,
@@ -8,6 +7,8 @@ import {
   Moon,
   Bell,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   CheckCircle2,
   ChevronDown,
   LogOut,
@@ -27,6 +28,7 @@ interface NavbarProps {
   user?: UserSession | null;
   onOpenSearch?: () => void;
   onToggleSidebar?: () => void;
+  isSidebarCollapsed?: boolean;
   onOpenBusinessSwitcher?: () => void;
   onOpenDateModal?: () => void;
   onOpenFyModal?: () => void;
@@ -41,6 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   user,
   onOpenSearch,
   onToggleSidebar,
+  isSidebarCollapsed = false,
   onOpenBusinessSwitcher,
   onOpenDateModal,
   onOpenFyModal,
@@ -96,31 +99,51 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="topbar">
-      {/* Left: Mobile Toggle & Company Context */}
+      {/* Left: Sidebar Toggle & Company Context */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
         <button
           type="button"
-          className="mobile-nav-toggle"
+          className="sidebar-toggle-btn"
           onClick={onToggleSidebar}
-          aria-label="Toggle Navigation Menu"
+          title={isSidebarCollapsed ? "Expand sidebar (Show icon and name)" : "Collapse sidebar (Show icons only)"}
+          aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <Menu size={18} />
+          {isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
         </button>
 
         <div
           className="top-company navbar-company-details"
           onClick={onOpenBusinessSwitcher}
           title="Click to switch business (Alt+B)"
-          style={{ cursor: 'pointer' }}
+          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '9px' }}
         >
-          <strong>{company?.company_name || 'DREAM TECH SOLUTIONS'}</strong>
-          <span>
-            {activeFy?.name || 'FY 2026–27'}
-            <i className="active-indicator" />
-            ACTIVE
-          </span>
+          {company?.logo_base64 && (
+            <img
+              src={company.logo_base64}
+              alt="Company Logo"
+              style={{
+                width: '26px',
+                height: '26px',
+                borderRadius: '5px',
+                objectFit: 'contain',
+                backgroundColor: 'var(--surface)',
+                border: '1px solid var(--border)',
+                padding: '1px',
+                flexShrink: 0
+              }}
+            />
+          )}
+          <div>
+            <strong>{company?.company_name || 'DREAM TECH SOLUTIONS'}</strong>
+            <span>
+              {activeFy?.name || 'FY 2026–27'}
+              <i className="active-indicator" />
+              ACTIVE
+            </span>
+          </div>
         </div>
       </div>
+
 
       {/* Center: Global Search Bar */}
       <div className="global-search navbar-search-box" onClick={onOpenSearch} style={{ cursor: 'pointer' }}>

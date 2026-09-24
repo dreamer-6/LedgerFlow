@@ -48,6 +48,21 @@ export const App: React.FC = () => {
   const [voucherInitialType, setVoucherInitialType] = useState<string>('SALES');
   const [editVoucherId, setEditVoucherId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('lf_sidebar_collapsed') === 'true';
+  });
+
+  const handleToggleSidebar = () => {
+    if (window.innerWidth < 768) {
+      setSidebarOpen((prev) => !prev);
+    } else {
+      setSidebarCollapsed((prev) => {
+        const next = !prev;
+        localStorage.setItem('lf_sidebar_collapsed', String(next));
+        return next;
+      });
+    }
+  };
 
   // Print Preview Modal
   const [activePrintVoucherId, setActivePrintVoucherId] = useState<string | null>(null);
@@ -369,7 +384,8 @@ export const App: React.FC = () => {
         setActiveTab={setActiveTab}
         user={user}
         onOpenSearch={() => setShowSearchModal(true)}
-        onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+        onToggleSidebar={handleToggleSidebar}
+        isSidebarCollapsed={sidebarCollapsed}
         onOpenBusinessSwitcher={() => setShowBusinessSwitcher(true)}
         onOpenDateModal={() => setShowDateModal(true)}
         onOpenFyModal={() => setShowFyModal(true)}
@@ -386,6 +402,8 @@ export const App: React.FC = () => {
           setReportSubTab={setReportSubTab}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          isCollapsed={sidebarCollapsed}
+          onToggleCollapse={handleToggleSidebar}
         />
 
         {/* Scrollable Main Content */}
