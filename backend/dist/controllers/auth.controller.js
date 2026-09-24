@@ -36,6 +36,20 @@ class AuthController {
             }
         }
     };
+    sso = (req, res) => {
+        try {
+            const result = auth_service_js_1.AuthService.ssoLogin(this.db, req.body);
+            res.json(result);
+        }
+        catch (err) {
+            if (err.message.includes('required') || err.message.includes('deactivated')) {
+                res.status(400).json({ error: err.message });
+            }
+            else {
+                res.status(500).json({ error: err.message });
+            }
+        }
+    };
     getMe = (req, res) => {
         try {
             const user = (0, routes_js_1.getUserFromToken)(req);

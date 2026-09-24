@@ -32,6 +32,19 @@ export class AuthController {
     }
   };
 
+  sso = (req: Request, res: Response) => {
+    try {
+      const result = AuthService.ssoLogin(this.db, req.body);
+      res.json(result);
+    } catch (err: any) {
+      if (err.message.includes('required') || err.message.includes('deactivated')) {
+        res.status(400).json({ error: err.message });
+      } else {
+        res.status(500).json({ error: err.message });
+      }
+    }
+  };
+
   getMe = (req: Request, res: Response) => {
     try {
       const user = getUserFromToken(req);

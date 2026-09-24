@@ -9,7 +9,7 @@ export class BusinessController {
   getBusinesses = (req: Request, res: Response) => {
     try {
       const user = getUserFromToken(req);
-      const businesses = BusinessService.getBusinesses(this.db, user?.userId);
+      const businesses = BusinessService.getBusinesses(this.db, user?.userId, user?.role);
       res.json(businesses);
     } catch (err: any) {
       res.status(500).json({ error: err.message });

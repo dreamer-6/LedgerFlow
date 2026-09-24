@@ -78,17 +78,34 @@ export class PostingEngine {
     };
     let prefix = prefixes[voucherType] || 'VCH';
 
+    // Extract FY code (e.g. 2026-2027 -> 2627)
+    let fyCode = '2627';
+    if (fyId) {
+      const fy = db.prepare('SELECT name, start_date, end_date FROM financial_years WHERE fy_id = ?').get(fyId) as any;
+      if (fy?.start_date && fy?.end_date) {
+        const sY = fy.start_date.substring(2, 4);
+        const eY = fy.end_date.substring(2, 4);
+        fyCode = `${sY}${eY}`;
+      } else if (fy?.name) {
+        const digits = fy.name.replace(/\D/g, '');
+        if (digits.length >= 4) fyCode = digits.slice(-4);
+      }
+    }
+
     // For Sales Invoices, use company name initials/acronym (e.g., Dream Tech Solutions -> DTS)
+    // Formatted strictly like: DTS-2627-000
     if (voucherType === 'SALES') {
+      let compAcronym = 'DTS';
       const comp = db.prepare('SELECT company_name FROM companies WHERE company_id = ?').get(companyId) as { company_name: string } | undefined;
       if (comp && comp.company_name) {
         const words = comp.company_name.trim().split(/[\s_-]+/).filter(w => w.length > 0);
         if (words.length > 1) {
-          prefix = words.map(w => w[0].toUpperCase()).join('');
+          compAcronym = words.map(w => w[0].toUpperCase()).join('');
         } else if (words.length === 1) {
-          prefix = words[0].substring(0, 3).toUpperCase();
+          compAcronym = words[0].substring(0, 3).toUpperCase();
         }
       }
+      prefix = `${compAcronym}-${fyCode}`;
     }
 
     const row = db.prepare(`
@@ -97,7 +114,7 @@ export class PostingEngine {
       ORDER BY rowid DESC LIMIT 1
     `).get(companyId, fyId, voucherType) as { voucher_number: string } | undefined;
 
-    let nextCounter = 1;
+    let nextCounter = 0;
     if (row && row.voucher_number) {
       const parts = row.voucher_number.split(/[-/]/);
       const lastNumStr = parts[parts.length - 1];
@@ -107,14 +124,14 @@ export class PostingEngine {
       }
     }
 
-    let candidate = `${prefix}-${nextCounter.toString().padStart(4, '0')}`;
+    let candidate = `${prefix}-${nextCounter.toString().padStart(3, '0')}`;
     while (
       db.prepare(
         'SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ?'
       ).get(companyId, fyId, voucherType, candidate)
     ) {
       nextCounter++;
-      candidate = `${prefix}-${nextCounter.toString().padStart(4, '0')}`;
+      candidate = `${prefix}-${nextCounter.toString().padStart(3, '0')}`;
     }
 
     return candidate;

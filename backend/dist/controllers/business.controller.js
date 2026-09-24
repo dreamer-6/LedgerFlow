@@ -11,7 +11,7 @@ class BusinessController {
     getBusinesses = (req, res) => {
         try {
             const user = (0, routes_js_1.getUserFromToken)(req);
-            const businesses = business_service_js_1.BusinessService.getBusinesses(this.db, user?.userId);
+            const businesses = business_service_js_1.BusinessService.getBusinesses(this.db, user?.userId, user?.role);
             res.json(businesses);
         }
         catch (err) {

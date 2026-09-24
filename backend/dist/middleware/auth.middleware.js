@@ -25,12 +25,23 @@ function requireAuth(db) {
                 if (access) {
                     req.companyId = access.company_id;
                 }
+                else if (user.role === 'ADMIN') {
+                    const compExists = db.prepare('SELECT company_id FROM companies WHERE company_id = ?').get(requested);
+                    if (compExists)
+                        req.companyId = compExists.company_id;
+                }
             }
             if (!req.companyId) {
                 // Fallback to first company
                 const first = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? ORDER BY created_at ASC LIMIT 1').get(user.userId);
-                if (first)
+                if (first) {
                     req.companyId = first.company_id;
+                }
+                else if (user.role === 'ADMIN') {
+                    const anyComp = db.prepare('SELECT company_id FROM companies ORDER BY created_at ASC LIMIT 1').get();
+                    if (anyComp)
+                        req.companyId = anyComp.company_id;
+                }
             }
             if (!req.companyId) {
                 return res.status(403).json({ error: 'Forbidden: No business context found.' });

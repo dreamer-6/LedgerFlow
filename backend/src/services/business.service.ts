@@ -2,7 +2,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { initializeBusiness } from '../database/seed.js';
 
 export class BusinessService {
-  static getBusinesses(db: DatabaseSync, userId?: string) {
+  static getBusinesses(db: DatabaseSync, userId?: string, userRole?: string) {
+    if (userRole === 'ADMIN') {
+      return db.prepare("SELECT *, 'ADMIN' as role FROM companies ORDER BY created_at ASC").all();
+    }
     if (userId) {
       return db.prepare(`
         SELECT c.*, ub.role

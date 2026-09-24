@@ -170,17 +170,26 @@ export function initializeBusiness(db: DatabaseSync, options: BusinessInitOption
 
 export function seedInitialData(db: DatabaseSync): string | null {
   // Check if admin user exists
-  const existingUser = db.prepare('SELECT user_id FROM users WHERE username = ?').get('admin') as any;
+  const existingUser = db.prepare('SELECT user_id, password_hash FROM users WHERE username = ?').get('admin') as any;
   let adminUserId = existingUser?.user_id;
+
+  const salt = bcrypt.genSaltSync(10);
+  const passwordHash = bcrypt.hashSync('admin123', salt);
 
   if (!adminUserId) {
     adminUserId = 'usr_admin';
-    const salt = bcrypt.genSaltSync(10);
-    const passwordHash = bcrypt.hashSync('admin123', salt);
     db.prepare(`
       INSERT OR IGNORE INTO users (user_id, username, email, password_hash, full_name, role)
       VALUES (?, 'admin', 'admin@ledgerflow.com', ?, 'System Administrator', 'ADMIN')
     `).run(adminUserId, passwordHash);
+  } else {
+    const isValid = existingUser.password_hash && bcrypt.compareSync('admin123', existingUser.password_hash);
+    if (!isValid) {
+      db.prepare(`
+        UPDATE users SET password_hash = ?, full_name = 'System Administrator', role = 'ADMIN', is_active = 1
+        WHERE username = 'admin'
+      `).run(passwordHash);
+    }
   }
 
   // NOTE: Requirement: "initialy don't create any companies only the user creates it's own"

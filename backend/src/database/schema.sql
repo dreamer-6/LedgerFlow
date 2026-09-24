@@ -180,7 +180,8 @@ CREATE TABLE IF NOT EXISTS voucher_lines (
     cgst_amount_paise INTEGER DEFAULT 0,
     sgst_amount_paise INTEGER DEFAULT 0,
     igst_amount_paise INTEGER DEFAULT 0,
-    total_amount_paise INTEGER NOT NULL
+    total_amount_paise INTEGER NOT NULL,
+    serial_number TEXT
 );
 
 -- 6. DOUBLE-ENTRY LEDGER ENTRIES

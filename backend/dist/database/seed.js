@@ -118,16 +118,25 @@ function initializeBusiness(db, options) {
 }
 function seedInitialData(db) {
     // Check if admin user exists
-    const existingUser = db.prepare('SELECT user_id FROM users WHERE username = ?').get('admin');
+    const existingUser = db.prepare('SELECT user_id, password_hash FROM users WHERE username = ?').get('admin');
     let adminUserId = existingUser?.user_id;
+    const salt = bcryptjs_1.default.genSaltSync(10);
+    const passwordHash = bcryptjs_1.default.hashSync('admin123', salt);
     if (!adminUserId) {
         adminUserId = 'usr_admin';
-        const salt = bcryptjs_1.default.genSaltSync(10);
-        const passwordHash = bcryptjs_1.default.hashSync('admin123', salt);
         db.prepare(`
       INSERT OR IGNORE INTO users (user_id, username, email, password_hash, full_name, role)
       VALUES (?, 'admin', 'admin@ledgerflow.com', ?, 'System Administrator', 'ADMIN')
     `).run(adminUserId, passwordHash);
+    }
+    else {
+        const isValid = existingUser.password_hash && bcryptjs_1.default.compareSync('admin123', existingUser.password_hash);
+        if (!isValid) {
+            db.prepare(`
+        UPDATE users SET password_hash = ?, full_name = 'System Administrator', role = 'ADMIN', is_active = 1
+        WHERE username = 'admin'
+      `).run(passwordHash);
+        }
     }
     // NOTE: Requirement: "initialy don't create any companies only the user creates it's own"
     // Zero default companies are created. Companies are only created by user registration or onboarding.

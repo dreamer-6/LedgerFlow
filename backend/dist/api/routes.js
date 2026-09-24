@@ -36,10 +36,20 @@ function resolveCompanyId(req, db, user) {
             const access = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? AND company_id = ?').get(user.userId, requested);
             if (access)
                 return access.company_id;
+            if (user.role === 'ADMIN') {
+                const exists = db.prepare('SELECT company_id FROM companies WHERE company_id = ?').get(requested);
+                if (exists)
+                    return exists.company_id;
+            }
         }
         const first = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? ORDER BY created_at ASC LIMIT 1').get(user.userId);
         if (first)
             return first.company_id;
+        if (user.role === 'ADMIN') {
+            const anyComp = db.prepare('SELECT company_id FROM companies ORDER BY created_at ASC LIMIT 1').get();
+            if (anyComp)
+                return anyComp.company_id;
+        }
     }
     if (requested) {
         const exists = db.prepare('SELECT company_id FROM companies WHERE company_id = ?').get(requested);
@@ -55,6 +65,7 @@ function createApiRouter(db) {
     const authController = new auth_controller_js_1.AuthController(db);
     router.post('/auth/register', authController.register);
     router.post('/auth/login', authController.login);
+    router.post('/auth/sso', authController.sso);
     router.get('/auth/me', authController.getMe);
     // ---------------- BUSINESSES (TENANTS) ----------------
     const businessController = new business_controller_js_1.BusinessController(db);
@@ -709,6 +720,12 @@ function createApiRouter(db) {
         FROM vouchers
         WHERE company_id = ? AND voucher_type = 'SALES' AND voucher_date = ? AND status = 'POSTED'
       `).get(companyId, today);
+            // Today Purchases
+            const todayPurchases = db.prepare(`
+        SELECT COALESCE(SUM(total_amount_paise), 0) as total
+        FROM vouchers
+        WHERE company_id = ? AND voucher_type = 'PURCHASE' AND voucher_date = ? AND status = 'POSTED'
+      `).get(companyId, today);
             // Total Receivables
             const receivables = db.prepare(`
         SELECT COALESCE(SUM(le.debit_paise - le.credit_paise), 0) as balance
@@ -753,7 +770,7 @@ function createApiRouter(db) {
                 qty: `${item.currentStock} Units`,
                 status: item.currentStock === 0 ? 'critical' : 'warning'
             }));
-            // Monthly Trend (Actual posted vouchers)
+            // Monthly Trend — actual posted vouchers grouped by YYYY-MM and type
             const trendData = db.prepare(`
         SELECT 
           substr(voucher_date, 1, 7) as month,
@@ -762,9 +779,11 @@ function createApiRouter(db) {
         FROM vouchers
         WHERE company_id = ? AND status = 'POSTED' AND voucher_type IN ('SALES', 'PURCHASE')
         GROUP BY substr(voucher_date, 1, 7), voucher_type
+        ORDER BY month ASC
       `).all(companyId);
             res.json({
                 todaySalesPaise: todaySales.total,
+                todayPurchasesPaise: todayPurchases.total,
                 receivablesPaise: Math.max(0, receivables.balance),
                 payablesPaise: Math.max(0, payables.balance),
                 cashBankPaise: Math.max(0, cashBank.balance),

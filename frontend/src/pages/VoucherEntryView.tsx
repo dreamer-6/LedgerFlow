@@ -18,7 +18,11 @@ import {
   Minimize2,
   Pencil,
   Search,
-  X
+  X,
+  Copy,
+  RotateCcw,
+  RefreshCw,
+  Percent
 } from 'lucide-react';
 
 /* ──────────────────────────────────────────────────────────
@@ -104,6 +108,7 @@ const PartySearchSelect: React.FC<PartySearchSelectProps> = ({
         <input
           type="text"
           className="vev2-combobox-input"
+          style={{ paddingLeft: '36px', paddingRight: '32px', height: '38px' }}
           placeholder={placeholder}
           value={isOpen ? query : (selectedParty?.party_name || '')}
           onFocus={() => {
@@ -292,7 +297,7 @@ const ItemSearchSelect: React.FC<ItemSearchSelectProps> = ({
         <input
           type="text"
           className="vev2-combobox-input"
-          style={{ height: '34px', fontSize: '13.5px', fontWeight: selectedItem ? 600 : 400 }}
+          style={{ height: '36px', fontSize: '13.5px', fontWeight: selectedItem ? 600 : 400, paddingLeft: '36px', paddingRight: '32px' }}
           placeholder={placeholder}
           value={isOpen ? query : (selectedItem?.item_name || '')}
           onFocus={() => {
@@ -425,14 +430,42 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
   onNavigate
 }) => {
   const getInitialVoucherNumber = () => {
-    if (!company?.company_name) return 'DTS-0001';
-    const words = company.company_name.trim().split(/[\s_-]+/).filter((w: string) => w.length > 0);
-    const pfx = words.length > 1 ? words.map((w: string) => w[0].toUpperCase()).join('') : words[0]?.substring(0, 3).toUpperCase() || 'DTS';
-    return `${pfx}-0001`;
+    let pfx = 'DTS';
+    if (company?.company_name) {
+      const words = company.company_name.trim().split(/[\s_-]+/).filter((w: string) => w.length > 0);
+      pfx = words.length > 1 ? words.map((w: string) => w[0].toUpperCase()).join('') : words[0]?.substring(0, 3).toUpperCase() || 'DTS';
+    }
+    let fyCode = '2627';
+    if (activeFy?.start_date && activeFy?.end_date) {
+      const sY = activeFy.start_date.substring(2, 4);
+      const eY = activeFy.end_date.substring(2, 4);
+      fyCode = `${sY}${eY}`;
+    } else if (activeFy?.name) {
+      const digits = activeFy.name.replace(/\D/g, '');
+      if (digits.length >= 4) fyCode = digits.slice(-4);
+    }
+    return `${pfx}-${fyCode}-000`;
   };
 
   const [voucherType, setVoucherType] = useState<string>(initialType);
   const [voucherNumber, setVoucherNumber] = useState<string>(getInitialVoucherNumber);
+  const [isEditingVoucherNumber, setIsEditingVoucherNumber] = useState(false);
+  const [tempVoucherNumber, setTempVoucherNumber] = useState('');
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const moreMenuRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false);
+      }
+    };
+    if (showMoreMenu) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showMoreMenu]);
+
   const [voucherDate, setVoucherDate] = useState<string>(currentDate || new Date().toISOString().split('T')[0]);
   const [supplierInvoiceDate, setSupplierInvoiceDate] = useState<string>(currentDate || new Date().toISOString().split('T')[0]);
 
@@ -1327,14 +1360,63 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
 
         {/* Right: Number pill + status + actions */}
         <div className="vev2-title-pills">
-          <div className="vev2-number-pill" title="Voucher Number">
-            {voucherNumber}
-            <Pencil size={12} />
-          </div>
+          {isEditingVoucherNumber ? (
+            <div className="vev2-number-edit-box">
+              <input
+                type="text"
+                autoFocus
+                value={tempVoucherNumber}
+                onChange={(e) => setTempVoucherNumber(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    if (tempVoucherNumber.trim()) setVoucherNumber(tempVoucherNumber.trim());
+                    setIsEditingVoucherNumber(false);
+                  } else if (e.key === 'Escape') {
+                    setIsEditingVoucherNumber(false);
+                  }
+                }}
+                className="vev2-number-edit-input"
+                placeholder="e.g. DTS-2627-000"
+              />
+              <button
+                type="button"
+                className="vev2-number-save-btn"
+                onClick={() => {
+                  if (tempVoucherNumber.trim()) setVoucherNumber(tempVoucherNumber.trim());
+                  setIsEditingVoucherNumber(false);
+                }}
+                title="Save Invoice Number"
+              >
+                <Check size={13} />
+              </button>
+              <button
+                type="button"
+                className="vev2-number-cancel-btn"
+                onClick={() => setIsEditingVoucherNumber(false)}
+                title="Cancel"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          ) : (
+            <div
+              className="vev2-number-pill"
+              onClick={() => {
+                setTempVoucherNumber(voucherNumber);
+                setIsEditingVoucherNumber(true);
+              }}
+              title="Click to edit Invoice / Voucher Number"
+            >
+              <span>{voucherNumber}</span>
+              <Pencil size={11} className="vev2-pill-edit-icon" />
+            </div>
+          )}
+
           <span className={`vev2-status-badge ${voucherStatus === 'Posted' ? 'posted' : ''}`}>
             {voucherStatus === 'Posted' ? 'Saved' : 'Draft'}
             <ChevronDown size={12} />
           </span>
+
           <button
             type="button"
             className="vev2-post-btn"
@@ -1345,14 +1427,114 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
             <Check size={15} />
             {isSaving ? 'Saving…' : 'Save'}
           </button>
-          <button
-            type="button"
-            className="vev2-more-btn"
-            onClick={() => setShowLivePreview(true)}
-            title="Print Preview (Alt+P)"
-          >
-            <MoreVertical size={16} />
-          </button>
+
+          <div ref={moreMenuRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className={`vev2-more-btn ${showMoreMenu ? 'active' : ''}`}
+              onClick={() => setShowMoreMenu(!showMoreMenu)}
+              title="Voucher Options & Actions"
+              aria-label="More actions"
+            >
+              <MoreVertical size={16} />
+            </button>
+
+            {showMoreMenu && (
+              <div className="vev2-dropdown-menu">
+                <div className="vev2-dropdown-header">Voucher Actions</div>
+                <button
+                  type="button"
+                  className="vev2-dropdown-item"
+                  onClick={() => {
+                    setTempVoucherNumber(voucherNumber);
+                    setIsEditingVoucherNumber(true);
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <Pencil size={13} />
+                  <span>Edit Invoice Number</span>
+                </button>
+                <button
+                  type="button"
+                  className="vev2-dropdown-item"
+                  onClick={() => {
+                    setShowLivePreview(true);
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <Printer size={13} />
+                  <span>Print / PDF Preview</span>
+                  <kbd>Alt+P</kbd>
+                </button>
+                <button
+                  type="button"
+                  className="vev2-dropdown-item"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(voucherNumber);
+                    setSuccessMessage(`Invoice Number "${voucherNumber}" copied to clipboard.`);
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <Copy size={13} />
+                  <span>Copy Invoice Number</span>
+                </button>
+                <button
+                  type="button"
+                  className="vev2-dropdown-item"
+                  onClick={() => {
+                    setTaxMode(taxMode === 'EXCLUSIVE' ? 'INCLUSIVE' : 'EXCLUSIVE');
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <Percent size={13} />
+                  <span>Switch Tax to {taxMode === 'EXCLUSIVE' ? 'Inclusive' : 'Exclusive'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="vev2-dropdown-item"
+                  onClick={() => {
+                    fetchNextVoucherNumber();
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <RefreshCw size={13} />
+                  <span>Reset to Auto Invoice No</span>
+                </button>
+                <div className="vev2-dropdown-divider" />
+                <button
+                  type="button"
+                  className="vev2-dropdown-item text-danger"
+                  onClick={() => {
+                    if (confirm('Reset voucher entry lines and fields?')) {
+                      setLines([
+                        {
+                          itemId: '',
+                          description: '',
+                          godownId: godowns[0]?.godown_id || '',
+                          quantity: 1,
+                          unit: 'Nos',
+                          hsnSac: '85044029',
+                          rate: 0,
+                          rateInclTax: 0,
+                          discountPercent: 0,
+                          gstRate: 18,
+                          serialNumber: '',
+                          availableSerials: []
+                        }
+                      ]);
+                      setNarration('');
+                      setOrderRef('');
+                      setSupplierInvoiceNo('');
+                    }
+                    setShowMoreMenu(false);
+                  }}
+                >
+                  <RotateCcw size={13} />
+                  <span>Reset Form</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1595,13 +1777,14 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                 <div className="vev2-items-header">
                   <span className="vev2-items-title">Items</span>
                   <div className="vev2-item-search-wrap">
-                    <Search size={13} />
+                    <Search size={13} style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', zIndex: 2 }} />
                     <input
                       type="text"
                       className="vev2-item-search"
                       placeholder="Search or type to add an item…"
                       value={itemSearch}
                       onChange={(e) => setItemSearch(e.target.value)}
+                      style={{ paddingLeft: '34px', width: '100%' }}
                     />
                   </div>
                   <button

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api, Company } from '../api/client';
 import { Logo } from '../components/Logo';
 import {
@@ -19,7 +19,9 @@ import {
   Shield,
   TrendingUp,
   Zap,
-  BarChart2
+  BarChart2,
+  X,
+  Loader2
 } from 'lucide-react';
 
 interface AuthViewProps {
@@ -31,6 +33,46 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
   const [signupStep, setSignupStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // SSO Authentication States
+  const [ssoModal, setSsoModal] = useState<{ open: boolean; provider: 'Google' | 'Microsoft' }>({ open: false, provider: 'Google' });
+  const [ssoLoading, setSsoLoading] = useState(false);
+  const [ssoError, setSsoError] = useState<string | null>(null);
+  const [customSsoEmail, setCustomSsoEmail] = useState('');
+  const [customSsoName, setCustomSsoName] = useState('');
+  const [showCustomEmailInput, setShowCustomEmailInput] = useState(false);
+
+  const handleOpenSSO = (provider: 'Google' | 'Microsoft') => {
+    setError(null);
+    setSsoError(null);
+    setSsoModal({ open: true, provider });
+    setShowCustomEmailInput(false);
+    setCustomSsoEmail('');
+    setCustomSsoName('');
+  };
+
+  const handleExecuteSSO = async (email: string, name?: string) => {
+    if (!email || !email.trim()) {
+      setSsoError('Please enter a valid email address.');
+      return;
+    }
+    setSsoLoading(true);
+    setSsoError(null);
+    try {
+      const res = await api.ssoLogin({
+        provider: ssoModal.provider.toLowerCase(),
+        email: email.trim(),
+        name: name?.trim()
+      });
+      setSsoModal({ open: false, provider: 'Google' });
+      onAuthSuccess(res.user, res.activeCompanyId, res.businesses || []);
+    } catch (err: any) {
+      setSsoError(err.message || 'SSO authentication failed. Please try again.');
+    } finally {
+      setSsoLoading(false);
+    }
+  };
+
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() =>
     (localStorage.getItem('ledgerflow-theme') as 'light' | 'dark') || 'dark'
@@ -397,12 +439,12 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
             {mode === 'LOGIN' && (
               <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <div>
-                  <label style={lbl}>Email or Username <span style={{ color: 'var(--danger)' }}>*</span></label>
+                  <label style={lbl}>Email, Username or Administrator <span style={{ color: 'var(--danger)' }}>*</span></label>
                   <div style={{ position: 'relative' }}>
                     <Mail size={14} style={iconPos} />
                     <input type="text" required value={loginIdentifier}
                       onChange={e => setLoginIdentifier(e.target.value)}
-                      placeholder="you@business.com or admin" style={iStyle} />
+                      placeholder="admin or System Administrator" style={iStyle} />
                   </div>
                 </div>
                 <div>
@@ -435,12 +477,12 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Shield size={12} color="var(--success)" />
-                    <span>Sign in with your <strong>registered credentials</strong></span>
+                    <span>Sign in with your <strong>credentials</strong></span>
                   </div>
                   <button type="button"
-                    onClick={() => { setLoginIdentifier('admin'); setLoginPassword('admin123'); }}
+                    onClick={() => { setLoginIdentifier('System Administrator'); setLoginPassword('admin123'); }}
                     style={{ background: 'none', border: 'none', color: 'var(--purple)', fontWeight: 700, cursor: 'pointer', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                    <Sparkles size={11} /> Demo
+                    <Sparkles size={11} /> Admin Demo
                   </button>
                 </div>
 
@@ -616,7 +658,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
                 { label: 'Microsoft', icon: <svg width="13" height="13" viewBox="0 0 21 21"><path fill="#F25022" d="M1 1h9v9H1z"/><path fill="#7FBA00" d="M11 1h9v9h-9z"/><path fill="#00A4EF" d="M1 11h9v9H1z"/><path fill="#FFB900" d="M11 11h9v9h-9z"/></svg> }
               ].map(sso => (
                 <button key={sso.label} type="button"
-                  onClick={() => alert(`${sso.label} SSO is configured in the production environment.`)}
+                  onClick={() => handleOpenSSO(sso.label as 'Google' | 'Microsoft')}
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                     padding: '9px 14px', borderRadius: '9px', background: 'var(--surface)',
@@ -655,7 +697,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
           padding: '14px 44px', borderTop: '1px solid var(--border-subtle)',
           fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0
         }}>
-          <span>Â© 2026 LedgerFlow. All rights reserved.</span>
+          <span>© 2026 LedgerFlow. All rights reserved.</span>
           <div style={{ display: 'flex', gap: '16px' }}>
             {['Privacy', 'Terms', 'Support'].map(l => (
               <a key={l} href={`#${l.toLowerCase()}`} style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>{l}</a>
@@ -663,6 +705,420 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
           </div>
         </div>
       </div>
+
+      {/* Interactive SSO Authentication Modal */}
+      {ssoModal.open && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'var(--modal-overlay)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '16px'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !ssoLoading) {
+              setSsoModal(prev => ({ ...prev, open: false }));
+            }
+          }}
+        >
+          <div
+            className="modal-animated"
+            style={{
+              width: '100%',
+              maxWidth: '430px',
+              backgroundColor: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '16px',
+              boxShadow: '0 24px 48px rgba(0,0,0,0.35)',
+              overflow: 'hidden',
+              position: 'relative'
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              padding: '20px 22px 16px',
+              borderBottom: '1px solid var(--border-subtle)',
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  backgroundColor: 'var(--bg-subtle, rgba(255,255,255,0.06))',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {ssoModal.provider === 'Google' ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 21 21"><path fill="#F25022" d="M1 1h9v9H1z"/><path fill="#7FBA00" d="M11 1h9v9h-9z"/><path fill="#00A4EF" d="M1 11h9v9H1z"/><path fill="#FFB900" d="M11 11h9v9h-9z"/></svg>
+                  )}
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                    Sign in with {ssoModal.provider}
+                  </h3>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Choose an account to continue to LedgerFlow
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !ssoLoading && setSsoModal(prev => ({ ...prev, open: false }))}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: ssoLoading ? 'not-allowed' : 'pointer',
+                  padding: '4px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Error Message */}
+            {ssoError && (
+              <div style={{
+                margin: '14px 20px 0',
+                padding: '9px 12px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                color: '#ef4444',
+                fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span>⚠️ {ssoError}</span>
+              </div>
+            )}
+
+            {/* Account List */}
+            <div style={{ padding: '16px 20px 20px' }}>
+              {ssoLoading ? (
+                <div style={{
+                  padding: '36px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '14px',
+                  textAlign: 'center'
+                }}>
+                  <Loader2 size={36} className="animate-spin" color="var(--primary)" />
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      Connecting to {ssoModal.provider} SSO...
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      Authenticating profile and resolving company workspaces
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                  {/* Account Option 1: System Administrator */}
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteSSO(ssoModal.provider === 'Google' ? 'admin@ledgerflow.com' : 'admin@ledgerflow.onmicrosoft.com', 'System Administrator')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '11px 13px',
+                      borderRadius: '10px',
+                      border: '1.5px solid var(--border)',
+                      backgroundColor: 'var(--surface-hover, rgba(255,255,255,0.02))',
+                      color: 'var(--text-primary)',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--primary)';
+                      e.currentTarget.style.backgroundColor = 'rgba(124, 58, 237, 0.06)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.backgroundColor = 'var(--surface-hover, rgba(255,255,255,0.02))';
+                    }}
+                  >
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+                      color: '#fff',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      SA
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          System Administrator
+                        </span>
+                        <span style={{
+                          fontSize: '9.5px',
+                          fontWeight: 700,
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                          backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                          color: '#818cf8',
+                          letterSpacing: '0.02em'
+                        }}>
+                          GLOBAL ADMIN
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {ssoModal.provider === 'Google' ? 'admin@ledgerflow.com' : 'admin@ledgerflow.onmicrosoft.com'}
+                      </div>
+                    </div>
+                    <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
+                  </button>
+
+                  {/* Account Option 2: Business Owner */}
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteSSO(ssoModal.provider === 'Google' ? 'deepak@deepaktraders.com' : 'deepak@deepaktraders.onmicrosoft.com', 'Deepak Traders')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '11px 13px',
+                      borderRadius: '10px',
+                      border: '1.5px solid var(--border)',
+                      backgroundColor: 'var(--surface-hover, rgba(255,255,255,0.02))',
+                      color: 'var(--text-primary)',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--primary)';
+                      e.currentTarget.style.backgroundColor = 'rgba(124, 58, 237, 0.06)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.backgroundColor = 'var(--surface-hover, rgba(255,255,255,0.02))';
+                    }}
+                  >
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #0ea5e9 0%, #10b981 100%)',
+                      color: '#fff',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      DT
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          Deepak Traders Management
+                        </span>
+                        <span style={{
+                          fontSize: '9.5px',
+                          fontWeight: 700,
+                          padding: '1px 5px',
+                          borderRadius: '4px',
+                          backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                          color: '#34d399',
+                          letterSpacing: '0.02em'
+                        }}>
+                          OWNER
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {ssoModal.provider === 'Google' ? 'deepak@deepaktraders.com' : 'deepak@deepaktraders.onmicrosoft.com'}
+                      </div>
+                    </div>
+                    <ArrowRight size={14} style={{ color: 'var(--text-muted)' }} />
+                  </button>
+
+                  {/* Toggle Custom Account */}
+                  {!showCustomEmailInput ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomEmailInput(true)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '11px 13px',
+                        borderRadius: '10px',
+                        border: '1px dashed var(--border)',
+                        backgroundColor: 'transparent',
+                        color: 'var(--text-secondary)',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '12.5px',
+                        marginTop: '3px'
+                      }}
+                    >
+                      <div style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '50%',
+                        border: '1px dashed var(--border)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--text-muted)'
+                      }}>
+                        <User size={15} />
+                      </div>
+                      <span style={{ fontWeight: 500 }}>Use another {ssoModal.provider} account</span>
+                    </button>
+                  ) : (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleExecuteSSO(customSsoEmail, customSsoName);
+                      }}
+                      style={{
+                        marginTop: '6px',
+                        padding: '13px',
+                        borderRadius: '10px',
+                        backgroundColor: 'var(--bg-subtle, rgba(255,255,255,0.03))',
+                        border: '1px solid var(--border)'
+                      }}
+                    >
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                        Enter your {ssoModal.provider} account details:
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div>
+                          <input
+                            type="email"
+                            required
+                            placeholder={ssoModal.provider === 'Google' ? 'you@gmail.com or you@company.com' : 'you@outlook.com or you@company.com'}
+                            value={customSsoEmail}
+                            onChange={(e) => setCustomSsoEmail(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              borderRadius: '7px',
+                              border: '1px solid var(--border)',
+                              backgroundColor: 'var(--input-bg)',
+                              color: 'var(--text-primary)',
+                              fontSize: '12px',
+                              outline: 'none'
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Full Name (optional)"
+                            value={customSsoName}
+                            onChange={(e) => setCustomSsoName(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              borderRadius: '7px',
+                              border: '1px solid var(--border)',
+                              backgroundColor: 'var(--input-bg)',
+                              color: 'var(--text-primary)',
+                              fontSize: '12px',
+                              outline: 'none'
+                            }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '3px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setShowCustomEmailInput(false)}
+                            style={{
+                              flex: 1,
+                              padding: '7px 10px',
+                              borderRadius: '7px',
+                              border: '1px solid var(--border)',
+                              backgroundColor: 'transparent',
+                              color: 'var(--text-secondary)',
+                              fontSize: '11.5px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            style={{
+                              flex: 2,
+                              padding: '7px 10px',
+                              borderRadius: '7px',
+                              border: 'none',
+                              backgroundColor: 'var(--primary)',
+                              color: '#fff',
+                              fontSize: '11.5px',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <span>Sign In</span>
+                            <ArrowRight size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* Security notice */}
+              <div style={{
+                marginTop: '16px',
+                paddingTop: '12px',
+                borderTop: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '11px',
+                color: 'var(--text-muted)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Shield size={12} style={{ color: 'var(--success)' }} />
+                  <span>Enterprise SSO Verified</span>
+                </div>
+                <span>LedgerFlow Identity Service</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

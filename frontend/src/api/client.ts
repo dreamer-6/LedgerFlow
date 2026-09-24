@@ -113,6 +113,31 @@ export const api = {
     return data;
   },
 
+  async ssoLogin(payload: { provider?: string; email: string; name?: string; avatarUrl?: string }) {
+    const res = await fetch(`${API_BASE}/auth/sso`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      let msg = 'SSO login failed';
+      try {
+        const d = await res.json();
+        msg = d.error || msg;
+      } catch {
+        msg = await res.text();
+      }
+      throw new Error(msg);
+    }
+    const data = await res.json();
+    authStorage.setToken(data.token);
+    authStorage.setUser(data.user);
+    if (data.activeCompanyId) {
+      authStorage.setActiveCompanyId(data.activeCompanyId);
+    }
+    return data;
+  },
+
   async register(info: {
     fullName: string;
     email: string;

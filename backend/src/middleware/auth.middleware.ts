@@ -30,13 +30,21 @@ export function requireAuth(db: DatabaseSync) {
         const access = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? AND company_id = ?').get(user.userId, requested) as any;
         if (access) {
           req.companyId = access.company_id;
+        } else if (user.role === 'ADMIN') {
+          const compExists = db.prepare('SELECT company_id FROM companies WHERE company_id = ?').get(requested) as any;
+          if (compExists) req.companyId = compExists.company_id;
         }
       }
 
       if (!req.companyId) {
         // Fallback to first company
         const first = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? ORDER BY created_at ASC LIMIT 1').get(user.userId) as any;
-        if (first) req.companyId = first.company_id;
+        if (first) {
+          req.companyId = first.company_id;
+        } else if (user.role === 'ADMIN') {
+          const anyComp = db.prepare('SELECT company_id FROM companies ORDER BY created_at ASC LIMIT 1').get() as any;
+          if (anyComp) req.companyId = anyComp.company_id;
+        }
       }
 
       if (!req.companyId) {

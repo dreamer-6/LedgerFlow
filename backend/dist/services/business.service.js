@@ -3,7 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BusinessService = void 0;
 const seed_js_1 = require("../database/seed.js");
 class BusinessService {
-    static getBusinesses(db, userId) {
+    static getBusinesses(db, userId, userRole) {
+        if (userRole === 'ADMIN') {
+            return db.prepare("SELECT *, 'ADMIN' as role FROM companies ORDER BY created_at ASC").all();
+        }
         if (userId) {
             return db.prepare(`
         SELECT c.*, ub.role

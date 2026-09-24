@@ -36,9 +36,17 @@ export function resolveCompanyId(req: Request, db: DatabaseSync, user?: any): st
     if (requested) {
       const access = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? AND company_id = ?').get(user.userId, requested) as any;
       if (access) return access.company_id;
+      if (user.role === 'ADMIN') {
+        const exists = db.prepare('SELECT company_id FROM companies WHERE company_id = ?').get(requested) as any;
+        if (exists) return exists.company_id;
+      }
     }
     const first = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? ORDER BY created_at ASC LIMIT 1').get(user.userId) as any;
     if (first) return first.company_id;
+    if (user.role === 'ADMIN') {
+      const anyComp = db.prepare('SELECT company_id FROM companies ORDER BY created_at ASC LIMIT 1').get() as any;
+      if (anyComp) return anyComp.company_id;
+    }
   }
 
   if (requested) {
@@ -57,6 +65,7 @@ export function createApiRouter(db: DatabaseSync): Router {
   const authController = new AuthController(db);
   router.post('/auth/register', authController.register);
   router.post('/auth/login', authController.login);
+  router.post('/auth/sso', authController.sso);
   router.get('/auth/me', authController.getMe);
 
   // ---------------- BUSINESSES (TENANTS) ----------------
