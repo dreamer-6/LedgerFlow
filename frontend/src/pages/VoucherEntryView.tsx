@@ -1393,6 +1393,21 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
               <span>{item.label}</span>
             </button>
           ))}
+          <button
+            type="button"
+            className="vev2-type-dock-btn"
+            onClick={() => onNavigate ? onNavigate('service_bill') : null}
+            title="Service Bill Mode (Quick Bill for OS Installation, Software Setup, Hardware Service)"
+            style={{
+              borderColor: 'rgba(255, 122, 0, 0.4)',
+              background: 'rgba(255, 122, 0, 0.08)',
+              color: 'var(--primary)',
+              fontWeight: 700
+            }}
+          >
+            <span className="vev2-fkey" style={{ background: 'var(--primary)', color: '#FFFFFF' }}>SB</span>
+            <span>Service Bill</span>
+          </button>
         </div>
 
         {/* Right: Number pill + status + actions */}

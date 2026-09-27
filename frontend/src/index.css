@@ -119,6 +119,10 @@
   --font-mono:         'JetBrains Mono', 'Courier New', monospace;
 
   --topbar-height:     58px;
+  --navbar-search-bg:     #F3F4F6;
+  --navbar-search-border: #E5E7EB;
+  --navbar-avatar-bg:     #E2E8F0;
+  --navbar-avatar-text:   #1F2937;
 }
 
 [data-theme="dark"] {
@@ -155,8 +159,12 @@
   --text-muted:        #6B7280;
 
   --sidebar-bg:        #14171C;
-  --header-bg:         rgba(26, 29, 34, 0.92);
+  --header-bg:         #0D0F12;
   --card-bg:           #1A1D22;
+  --navbar-search-bg:     #161920;
+  --navbar-search-border: rgba(255, 255, 255, 0.08);
+  --navbar-avatar-bg:     #313745;
+  --navbar-avatar-text:   #FFFFFF;
 
   --card-shadow:       0 4px 20px rgba(0, 0, 0, 0.35), 0 0 0 1px #2A2F36;
   --card-shadow-hover: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 122, 0, 0.35);
@@ -1741,7 +1749,7 @@ textarea,
    LF_DEMO ADAPTED DESIGN SYSTEM STYLES
    ========================================================= */
 
-/* ── Topbar / Header ── */
+/* ── Topbar / Header (Matches Screenshot) ── */
 .topbar {
   height: var(--topbar-height, 58px);
   position: sticky;
@@ -1753,8 +1761,256 @@ textarea,
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 20px;
   gap: 16px;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-shrink: 0;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  user-select: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.topbar-brand-logo-wrap {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 7px;
+  transition: transform 0.15s ease;
+}
+
+.topbar-brand:hover .topbar-brand-logo-wrap {
+  transform: scale(1.05);
+}
+
+.topbar-brand-logo-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: block;
+}
+
+.topbar-brand-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #FF7A00 0%, #EA580C 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(255, 122, 0, 0.28);
+  flex-shrink: 0;
+}
+
+.topbar-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  justify-content: center;
+}
+
+.topbar-brand-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
+}
+
+.topbar-brand-subtitle {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+  margin-top: 1.5px;
+}
+
+.topbar-search-capsule {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
+  width: 270px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--navbar-search-bg, #161920);
+  border: 1px solid var(--navbar-search-border, rgba(255, 255, 255, 0.08));
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.topbar-search-capsule:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.topbar-search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.topbar-search-capsule input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.topbar-search-capsule input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-shrink: 0;
+}
+
+.topbar-company-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  line-height: 1.25;
+  transition: background 0.15s ease;
+  user-select: none;
+}
+
+.topbar-company-block:hover {
+  background: var(--surface-hover);
+}
+
+.topbar-company-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.topbar-chevron {
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.topbar-company-location {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.topbar-date-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  line-height: 1.25;
+  transition: background 0.15s ease;
+  user-select: none;
+}
+
+.topbar-date-block:hover {
+  background: var(--surface-hover);
+}
+
+.topbar-date-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.topbar-day-text {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.topbar-bell-btn {
+  position: relative;
+  background: transparent;
+  border: none;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: color 0.15s, background 0.15s;
+}
+
+.topbar-bell-btn:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.topbar-bell-dot {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 50%;
+  background-color: #FF7A00;
+  box-shadow: 0 0 5px rgba(255, 122, 0, 0.7);
+}
+
+.topbar-avatar-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: var(--navbar-avatar-bg, #313745);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--navbar-avatar-text, #FFFFFF);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.topbar-avatar-btn:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 0 0 2px rgba(255, 122, 0, 0.25);
+}
+
+.user-menu-dropdown {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
 }
 
 .top-company {
@@ -3509,12 +3765,12 @@ textarea,
   position: sticky;
   top: 0;
   z-index: 50;
-  height: 76px;
-  padding: 0 28px;
+  height: var(--topbar-height, 58px);
+  padding: 0 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 16px;
   background: var(--header-bg);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
@@ -7516,4 +7772,40 @@ input.vev2-combobox-input:focus {
 .sg-card:hover {
   box-shadow: var(--card-shadow-hover);
   border-color: var(--border-strong);
+}
+
+/* ── Service Bill Entry & Dedicated Print Rules ── */
+.service-bill-page {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #service-bill-printable,
+  #service-bill-printable * {
+    visibility: visible;
+  }
+  #service-bill-printable {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    padding: 24px !important;
+    margin: 0 !important;
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+  }
+  .print-modal-overlay {
+    position: static !important;
+    padding: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+  .no-print,
+  .topbar,
+  .sidebar-aside {
+    display: none !important;
+  }
 }

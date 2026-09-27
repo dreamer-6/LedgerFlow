@@ -11,6 +11,7 @@ import { MastersView } from './pages/MastersView';
 import { UtilitiesView } from './pages/UtilitiesView';
 import { SettingsView } from './pages/SettingsView';
 import { InvoicePrintModal } from './pages/InvoicePrintModal';
+import { ServiceBillView } from './pages/ServiceBillView';
 import { CreateBusinessOnboarding } from './components/CreateBusinessOnboarding';
 import { DateChangeModal } from './components/DateChangeModal';
 import { FinancialYearModal } from './components/FinancialYearModal';
@@ -28,6 +29,7 @@ import {
   Percent,
   ShoppingCart,
   ShoppingBag,
+  Wrench,
   X
 } from 'lucide-react';
 
@@ -148,8 +150,8 @@ export const App: React.FC = () => {
   // Global Keyboard Navigation Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Global Search: Ctrl + K or Cmd + K
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      // Global Search: Ctrl + K or Cmd + K or Ctrl + S
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 's')) {
         e.preventDefault();
         setShowSearchModal((prev) => !prev);
         return;
@@ -256,6 +258,9 @@ export const App: React.FC = () => {
         } else if (k === '5') {
           e.preventDefault();
           setActiveTab('utilities');
+        } else if (k === 'w') {
+          e.preventDefault();
+          setActiveTab('service_bill');
         } else if (k === 's') {
           e.preventDefault();
           setVoucherInitialType('SALES');
@@ -293,6 +298,7 @@ export const App: React.FC = () => {
   const searchNavItems = [
     { label: 'Dashboard', tab: 'dashboard', category: 'Module', icon: <LayoutDashboard size={14} />, hotkey: 'Alt+1' },
     { label: 'Sales Invoice Voucher', tab: 'vouchers', vType: 'SALES', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+S' },
+    { label: 'Service Bill Entry (OS / Software / Servicing)', tab: 'service_bill', category: 'Voucher', icon: <Wrench size={14} />, hotkey: 'Alt+W' },
     { label: 'Purchase Voucher', tab: 'vouchers', vType: 'PURCHASE', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+P' },
     { label: 'Receipt Voucher', tab: 'vouchers', vType: 'RECEIPT', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+R' },
     { label: 'Payment Voucher', tab: 'vouchers', vType: 'PAYMENT', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+Y' },
@@ -446,6 +452,24 @@ export const App: React.FC = () => {
                 onNavigate={(tab, subTab) => {
                   setActiveTab(tab);
                   if (subTab) setReportSubTab(subTab);
+                }}
+              />
+            </div>
+          )}
+
+          {/* 2.1 Service Bill Entry View */}
+          {activeTab === 'service_bill' && (
+            <div key="service_bill" className="view-container-animated">
+              <ServiceBillView
+                company={company}
+                activeFy={activeFy}
+                currentDate={currentDate}
+                onNavigate={(tab, subTab) => {
+                  setActiveTab(tab);
+                  if (subTab) setReportSubTab(subTab);
+                }}
+                onPostSuccess={(id) => {
+                  setActivePrintVoucherId(id);
                 }}
               />
             </div>

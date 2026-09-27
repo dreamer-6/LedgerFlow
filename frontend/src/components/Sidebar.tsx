@@ -17,7 +17,8 @@ import {
   ShoppingCart,
   ShoppingBag,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Wrench
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -85,30 +86,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
       <aside className={`sidebar-aside ${isCollapsed ? 'collapsed' : ''} ${isOpen ? 'mobile-open' : ''}`}>
 
-        {/* Brand Header */}
-        <div className={`sidebar-brand ${isCollapsed ? 'collapsed' : ''}`}>
-          {isCollapsed ? (
-            <div
-              className="sidebar-brand-collapsed-logo"
-              title="LedgerFlow OS"
+        {/* Sidebar Navigation Header with Toggle */}
+        <div
+          className={`sidebar-brand ${isCollapsed ? 'collapsed' : ''}`}
+          style={{
+            height: '46px',
+            padding: isCollapsed ? '0' : '0 12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: isCollapsed ? 'center' : 'space-between',
+            borderBottom: '1px solid var(--border-subtle)',
+            flexShrink: 0
+          }}
+        >
+          {!isCollapsed && (
+            <span
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '6px'
+                fontSize: '10.5px',
+                fontWeight: 700,
+                color: 'var(--text-muted)',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase'
               }}
             >
-              <LogoGlyph size={28} />
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-              <LogoGlyph size={28} />
-              <div className="sidebar-brand-info">
-                <h2 className="sidebar-brand-name">LedgerFlow</h2>
-                <span className="sidebar-brand-sub">Accounting &amp; ERP OS</span>
-              </div>
-            </div>
+              Navigation
+            </span>
           )}
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              padding: '6px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--text-primary)';
+              e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'var(--text-muted)';
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            {isCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          </button>
         </div>
 
         {/* Navigation Sections */}
@@ -121,6 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
             {renderItem('dashboard', 'Dashboard', <LayoutDashboard size={16} />, false, undefined, 'Alt+1')}
             {renderItem('vouchers', 'Vouchers & Entry', <ReceiptText size={16} />, false, undefined, 'Alt+2')}
+            {renderItem('service_bill', 'Service Bill', <Wrench size={16} />, false, undefined, 'Alt+4')}
             {renderItem('masters', 'Masters & Items', <Boxes size={16} />, false, undefined, 'Alt+3')}
           </div>
 
