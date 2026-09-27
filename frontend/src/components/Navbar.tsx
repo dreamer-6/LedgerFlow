@@ -115,29 +115,81 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="top-company navbar-company-details"
           onClick={onOpenBusinessSwitcher}
           title="Click to switch business (Alt+B)"
-          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '9px' }}
+          style={{
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: '10px',
+            flexWrap: 'nowrap',
+            padding: '4px 10px 4px 6px',
+            borderRadius: '8px',
+            transition: 'background 0.15s ease',
+            maxWidth: '360px',
+            width: 'auto'
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--surface-hover)')}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
         >
           {company?.logo_base64 && (
-            <img
-              src={company.logo_base64}
-              alt="Company Logo"
+            <div
               style={{
-                width: '26px',
-                height: '26px',
-                borderRadius: '5px',
-                objectFit: 'contain',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '32px',
+                maxWidth: '90px',
+                flexShrink: 0,
                 backgroundColor: 'var(--surface)',
                 border: '1px solid var(--border)',
-                padding: '1px',
-                flexShrink: 0
+                borderRadius: '6px',
+                padding: '2px 5px',
+                overflow: 'hidden'
               }}
-            />
+            >
+              <img
+                src={company.logo_base64}
+                alt="Company Logo"
+                style={{
+                  maxHeight: '28px',
+                  maxWidth: '80px',
+                  width: 'auto',
+                  height: 'auto',
+                  objectFit: 'contain',
+                  display: 'block'
+                }}
+              />
+            </div>
           )}
-          <div>
-            <strong>{company?.company_name || 'DREAM TECH SOLUTIONS'}</strong>
-            <span>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, justifyContent: 'center' }}>
+            <strong
+              style={{
+                fontSize: '12.5px',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: company?.logo_base64 ? '180px' : '220px',
+                lineHeight: 1.25
+              }}
+            >
+              {company?.company_name || 'DREAM TECH SOLUTIONS'}
+            </strong>
+            <span
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                fontSize: '9.5px',
+                color: 'var(--text-muted)',
+                fontWeight: 600,
+                marginTop: '1px',
+                whiteSpace: 'nowrap'
+              }}
+            >
               {activeFy?.name || 'FY 2026–27'}
-              <i className="active-indicator" />
+              <i className="active-indicator" style={{ width: '5px', height: '5px' }} />
               ACTIVE
             </span>
           </div>

@@ -733,23 +733,6 @@ export function createApiRouter(db: DatabaseSync): Router {
     }
   });
 
-  router.get('/vouchers/:id', (req: Request, res: Response) => {
-    try {
-      const vch = db.prepare(`
-        SELECT v.*, p.party_name 
-        FROM vouchers v
-        LEFT JOIN parties p ON v.party_id = p.party_id
-        WHERE v.voucher_id = ?
-      `).get(req.params.id) as any;
-      
-      if (!vch) return res.status(404).json({ error: 'Voucher not found' });
-      
-      const lines = db.prepare('SELECT * FROM voucher_lines WHERE voucher_id = ? ORDER BY line_order ASC').all(req.params.id);
-      res.json({ voucher: vch, lines });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
 
   router.put('/vouchers/:id', (req: Request, res: Response) => {
     try {
@@ -757,18 +740,20 @@ export function createApiRouter(db: DatabaseSync): Router {
       const fyId = req.body.fyId;
       if (!fyId) return res.status(400).json({ error: 'Financial year ID is required for editing a voucher.' });
 
-      // First, cancel the old voucher to reverse its effects.
-      PostingEngine.cancelVoucher(db, req.params.id, 'admin', 'Edited by user');
-      
-      // We actually want to delete the cancelled voucher completely and reuse its ID if possible, 
-      // but PostingEngine.postVoucher assigns a new ID. Instead of modifying PostingEngine, 
-      // let's let PostingEngine create a new one, but we'll manually force the ID, or just return the new ID.
-      // Wait, let's just let it post a new voucher and return the new ID. The frontend will redirect or update.
+      // First, cancel the old voucher to reverse its effects if it was posted.
+      try {
+        PostingEngine.cancelVoucher(db, req.params.id, 'admin', 'Edited by user');
+      } catch {}
+      // Remove the old voucher record and its associated entries so its exact voucher_number can be safely reused
+      db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(req.params.id);
+      db.prepare('DELETE FROM stock_entries WHERE voucher_id = ?').run(req.params.id);
+      db.prepare('DELETE FROM tax_entries WHERE voucher_id = ?').run(req.params.id);
+      db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ?').run(req.params.id);
+      db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(req.params.id);
+      db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(req.params.id);
+
       const payload = { ...req.body, companyId: targetCompanyId, fyId };
       const result = PostingEngine.postVoucher(db, payload);
-      
-      // Update the new voucher to have the original ID or just return it.
-      // To keep it simple, we just return the new voucher ID.
       res.status(200).json(result);
     } catch (err: any) {
       res.status(400).json({ error: err.message });

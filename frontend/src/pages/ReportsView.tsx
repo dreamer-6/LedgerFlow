@@ -152,6 +152,142 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     return (paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  const handlePrintReport = () => {
+    const printArea = document.querySelector('.print-area');
+    if (!printArea) {
+      window.print();
+      return;
+    }
+
+    const reportTitle = reportTabs.find(t => t.id === activeSubTab)?.label || 'FINANCIAL REPORT';
+    const periodText = `Period: ${fromDate} to ${toDate}${selectedLedgerId && activeSubTab === 'ledger' ? ` | Ledger: ${ledgers.find(l => l.ledger_id === selectedLedgerId)?.ledger_name || ''}` : ''}`;
+    const printedOn = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      document.body.removeChild(iframe);
+      window.print();
+      return;
+    }
+
+    const clone = printArea.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('button, .btn-secondary, .btn-primary, input, .no-print').forEach(el => el.remove());
+
+    iframeDoc.open();
+    iframeDoc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>${reportTitle} — LedgerFlow</title>
+  <style>
+    @page { size: A4 landscape; margin: 10mm 8mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      font-size: 11px;
+      color: #111;
+      background: #fff;
+      padding: 14px;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .report-print-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      border-bottom: 2px solid #111;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+    .report-print-banner h1 {
+      font-size: 18px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: #000;
+      letter-spacing: 0.5px;
+    }
+    .report-print-banner .meta {
+      font-size: 11.5px;
+      color: #333;
+      margin-top: 3px;
+    }
+    .report-print-banner .right-meta {
+      text-align: right;
+      font-size: 10px;
+      color: #555;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      page-break-inside: auto;
+    }
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tfoot {
+      display: table-footer-group;
+    }
+    th, td {
+      border: 1px solid #d1d5db;
+      padding: 6px 8px;
+      text-align: left;
+      font-size: 10px;
+    }
+    th {
+      background: #f3f4f6 !important;
+      font-weight: 700;
+      color: #000;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    .badge-status {
+      display: inline-block;
+      padding: 1px 5px;
+      border: 1px solid #aaa;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="report-print-banner">
+    <div>
+      <h1>${reportTitle}</h1>
+      <div class="meta">${periodText}</div>
+    </div>
+    <div class="right-meta">
+      <div style="font-weight:700;">LedgerFlow™ Financial Management</div>
+      <div>Printed: ${printedOn}</div>
+    </div>
+  </div>
+  ${clone.innerHTML}
+</body>
+</html>`);
+    iframeDoc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) document.body.removeChild(iframe);
+        }, 1500);
+      }
+    }, 350);
+  };
+
   const reportTabs = [
     { id: 'daybook', label: 'Day Book', icon: <Clock size={14} /> },
     { id: 'sales_register', label: 'Sales Register', icon: <ShoppingCart size={14} /> },
@@ -169,6 +305,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
     <div className="page-container">
       {/* SubTab Navigation */}
       <div
+        className="no-print"
         style={{
           display: 'flex',
           gap: '4px',
@@ -211,7 +348,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
       {/* Analytical Filter Controls */}
       <div
-        className="ledger-card"
+        className="ledger-card no-print"
         style={{
           padding: '14px 18px',
           marginBottom: '20px',
@@ -312,7 +449,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         {/* Print / Export Action */}
         <button
           className="btn-secondary"
-          onClick={() => window.print()}
+          onClick={handlePrintReport}
           style={{ padding: '6px 12px', fontSize: '12px' }}
         >
           <Printer size={13} />
@@ -329,6 +466,23 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       {/* Report Tables Container */}
       {!loading && (
         <div className="ledger-card table-responsive-wrapper print-area" style={{ overflowX: 'auto' }}>
+          {/* Printable Report Header */}
+          <div className="report-print-header" style={{ display: 'none', padding: '16px 20px', borderBottom: '2px solid #000', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h2 style={{ fontSize: '18px', fontWeight: 800, margin: 0, textTransform: 'uppercase', color: '#000' }}>
+                  {reportTabs.find(t => t.id === activeSubTab)?.label || 'FINANCIAL REPORT'}
+                </h2>
+                <div style={{ fontSize: '11px', color: '#444', marginTop: '3px' }}>
+                  Period: {fromDate} to {toDate} {selectedLedgerId && activeSubTab === 'ledger' ? `| Ledger: ${ledgers.find(l => l.ledger_id === selectedLedgerId)?.ledger_name || ''}` : ''}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', fontSize: '10.5px', color: '#555' }}>
+                <div>LedgerFlow™ Financial Intelligence</div>
+                <div>Printed: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+              </div>
+            </div>
+          </div>
           {/* 1. Day Book */}
           {activeSubTab === 'daybook' && (
             <table className="ledger-table">
@@ -358,7 +512,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                     .map((v: any, i: number) => (
                       <tr key={i} style={{ cursor: 'pointer' }} onClick={() => onViewVoucher(v.voucherId)}>
                         <td className="tabular-nums" style={{ color: 'var(--text-secondary)' }}>{v.voucherDate}</td>
-                        <td className="tabular-nums" style={{ fontWeight: 600, color: 'var(--primary-accent)' }}>{v.voucherNumber}</td>
+                        <td className="tabular-nums" style={{ fontWeight: 600, color: 'var(--primary-accent)' }}>
+                          {v.voucherNumber}
+                          {v.status === 'DRAFT' && (
+                            <span className="badge-status badge-warning" style={{ marginLeft: '6px', fontSize: '9.5px', padding: '1px 5px' }}>
+                              DRAFT
+                            </span>
+                          )}
+                        </td>
                         <td>
                           <span className="badge-status badge-info">{v.voucherType}</span>
                         </td>
@@ -459,7 +620,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                             />
                           </td>
                           <td className="tabular-nums" style={{ color: 'var(--text-secondary)' }}>{v.voucher_date}</td>
-                          <td className="tabular-nums" style={{ fontWeight: 600, color: 'var(--blue)' }}>{v.voucher_number}</td>
+                          <td className="tabular-nums" style={{ fontWeight: 600, color: 'var(--blue)' }}>
+                            {v.voucher_number}
+                            {v.status === 'DRAFT' && (
+                              <span className="badge-status badge-warning" style={{ marginLeft: '6px', fontSize: '9.5px', padding: '1px 5px' }}>
+                                DRAFT
+                              </span>
+                            )}
+                          </td>
                           <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{v.party_name || 'Counter Cash Sale'}</td>
                           <td className="tabular-nums" style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
                             {v.party_gstin || <span style={{ color: 'var(--text-muted)' }}>Unregistered</span>}
@@ -597,7 +765,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                             />
                           </td>
                           <td className="tabular-nums" style={{ color: 'var(--text-secondary)' }}>{v.voucher_date}</td>
-                          <td className="tabular-nums" style={{ fontWeight: 600, color: 'var(--orange)' }}>{v.voucher_number}</td>
+                          <td className="tabular-nums" style={{ fontWeight: 600, color: 'var(--orange)' }}>
+                            {v.voucher_number}
+                            {v.status === 'DRAFT' && (
+                              <span className="badge-status badge-warning" style={{ marginLeft: '6px', fontSize: '9.5px', padding: '1px 5px' }}>
+                                DRAFT
+                              </span>
+                            )}
+                          </td>
                           <td style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{v.party_name || 'Direct Vendor Purchase'}</td>
                           <td className="tabular-nums" style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
                             {v.party_gstin || <span style={{ color: 'var(--text-muted)' }}>Unregistered</span>}
@@ -610,7 +785,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                             ₹{formatPaise(v.total_amount_paise || 0)}
                           </td>
                           <td>
-                            <span className="badge-status badge-success" style={{ fontSize: '10.5px' }}>POSTED</span>
+                            <span className={`badge-status ${v.status === 'DRAFT' ? 'badge-warning' : 'badge-success'}`} style={{ fontSize: '10.5px' }}>
+                              {v.status || 'POSTED'}
+                            </span>
                           </td>
                           <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
                             <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>

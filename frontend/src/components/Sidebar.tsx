@@ -88,45 +88,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Brand Header */}
         <div className={`sidebar-brand ${isCollapsed ? 'collapsed' : ''}`}>
           {isCollapsed ? (
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              className="sidebar-brand-toggle-btn"
-              title="Expand sidebar (show icon and name)"
+            <div
+              className="sidebar-brand-collapsed-logo"
+              title="LedgerFlow OS"
               style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: '6px',
-                borderRadius: '8px'
+                padding: '6px'
               }}
             >
               <LogoGlyph size={28} />
-            </button>
+            </div>
           ) : (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-                <LogoGlyph size={28} />
-                <div className="sidebar-brand-info">
-                  <h2 className="sidebar-brand-name">LedgerFlow</h2>
-                  <span className="sidebar-brand-sub">Accounting &amp; ERP OS</span>
-                </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+              <LogoGlyph size={28} />
+              <div className="sidebar-brand-info">
+                <h2 className="sidebar-brand-name">LedgerFlow</h2>
+                <span className="sidebar-brand-sub">Accounting &amp; ERP OS</span>
               </div>
-              {onToggleCollapse && (
-                <button
-                  type="button"
-                  className="sidebar-collapse-inline-btn"
-                  onClick={onToggleCollapse}
-                  title="Collapse sidebar (show icons only)"
-                  aria-label="Collapse sidebar"
-                >
-                  <PanelLeftClose size={15} />
-                </button>
-              )}
-            </>
+            </div>
           )}
         </div>
 

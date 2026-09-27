@@ -22,7 +22,9 @@ import {
   Copy,
   RotateCcw,
   RefreshCw,
-  Percent
+  Percent,
+  CheckCircle2,
+  FileText
 } from 'lucide-react';
 
 /* ──────────────────────────────────────────────────────────
@@ -481,7 +483,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
   const [placeOfSupply, setPlaceOfSupply] = useState<string>('33 - Tamil Nadu');
   const [narration, setNarration] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<string>('GPAY');
-  const [paymentTerms, setPaymentTerms] = useState<string>('Net 30 Days');
+  const [paymentTerms, setPaymentTerms] = useState<string>('Immediate');
   const [orderRef, setOrderRef] = useState<string>('');
   const [termsAndConditions, setTermsAndConditions] = useState<string>(
     '01-Once product sold no cancel or return. 02=Product warranty is from service center only. 03=for physical damage'
@@ -489,6 +491,11 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
   const [taxMode, setTaxMode] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('EXCLUSIVE');
   const [isSummaryExpanded, setIsSummaryExpanded] = useState<boolean>(true);
   const [showLivePreview, setShowLivePreview] = useState<boolean>(false);
+
+  // Serial Number Picker Modal State (Clean dialog instead of bulky table rows)
+  const [serialPickerLineIndex, setSerialPickerLineIndex] = useState<number | null>(null);
+  const [serialSearchQuery, setSerialSearchQuery] = useState<string>('');
+  const [manualSerialInput, setManualSerialInput] = useState<string>('');
 
   // Selected Party details for compact card
   const [selectedParty, setSelectedParty] = useState<any>(null);
@@ -507,7 +514,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
       description: '',
       godownId: '',
       quantity: 1,
-      unit: 'Nos',
+      unit: 'NOS',
       hsnSac: '85044029',
       rate: 0,
       rateInclTax: 0,
@@ -619,6 +626,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         setVoucherType(voucher.voucher_type);
         setVoucherNumber(voucher.voucher_number);
         setVoucherDate(voucher.voucher_date);
+        setVoucherStatus(voucher.status === 'DRAFT' ? 'Draft' : 'Posted');
         setSupplierInvoiceNo(voucher.supplier_invoice_no || '');
         setSupplierInvoiceDate(voucher.supplier_invoice_date || voucher.voucher_date);
         setPartyId(voucher.party_id);
@@ -1058,32 +1066,34 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
     return str + ' Only';
   };
 
-  // Submit / Save Voucher
-  const handleSaveVoucher = async (andPrint: boolean = false) => {
+  // Submit / Save Voucher (as Draft or Posted)
+  const handleSaveVoucher = async (andPrint: boolean = false, asDraft: boolean = false) => {
     if (isSaving) return;
     if (!company) {
       setErrorMessage('Active company required.');
       return;
     }
 
-    // Validation 1: Party required for trading vouchers
-    if (isTrading && !partyId) {
-      setErrorMessage(`Please select a ${voucherType === 'PURCHASE' ? 'supplier' : 'customer'} party.`);
-      return;
-    }
-
-    // Validation 2: At least one item required for trading vouchers
-    const filled = lines.filter((l) => l.itemId);
-    if (isTrading && filled.length === 0) {
-      setErrorMessage('Please add at least one stock item to the voucher.');
-      return;
-    }
-
-    // Validation 3: Positive quantity
-    for (const l of filled) {
-      if ((Number(l.quantity) || 0) <= 0) {
-        setErrorMessage('Item quantity must be greater than zero.');
+    if (!asDraft) {
+      // Validation 1: Party required for trading vouchers
+      if (isTrading && !partyId) {
+        setErrorMessage(`Please select a ${voucherType === 'PURCHASE' ? 'supplier' : 'customer'} party.`);
         return;
+      }
+
+      // Validation 2: At least one item required for trading vouchers
+      const filled = lines.filter((l) => l.itemId);
+      if (isTrading && filled.length === 0) {
+        setErrorMessage('Please add at least one stock item to the voucher.');
+        return;
+      }
+
+      // Validation 3: Positive quantity
+      for (const l of filled) {
+        if ((Number(l.quantity) || 0) <= 0) {
+          setErrorMessage('Item quantity must be greater than zero.');
+          return;
+        }
       }
     }
 
@@ -1091,6 +1101,13 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
     setErrorMessage(null);
 
     try {
+      // For draft vouchers, if party is not selected, fallback to first available party or default
+      let effectivePartyId = partyId;
+      if (asDraft && isTrading && !effectivePartyId && parties.length > 0) {
+        const matchingParty = parties.find(p => voucherType === 'PURCHASE' ? p.party_type === 'SUPPLIER' : p.party_type === 'CUSTOMER') || parties[0];
+        effectivePartyId = matchingParty?.party_id || undefined;
+      }
+
       let payload: any = {
         companyId: company.company_id,
         fyId: activeFy?.fy_id,
@@ -1106,22 +1123,38 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         paymentTerms,
         orderRef,
         termsConditions: termsAndConditions,
-        narration
+        narration,
+        status: asDraft ? 'DRAFT' : 'POSTED'
       };
 
       if (isTrading) {
-        payload.partyId = partyId;
-        payload.lines = lines.map((l) => ({
-          itemId: l.itemId || undefined,
-          description: l.description || null,
-          godownId: l.godownId || godowns[0]?.godown_id || undefined,
-          quantity: Number(l.quantity) || 1,
-          ratePaise: Math.round(Number(l.rate) * 100),
-          discountPercent: Number(l.discountPercent) || 0,
-          gstRate: Number(l.gstRate) || 18,
-          isTaxInclusive: taxMode === 'INCLUSIVE',
-          serialNumber: l.serialNumber || undefined
-        }));
+        payload.partyId = effectivePartyId;
+        payload.lines = lines
+          .filter((l) => asDraft ? (l.itemId || l.description) : l.itemId)
+          .map((l) => ({
+            itemId: l.itemId || undefined,
+            description: l.description || null,
+            godownId: l.godownId || godowns[0]?.godown_id || undefined,
+            quantity: Number(l.quantity) || 1,
+            ratePaise: Math.round(Number(l.rate) * 100),
+            discountPercent: Number(l.discountPercent) || 0,
+            gstRate: Number(l.gstRate) || 18,
+            isTaxInclusive: taxMode === 'INCLUSIVE',
+            serialNumber: l.serialNumber || undefined
+          }));
+
+        if (asDraft && payload.lines.length === 0) {
+          payload.lines = [{
+            itemId: stockItems[0]?.item_id || undefined,
+            description: 'Draft Item',
+            godownId: godowns[0]?.godown_id || undefined,
+            quantity: 1,
+            ratePaise: 0,
+            discountPercent: 0,
+            gstRate: 18,
+            isTaxInclusive: false
+          }];
+        }
       } else {
         // Financial vouchers: convert DR/CR ledger lines to debitPaise/creditPaise format
         payload.lines = [];
@@ -1141,18 +1174,22 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
       } else {
         res = await api.postVoucher(payload);
       }
-      setVoucherStatus('Posted');
+      setVoucherStatus(asDraft ? 'Draft' : 'Posted');
       setLastSavedVoucherId(res.voucherId);
 
-      if (!editVoucherId) {
+      if (!editVoucherId && !asDraft) {
         await fetchNextVoucherNumber();
       }
 
       if (andPrint) {
         onPostSuccess(res.voucherId);
       } else {
-        setSuccessMessage(`Voucher ${res.voucherNumber || voucherNumber} ${editVoucherId ? 'updated' : 'saved'} successfully!`);
-        if (!editVoucherId) {
+        setSuccessMessage(
+          asDraft
+            ? `Voucher ${res.voucherNumber || voucherNumber} saved as Draft successfully!`
+            : `Voucher ${res.voucherNumber || voucherNumber} ${editVoucherId ? 'updated' : 'saved'} successfully!`
+        );
+        if (!editVoucherId && !asDraft) {
           // Reset lines for next entry
           setLines([
             {
@@ -1160,7 +1197,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
               description: '',
               godownId: godowns[0]?.godown_id || '',
               quantity: 1,
-              unit: 'Nos',
+              unit: 'NOS',
               hsnSac: '85044029',
               rate: 0,
               rateInclTax: 0,
@@ -1176,7 +1213,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         }
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to save voucher.');
+      setErrorMessage(err.message || (asDraft ? 'Failed to save draft voucher.' : 'Failed to save voucher.'));
     } finally {
       setIsSaving(false);
     }
@@ -1470,6 +1507,17 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                   type="button"
                   className="vev2-dropdown-item"
                   onClick={() => {
+                    setShowMoreMenu(false);
+                    handleSaveVoucher(false, true);
+                  }}
+                >
+                  <FileText size={13} />
+                  <span>Save as Draft</span>
+                </button>
+                <button
+                  type="button"
+                  className="vev2-dropdown-item"
+                  onClick={() => {
                     navigator.clipboard?.writeText(voucherNumber);
                     setSuccessMessage(`Invoice Number "${voucherNumber}" copied to clipboard.`);
                     setShowMoreMenu(false);
@@ -1683,13 +1731,33 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                   </div>
                   <div className="vev2-field">
                     <label>Payment Terms</label>
-                    <input
-                      type="text"
-                      value={paymentTerms}
-                      onChange={(e) => setPaymentTerms(e.target.value)}
-                      placeholder="e.g. 30 Days / Immediate"
-                      style={{ width: '100%' }}
-                    />
+                    <select
+                      value={['Immediate', 'Due on Receipt', 'Net 7 Days', 'Net 15 Days', 'Net 30 Days', 'Net 45 Days', 'Net 60 Days', 'Cash on Delivery (COD)', 'Advance Payment'].includes(paymentTerms) ? paymentTerms : 'Custom'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === 'Custom') {
+                          const customVal = prompt('Enter custom payment terms:', paymentTerms) || paymentTerms;
+                          setPaymentTerms(customVal);
+                        } else {
+                          setPaymentTerms(val);
+                        }
+                      }}
+                      style={{ width: '100%', height: '36px' }}
+                    >
+                      <option value="Immediate">Immediate (Default)</option>
+                      <option value="Due on Receipt">Due on Receipt</option>
+                      <option value="Net 7 Days">Net 7 Days</option>
+                      <option value="Net 15 Days">Net 15 Days</option>
+                      <option value="Net 30 Days">Net 30 Days</option>
+                      <option value="Net 45 Days">Net 45 Days</option>
+                      <option value="Net 60 Days">Net 60 Days</option>
+                      <option value="Cash on Delivery (COD)">Cash on Delivery (COD)</option>
+                      <option value="Advance Payment">Advance Payment</option>
+                      {!['Immediate', 'Due on Receipt', 'Net 7 Days', 'Net 15 Days', 'Net 30 Days', 'Net 45 Days', 'Net 60 Days', 'Cash on Delivery (COD)', 'Advance Payment'].includes(paymentTerms) && (
+                        <option value={paymentTerms}>{paymentTerms}</option>
+                      )}
+                      <option value="Custom">Custom Terms…</option>
+                    </select>
                   </div>
                   <div className="vev2-field">
                     <label>{voucherType === 'PURCHASE' ? 'Supplier Bill Date' : 'Due Date'}</label>
@@ -1812,17 +1880,17 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                     <thead>
                       <tr>
                         <th style={{ width: '36px', textAlign: 'center' }}>#</th>
-                        <th style={{ minWidth: '240px' }}>Item</th>
-                        <th style={{ width: '100px', textAlign: 'center' }}>HSN/SAC</th>
-                        <th style={{ width: '70px', textAlign: 'right' }}>Qty</th>
-                        <th style={{ width: '60px', textAlign: 'center' }}>Unit</th>
-                        <th style={{ width: '130px', textAlign: 'right' }}>
+                        <th style={{ minWidth: '260px' }}>Item Details</th>
+                        <th style={{ width: '105px', minWidth: '105px', textAlign: 'center' }}>HSN/SAC</th>
+                        <th style={{ width: '85px', minWidth: '85px', textAlign: 'right' }}>Qty</th>
+                        <th style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>Unit</th>
+                        <th style={{ width: '140px', minWidth: '140px', textAlign: 'right' }}>
                           Rate (₹) {taxMode === 'INCLUSIVE' ? <span style={{ color: 'var(--primary-accent)', fontSize: '9px' }}>INCL.</span> : <span style={{ color: 'var(--text-muted)', fontSize: '9px' }}>EXCL.</span>}
                         </th>
-                        <th style={{ width: '75px', textAlign: 'right' }}>Disc. (%)</th>
-                        <th style={{ width: '80px', textAlign: 'center' }}>GST (%)</th>
-                        <th style={{ width: '120px', textAlign: 'right' }}>Amount (₹)</th>
-                        <th style={{ width: '36px' }}></th>
+                        <th style={{ width: '85px', minWidth: '85px', textAlign: 'right' }}>Disc. (%)</th>
+                        <th style={{ width: '110px', minWidth: '110px', textAlign: 'center' }}>GST (%)</th>
+                        <th style={{ width: '135px', minWidth: '135px', textAlign: 'right' }}>Amount (₹)</th>
+                        <th style={{ width: '38px', textAlign: 'center' }}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1864,7 +1932,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                                 }}
                               />
 
-                              {/* Serial number tracking */}
+                              {/* Serial number tracking or remarks */}
                               {(() => {
                                 if (!row.itemId) return null;
                                 const itemDef = stockItems.find((s: any) => s.item_id === row.itemId);
@@ -1885,93 +1953,35 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                                 const targetQty = Math.max(1, Math.round(Number(row.quantity) || 1));
                                 const isMet = selectedSerials.length === targetQty;
 
-                                const toggleSerial = (serial: string) => {
-                                  let next: string[];
-                                  if (selectedSerials.includes(serial)) {
-                                    next = selectedSerials.filter((s: string) => s !== serial);
-                                  } else {
-                                    next = targetQty === 1 ? [serial] : [...selectedSerials, serial].slice(0, targetQty);
-                                  }
-                                  updateLine(idx, 'serialNumber', next.join(', '));
-                                };
-
-                                const isSalesOrOutward = voucherType === 'SALES';
-
                                 return (
-                                  <div className="serial-number-box" style={{ marginTop: '6px' }}>
-                                    <div className="serial-box-header">
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '11px' }}>
-                                          {isSalesOrOutward ? '🏷️ Available S/N Stock:' : '📦 Incoming Serial Numbers:'}
-                                        </span>
-                                        {isSalesOrOutward && (
-                                          <span className={`serial-badge-count ${availList.length > 0 ? 'success' : ''}`}>
-                                            {availList.length} in Stock
-                                          </span>
-                                        )}
-                                      </div>
-                                      <span style={{ fontSize: '10px', color: isMet ? 'var(--success-emerald)' : 'var(--primary-accent)', fontWeight: 700 }}>
-                                        {selectedSerials.length} / {targetQty} {isSalesOrOutward ? 'Selected' : 'Entered'} {isMet ? '✓' : ''}
+                                  <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSerialPickerLineIndex(idx);
+                                        setSerialSearchQuery('');
+                                        setManualSerialInput('');
+                                      }}
+                                      className={`vev2-serial-pill-btn ${selectedSerials.length > 0 ? 'selected' : ''}`}
+                                      title="Click to view & select serial numbers in dialog"
+                                    >
+                                      <span style={{ fontSize: '11px' }}>🏷️</span>
+                                      <span>
+                                        {selectedSerials.length > 0
+                                          ? `${selectedSerials.length} S/N Selected (${selectedSerials.slice(0, 2).join(', ')}${selectedSerials.length > 2 ? '…' : ''})`
+                                          : `Select Serials (${availList.length} in stock)`}
                                       </span>
-                                    </div>
-
-                                    {/* Quick chips for Sales / Outward */}
-                                    {isSalesOrOutward && availList.length > 0 && (
-                                      <div>
-                                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '3px', display: 'flex', justifyContent: 'space-between' }}>
-                                          <span>Click chip to select serial:</span>
-                                          {targetQty > 1 && (
-                                            <button
-                                              type="button"
-                                              onClick={() => updateLine(idx, 'serialNumber', availList.slice(0, targetQty).join(', '))}
-                                              style={{ background: 'none', border: 'none', color: 'var(--primary-accent)', fontSize: '10px', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
-                                            >
-                                              Pick First {targetQty}
-                                            </button>
-                                          )}
-                                        </div>
-                                        <div className="serial-chip-list">
-                                          {availList.map((sn: string) => {
-                                            const isSelected = selectedSerials.includes(sn);
-                                            return (
-                                              <button
-                                                key={sn}
-                                                type="button"
-                                                onClick={() => toggleSerial(sn)}
-                                                className={`serial-chip ${isSelected ? 'selected' : ''}`}
-                                                title={isSelected ? 'Click to deselect' : 'Click to select'}
-                                              >
-                                                <span>{sn}</span>
-                                                {isSelected && <span style={{ fontSize: '10px' }}>✓</span>}
-                                              </button>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {availList.length === 0 && isSalesOrOutward && (
-                                      <div className="serial-warning-badge" style={{ marginTop: '4px' }}>
-                                        <span>⚠️</span>
-                                        <span>0 serial numbers currently in stock. Type manual serials below or update stock.</span>
-                                      </div>
-                                    )}
-
-                                    {/* Direct comma-separated input */}
-                                    <input
-                                      type="text"
-                                      value={row.serialNumber || ''}
-                                      onChange={(e) => updateLine(idx, 'serialNumber', e.target.value)}
-                                      placeholder={isSalesOrOutward ? 'Selected serials or type manual serial…' : 'Enter serial number(s) e.g. SN-001, SN-002…'}
-                                      style={{ width: '100%', height: '28px', fontSize: '12px', fontFamily: 'var(--font-mono)', marginTop: '5px' }}
-                                    />
+                                      <span className="vev2-serial-edit-tag">
+                                        {selectedSerials.length > 0 ? (isMet ? '✓' : `${selectedSerials.length}/${targetQty}`) : 'Pick ▾'}
+                                      </span>
+                                    </button>
                                   </div>
                                 );
                               })()}
                             </td>
 
                             {/* HSN/SAC */}
-                            <td>
+                            <td style={{ width: '105px', minWidth: '105px' }}>
                               <input
                                 type="text"
                                 value={row.hsnSac || ''}
@@ -1982,7 +1992,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                             </td>
 
                             {/* Qty */}
-                            <td>
+                            <td style={{ width: '85px', minWidth: '85px' }}>
                               <input
                                 type="number"
                                 min="0.01"
@@ -1995,14 +2005,14 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                             </td>
 
                             {/* Unit */}
-                            <td style={{ textAlign: 'center' }}>
-                              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-                                {row.unit || 'Nos'}
+                            <td style={{ width: '70px', minWidth: '70px', textAlign: 'center' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                {row.unit || 'NOS'}
                               </span>
                             </td>
 
                             {/* Rate */}
-                            <td>
+                            <td style={{ width: '140px', minWidth: '140px' }}>
                               <input
                                 type="number"
                                 step="0.01"
@@ -2020,7 +2030,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                             </td>
 
                             {/* Discount % */}
-                            <td>
+                            <td style={{ width: '85px', minWidth: '85px' }}>
                               <input
                                 type="number"
                                 step="0.1"
@@ -2034,22 +2044,29 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                             </td>
 
                             {/* GST % */}
-                            <td>
+                            <td style={{ width: '110px', minWidth: '110px' }}>
                               <select
-                                value={row.gstRate || 18}
+                                value={row.gstRate !== undefined ? row.gstRate : 18}
                                 onChange={(e) => updateLine(idx, 'gstRate', Number(e.target.value))}
-                                style={{ textAlign: 'center', fontSize: '13px' }}
+                                style={{
+                                  textAlign: 'center',
+                                  fontSize: '12.5px',
+                                  fontWeight: 600,
+                                  width: '100%',
+                                  minWidth: '95px',
+                                  padding: '0 8px'
+                                }}
                               >
-                                <option value={0}>0%</option>
-                                <option value={5}>5%</option>
-                                <option value={12}>12%</option>
-                                <option value={18}>18%</option>
-                                <option value={28}>28%</option>
+                                <option value={0}>0% GST</option>
+                                <option value={5}>5% GST</option>
+                                <option value={12}>12% GST</option>
+                                <option value={18}>18% GST</option>
+                                <option value={28}>28% GST</option>
                               </select>
                             </td>
 
                             {/* Amount */}
-                            <td>
+                            <td style={{ width: '135px', minWidth: '135px' }}>
                               <span className="vev2-amount-cell">
                                 ₹{lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
@@ -2405,13 +2422,33 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                     </div>
                     <div>
                       <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Terms</label>
-                      <input
-                        type="text"
-                        value={paymentTerms}
-                        onChange={(e) => setPaymentTerms(e.target.value)}
-                        placeholder="Immediate / Net 30 Days"
-                        style={{ width: '100%' }}
-                      />
+                      <select
+                        value={['Immediate', 'Due on Receipt', 'Net 7 Days', 'Net 15 Days', 'Net 30 Days', 'Net 45 Days', 'Net 60 Days', 'Cash on Delivery (COD)', 'Advance Payment'].includes(paymentTerms) ? paymentTerms : 'Custom'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === 'Custom') {
+                            const customVal = prompt('Enter custom payment terms:', paymentTerms) || paymentTerms;
+                            setPaymentTerms(customVal);
+                          } else {
+                            setPaymentTerms(val);
+                          }
+                        }}
+                        style={{ width: '100%', height: '34px', fontSize: '13px' }}
+                      >
+                        <option value="Immediate">Immediate (Default)</option>
+                        <option value="Due on Receipt">Due on Receipt</option>
+                        <option value="Net 7 Days">Net 7 Days</option>
+                        <option value="Net 15 Days">Net 15 Days</option>
+                        <option value="Net 30 Days">Net 30 Days</option>
+                        <option value="Net 45 Days">Net 45 Days</option>
+                        <option value="Net 60 Days">Net 60 Days</option>
+                        <option value="Cash on Delivery (COD)">Cash on Delivery (COD)</option>
+                        <option value="Advance Payment">Advance Payment</option>
+                        {!['Immediate', 'Due on Receipt', 'Net 7 Days', 'Net 15 Days', 'Net 30 Days', 'Net 45 Days', 'Net 60 Days', 'Cash on Delivery (COD)', 'Advance Payment'].includes(paymentTerms) && (
+                          <option value={paymentTerms}>{paymentTerms}</option>
+                        )}
+                        <option value="Custom">Custom Terms…</option>
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -2456,7 +2493,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
             className="vev2-cancel-btn"
             onClick={() => {
               if (confirm('Cancel voucher entry?')) {
-                setLines([{ itemId: '', description: '', quantity: 1, unit: 'Nos', hsnSac: '85044029', rate: 0, rateInclTax: 0, discountPercent: 0, gstRate: 18, godownId: '', serialNumber: '', availableSerials: [] }]);
+                setLines([{ itemId: '', description: '', quantity: 1, unit: 'NOS', hsnSac: '85044029', rate: 0, rateInclTax: 0, discountPercent: 0, gstRate: 18, godownId: '', serialNumber: '', availableSerials: [] }]);
                 setNarration('');
               }
             }}
@@ -2478,16 +2515,17 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
           <button
             type="button"
             className="vev2-draft-btn"
-            onClick={() => handleSaveVoucher(false)}
+            onClick={() => handleSaveVoucher(false, true)}
             disabled={isSaving}
+            title="Save as Draft (Unposted)"
           >
-            Save as Draft
+            {isSaving ? 'Saving…' : 'Save as Draft'}
           </button>
           <div className="vev2-save-print-group" style={{ display: 'flex', gap: '8px' }}>
             <button
               type="button"
               className="vev2-btn-save"
-              onClick={() => handleSaveVoucher(false)}
+              onClick={() => handleSaveVoucher(false, false)}
               disabled={isSaving}
               style={{ padding: '8px 22px', fontSize: '13.5px', fontWeight: 700, height: '40px' }}
               title="Save Voucher (Ctrl+A, Ctrl+S or F10)"
@@ -2498,7 +2536,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
             <button
               type="button"
               className="vev2-save-print-btn"
-              onClick={() => handleSaveVoucher(true)}
+              onClick={() => handleSaveVoucher(true, false)}
               disabled={isSaving}
               style={{ padding: '8px 18px', fontSize: '13px', fontWeight: 600, height: '40px' }}
               title="Save and open print preview"
@@ -2781,6 +2819,264 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
           onClose={() => setShowLivePreview(false)}
         />
       )}
+
+      {/* ── Dedicated Serial Numbers Selection Modal ── */}
+      {serialPickerLineIndex !== null && lines[serialPickerLineIndex] && (() => {
+        const row = lines[serialPickerLineIndex];
+        const itemDef = stockItems.find((s: any) => s.item_id === row.itemId);
+        const availList: string[] = row.availableSerials || [];
+        const currentSerials: string[] = (row.serialNumber || '')
+          .split(/[\n,]+/)
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+        const targetQty = Math.max(1, Math.round(Number(row.quantity) || 1));
+        const isSalesOrOutward = voucherType === 'SALES';
+
+        // Filter serials by search query
+        const filteredAvail = availList.filter(sn =>
+          sn.toLowerCase().includes(serialSearchQuery.toLowerCase())
+        );
+
+        const handleToggleModalSerial = (serial: string) => {
+          let next: string[];
+          if (currentSerials.includes(serial)) {
+            next = currentSerials.filter(s => s !== serial);
+          } else {
+            next = [...currentSerials, serial];
+          }
+          updateLine(serialPickerLineIndex, 'serialNumber', next.join(', '));
+        };
+
+        const handlePickFirstN = (n: number) => {
+          const picked = availList.slice(0, n);
+          updateLine(serialPickerLineIndex, 'serialNumber', picked.join(', '));
+        };
+
+        const handleClearAll = () => {
+          updateLine(serialPickerLineIndex, 'serialNumber', '');
+        };
+
+        const handleAddManualSerials = () => {
+          if (!manualSerialInput.trim()) return;
+          const entered = manualSerialInput.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+          const merged = Array.from(new Set([...currentSerials, ...entered]));
+          updateLine(serialPickerLineIndex, 'serialNumber', merged.join(', '));
+          setManualSerialInput('');
+        };
+
+        const handleDone = () => {
+          // If user picked serials and it differs from targetQty in Sales, sync quantity!
+          if (currentSerials.length > 0 && currentSerials.length !== targetQty) {
+            updateLine(serialPickerLineIndex, 'quantity', currentSerials.length);
+          }
+          setSerialPickerLineIndex(null);
+        };
+
+        return (
+          <div
+            className="vev2-serial-modal-overlay"
+            onClick={() => setSerialPickerLineIndex(null)}
+          >
+            <div
+              className="vev2-serial-modal-card"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="vev2-serial-modal-header">
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '18px' }}>🏷️</span>
+                    <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                      Serial Number Selection
+                    </h3>
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    {itemDef?.item_name || 'Stock Item'} {row.hsnSac ? `• HSN: ${row.hsnSac}` : ''}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn-quiet"
+                  onClick={() => setSerialPickerLineIndex(null)}
+                  style={{ padding: '6px', borderRadius: '50%' }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Status & Quick Action Bar */}
+              <div className="vev2-serial-status-bar">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className="vev2-serial-counter">
+                    Selected: <strong>{currentSerials.length}</strong> {targetQty ? `/ Target: ${targetQty}` : ''}
+                  </span>
+                  {availList.length > 0 && (
+                    <span className="vev2-serial-stock-count">
+                      Stock: {availList.length} Units
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {availList.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handlePickFirstN(targetQty)}
+                      className="btn-secondary"
+                      style={{ padding: '4px 9px', fontSize: '11px' }}
+                    >
+                      Pick First {targetQty}
+                    </button>
+                  )}
+                  {currentSerials.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearAll}
+                      className="btn-quiet"
+                      style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--danger)' }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Search Bar */}
+              {availList.length > 4 && (
+                <div style={{ margin: '10px 0' }}>
+                  <input
+                    type="text"
+                    value={serialSearchQuery}
+                    onChange={(e) => setSerialSearchQuery(e.target.value)}
+                    placeholder="Search available serial numbers…"
+                    style={{ width: '100%', height: '34px', fontSize: '12.5px', padding: '0 10px' }}
+                  />
+                </div>
+              )}
+
+              {/* Available Stock Serials Grid */}
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {isSalesOrOutward ? 'Available Stock Serials (Click to Select)' : 'Available / Recorded Serials'}
+                </div>
+
+                {availList.length > 0 ? (
+                  <div className="vev2-serial-grid">
+                    {filteredAvail.map((sn: string) => {
+                      const isSelected = currentSerials.includes(sn);
+                      return (
+                        <div
+                          key={sn}
+                          onClick={() => handleToggleModalSerial(sn)}
+                          className={`vev2-serial-item ${isSelected ? 'selected' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            style={{ cursor: 'pointer', width: '14px', height: '14px' }}
+                          />
+                          <span className="vev2-serial-text">{sn}</span>
+                          {isSelected && <span className="vev2-serial-check">✓</span>}
+                        </div>
+                      );
+                    })}
+                    {filteredAvail.length === 0 && (
+                      <div style={{ color: 'var(--text-muted)', fontSize: '12px', padding: '10px' }}>
+                        No serial numbers matching "{serialSearchQuery}".
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ padding: '16px', background: 'var(--surface-soft)', borderRadius: '8px', border: '1px dashed var(--border)', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      0 pre-recorded serial numbers found in stock for this item.
+                    </p>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                      Type or paste new serial numbers below to add them to this voucher.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Manual Input / Scan Barcode / New Serials */}
+              <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
+                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  Add / Paste Serial Numbers (Barcode Scan or Manual Entry):
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={manualSerialInput}
+                    onChange={(e) => setManualSerialInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddManualSerials();
+                      }
+                    }}
+                    placeholder="Enter serial number(s) comma or space separated…"
+                    style={{ flex: 1, height: '34px', fontSize: '12.5px', fontFamily: 'var(--font-mono)' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddManualSerials}
+                    className="btn-secondary"
+                    style={{ height: '34px', padding: '0 12px', fontSize: '12px' }}
+                  >
+                    + Add
+                  </button>
+                </div>
+              </div>
+
+              {/* Selected List Preview */}
+              {currentSerials.length > 0 && (
+                <div style={{ marginTop: '14px', background: 'var(--surface-soft)', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
+                    Selected for Voucher ({currentSerials.length}):
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', maxHeight: '90px', overflowY: 'auto' }}>
+                    {currentSerials.map((sn, sIdx) => (
+                      <span
+                        key={sIdx}
+                        className="vev2-serial-tag"
+                      >
+                        {sn}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleModalSerial(sn)}
+                          style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, marginLeft: '3px' }}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Footer */}
+              <div className="vev2-serial-modal-footer">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setSerialPickerLineIndex(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleDone}
+                  style={{ padding: '8px 20px', gap: '6px' }}
+                >
+                  <CheckCircle2 size={15} />
+                  Done &amp; Add to Voucher
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

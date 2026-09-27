@@ -301,6 +301,7 @@ ${printTarget.outerHTML}
       {format !== 'THERMAL' ? (
         <div
           id="printable-tax-invoice"
+          className="print-area"
           style={{
             width: getContainerWidth(),
             minHeight: format === 'A4' ? '1050px' : format === 'A5_PORTRAIT' ? '740px' : '520px',
@@ -349,14 +350,10 @@ ${printTarget.outerHTML}
               <div style={{ color: '#555F73', fontSize: '11.5px' }}>
                 State: {isPurchase ? (voucher.state || 'Tamil Nadu') : (company?.state || 'Tamil Nadu')} (Code: {isPurchase ? (voucher.state_code || '33') : (company?.state_code || '33')})
               </div>
-              {/* Only show GSTIN if company or party has a valid GSTIN; never show fake default */}
-              {hasGstin ? (
+              {/* Only show GSTIN if company or party has a valid GSTIN; never show unregistered */}
+              {hasGstin && (
                 <div style={{ fontWeight: 600, marginTop: '4px', fontSize: '12px' }}>
                   GSTIN: <span style={{ fontFamily: 'var(--font-mono)' }}>{isPurchase ? voucher.party_gstin : company?.gstin}</span>
-                </div>
-              ) : (
-                <div style={{ color: '#64748B', marginTop: '4px', fontSize: '11px', fontStyle: 'italic' }}>
-                  GSTIN: Unregistered (No GST Registered)
                 </div>
               )}
               {company?.phone && !isPurchase && (
@@ -405,11 +402,42 @@ ${printTarget.outerHTML}
                 {isPurchase ? (company?.company_name || 'ENTERPRISE') : (voucher.party_name || 'Cash Customer / Counter Sale')}
               </div>
               <div style={{ color: '#555F73', fontSize: '11px', marginTop: '2px' }}>
-                {isPurchase ? (company?.address_line1 || 'Chennai, Tamil Nadu') : (voucher.address_line1 || voucher.city || 'Counter Sale / Over-the-counter')}
+                {(() => {
+                  if (isPurchase) return company?.address_line1 || (company?.city ? `City: ${company.city}` : 'Chennai, Tamil Nadu');
+                  const addr = (voucher.address_line1 || '').trim();
+                  const city = (voucher.city || '').trim();
+                  const isGenericOrBlank = !addr || [
+                    'main business address',
+                    'main address',
+                    'main office',
+                    'counter sale',
+                    'counter sale / over-the-counter',
+                    'n/a',
+                    'na',
+                    'nil',
+                    'none',
+                    '-',
+                    '.'
+                  ].includes(addr.toLowerCase());
+
+                  if (!isGenericOrBlank) {
+                    return addr;
+                  }
+                  if (city) {
+                    return `City: ${city}`;
+                  }
+                  if (voucher.state) {
+                    return `State: ${voucher.state}`;
+                  }
+                  return '';
+                })()}
               </div>
-              <div style={{ marginTop: '4px', fontSize: '11px' }}>
-                <strong>GSTIN:</strong> <span style={{ fontFamily: 'var(--font-mono)' }}>{isPurchase ? (company?.gstin || 'URP') : (voucher.party_gstin || 'URP / Consumer')}</span>
-              </div>
+              {((isPurchase ? company?.gstin : voucher.party_gstin) &&
+                !['URP', 'UNREGISTERED', 'N/A', 'CONSUMER', ''].includes(String(isPurchase ? company?.gstin : voucher.party_gstin).toUpperCase().trim())) && (
+                <div style={{ marginTop: '4px', fontSize: '11px' }}>
+                  <strong>GSTIN:</strong> <span style={{ fontFamily: 'var(--font-mono)' }}>{isPurchase ? company?.gstin : voucher.party_gstin}</span>
+                </div>
+              )}
             </div>
 
             <div style={{ padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
@@ -420,7 +448,28 @@ ${printTarget.outerHTML}
                 {voucher.party_name || 'Same as Buyer'}
               </div>
               <div style={{ color: '#555F73', fontSize: '11px', marginTop: '2px' }}>
-                {voucher.narration || (isPurchase ? 'Warehouse Inward Movement' : 'Same as Billing Address')}
+                {(() => {
+                  if (isPurchase) return voucher.narration || 'Warehouse Inward Movement';
+                  const addr = (voucher.address_line1 || '').trim();
+                  const city = (voucher.city || '').trim();
+                  const isGenericOrBlank = !addr || [
+                    'main business address',
+                    'main address',
+                    'main office',
+                    'counter sale',
+                    'counter sale / over-the-counter',
+                    'n/a',
+                    'na',
+                    'nil',
+                    'none',
+                    '-',
+                    '.'
+                  ].includes(addr.toLowerCase());
+
+                  if (!isGenericOrBlank) return 'Same as Billing Address';
+                  if (city) return `City: ${city}`;
+                  return 'Same as Billing Address';
+                })()}
               </div>
               <div style={{ marginTop: '4px', fontSize: '11px' }}>
                 <strong>State:</strong> {voucher.state || company?.state || 'Tamil Nadu'} (Code: {voucher.state_code || company?.state_code || '33'})
@@ -429,7 +478,7 @@ ${printTarget.outerHTML}
           </div>
 
           {/* Item Table: HSN/SAC, Quantity, Rate, Discount, Taxable Value, GST */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px', fontSize: '11.5px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', fontSize: '11.5px' }}>
             <thead>
               <tr style={{ backgroundColor: '#F8FAFC', borderTop: '1px solid #121B2E', borderBottom: '1px solid #121B2E' }}>
                 <th style={{ padding: '7px 8px', textAlign: 'center', width: '30px' }}>#</th>
@@ -464,13 +513,13 @@ ${printTarget.outerHTML}
                       </td>
                       <td style={{ padding: '7px 8px', fontFamily: 'var(--font-mono)' }}>{l.hsn_sac || l.hsnSac || '85044029'}</td>
                       <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
-                        {Number(l.quantity || 1).toFixed(2)} {l.unit_symbol || l.unit || 'Nos'}
+                        {Number(l.quantity || 1).toFixed(2)} {l.unit_symbol || l.unit || 'NOS'}
                       </td>
                       <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
                         {unitPrice.toFixed(2)}
                       </td>
                       <td style={{ padding: '7px 8px', textAlign: 'center', color: '#64748B' }}>
-                        {l.unit_symbol || l.unit || 'Nos'}
+                        {l.unit_symbol || l.unit || 'NOS'}
                       </td>
                       <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
                         {taxableVal.toFixed(2)}
@@ -517,36 +566,35 @@ ${printTarget.outerHTML}
             </div>
 
             {/* Tax Summary Box */}
-            <div style={{ border: '1px solid #E2E8F0', borderRadius: '4px', padding: '12px 14px', fontSize: '11.5px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span style={{ color: '#64748B' }}>Taxable Value:</span>
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: '4px', padding: '12px 14px', fontSize: '11.5px', backgroundColor: '#FAFAFA' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '7px' }}>
+                <span style={{ color: '#475569', fontWeight: 600 }}>Tax Exclusive Amount:</span>
                 <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                  ₹{((voucher.taxable_amount_paise || 0) / 100).toFixed(2)}
+                  ₹{((voucher.taxable_amount_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
-              {voucher.cgst_amount_paise > 0 && (
+              {voucher.igst_amount_paise > 0 ? (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span style={{ color: '#64748B' }}>CGST:</span>
+                  <span style={{ color: '#475569' }}>IGST:</span>
                   <span style={{ fontFamily: 'var(--font-mono)' }}>
-                    ₹{((voucher.cgst_amount_paise || 0) / 100).toFixed(2)}
+                    ₹{((voucher.igst_amount_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
-              )}
-              {voucher.sgst_amount_paise > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span style={{ color: '#64748B' }}>SGST:</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>
-                    ₹{((voucher.sgst_amount_paise || 0) / 100).toFixed(2)}
-                  </span>
-                </div>
-              )}
-              {voucher.igst_amount_paise > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span style={{ color: '#64748B' }}>IGST:</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>
-                    ₹{((voucher.igst_amount_paise || 0) / 100).toFixed(2)}
-                  </span>
-                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ color: '#475569' }}>CGST:</span>
+                    <span style={{ fontFamily: 'var(--font-mono)' }}>
+                      ₹{((voucher.cgst_amount_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ color: '#475569' }}>SGST:</span>
+                    <span style={{ fontFamily: 'var(--font-mono)' }}>
+                      ₹{((voucher.sgst_amount_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </>
               )}
               {voucher.round_off_paise !== 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
@@ -556,10 +604,10 @@ ${printTarget.outerHTML}
                   </span>
                 </div>
               )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #121B2E', paddingTop: '8px', marginTop: '8px', fontWeight: 700, fontSize: '15px' }}>
-                <span>Invoice Total:</span>
-                <span style={{ fontFamily: 'var(--font-mono)', color: '#121B2E' }}>
-                  ₹{((voucher.total_amount_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #0F172A', paddingTop: '8px', marginTop: '8px', fontWeight: 700, fontSize: '15px' }}>
+                <span style={{ color: '#0F172A' }}>Total:</span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
+                  ₹{((voucher.total_amount_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
@@ -590,6 +638,7 @@ ${printTarget.outerHTML}
         /* Thermal Slip Preview */
         <div
           id="printable-tax-invoice"
+          className="print-area"
           style={{
             width: '380px',
             backgroundColor: '#FFFFFF',
@@ -605,10 +654,8 @@ ${printTarget.outerHTML}
         >
           <div style={{ textAlign: 'center', marginBottom: '12px', borderBottom: '1px dashed #94A3B8', paddingBottom: '8px' }}>
             <div style={{ fontSize: '14px', fontWeight: 700 }}>{company?.company_name || 'TAX INVOICE'}</div>
-            {hasGstin ? (
+            {hasGstin && (
               <div style={{ fontSize: '10px' }}>GSTIN: {isPurchase ? voucher.party_gstin : company?.gstin}</div>
-            ) : (
-              <div style={{ fontSize: '10px', color: '#64748B' }}>GSTIN: Unregistered</div>
             )}
             <div style={{ fontSize: '11px', fontWeight: 700, marginTop: '4px' }}>
               {isPurchase ? 'PURCHASE VOUCHER' : 'TAX INVOICE'}
@@ -618,6 +665,14 @@ ${printTarget.outerHTML}
           <div style={{ marginBottom: '10px', fontSize: '10.5px' }}>
             <div>Inv: <strong>{voucher.voucher_number}</strong> | {voucher.voucher_date}</div>
             <div>Party: <strong>{voucher.party_name || 'Counter Sale'}</strong></div>
+            {(() => {
+              const addr = (voucher.address_line1 || '').trim();
+              const city = (voucher.city || '').trim();
+              const isGeneric = !addr || ['main business address', 'n/a', 'nil', '-', 'counter sale'].includes(addr.toLowerCase());
+              if (!isGeneric) return <div>Addr: {addr}</div>;
+              if (city) return <div>City: {city}</div>;
+              return null;
+            })()}
           </div>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px', fontSize: '10.5px' }}>
@@ -641,13 +696,32 @@ ${printTarget.outerHTML}
 
           <div style={{ borderTop: '1px dashed #94A3B8', paddingTop: '6px', marginBottom: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Taxable:</span>
+              <span>Tax Exclusive Amt:</span>
               <span>₹{((voucher.taxable_amount_paise || 0) / 100).toFixed(2)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>GST Total:</span>
-              <span>₹{(((voucher.cgst_amount_paise || 0) + (voucher.sgst_amount_paise || 0) + (voucher.igst_amount_paise || 0)) / 100).toFixed(2)}</span>
-            </div>
+            {voucher.igst_amount_paise > 0 ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>IGST:</span>
+                <span>₹{((voucher.igst_amount_paise || 0) / 100).toFixed(2)}</span>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>CGST:</span>
+                  <span>₹{((voucher.cgst_amount_paise || 0) / 100).toFixed(2)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>SGST:</span>
+                  <span>₹{((voucher.sgst_amount_paise || 0) / 100).toFixed(2)}</span>
+                </div>
+              </>
+            )}
+            {voucher.round_off_paise !== 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Round Off:</span>
+                <span>{voucher.round_off_paise < 0 ? `(-)₹${(Math.abs(voucher.round_off_paise) / 100).toFixed(2)}` : `₹${(voucher.round_off_paise / 100).toFixed(2)}`}</span>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '13px', marginTop: '4px' }}>
               <span>Total:</span>
               <span>₹{((voucher.total_amount_paise || 0) / 100).toFixed(2)}</span>

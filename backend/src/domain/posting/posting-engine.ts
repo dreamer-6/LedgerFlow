@@ -42,6 +42,7 @@ export interface CreateVoucherInput {
   partyId?: string;
   narration?: string;
   lines: CreateVoucherLineInput[];
+  status?: 'DRAFT' | 'POSTED';
   // For financial vouchers (Receipt, Payment, Contra, Journal)
   customLedgerLines?: LedgerPostingLine[];
   // Bill allocation settlement
@@ -145,6 +146,7 @@ export class PostingEngine {
     voucherId: string;
     voucherNumber: string;
     totalAmountPaise: number;
+    status: 'DRAFT' | 'POSTED';
   } {
     // 1. Basic Validations
     const fy = db.prepare('SELECT status, start_date, end_date FROM financial_years WHERE fy_id = ?')
@@ -317,50 +319,55 @@ export class PostingEngine {
       return possibleIds[0];
     };
 
-    if (input.customLedgerLines && input.customLedgerLines.length > 0) {
-      ledgerLines = input.customLedgerLines;
-    } else if (input.voucherType === 'SALES') {
-      if (!partyLedgerId) throw new Error('Party (Customer) is mandatory for Sales voucher.');
-      ledgerLines = DoubleEntryEngine.buildSalesEntries({
-        customerLedgerId: partyLedgerId,
-        salesLedgerId: findLedgerId(['led_sales'], '%Sales%'),
-        taxableAmountPaise: voucherTotals.taxableAmountPaise,
-        cgstAmountPaise: voucherTotals.cgstAmountPaise,
-        sgstAmountPaise: voucherTotals.sgstAmountPaise,
-        igstAmountPaise: voucherTotals.igstAmountPaise,
-        roundOffPaise: voucherTotals.roundOffPaise,
-        totalAmountPaise: voucherTotals.totalAmountPaise,
-        outputCgstLedgerId: findLedgerId(['led_out_cgst', 'led_output_cgst'], '%Output CGST%'),
-        outputSgstLedgerId: findLedgerId(['led_out_sgst', 'led_output_sgst'], '%Output SGST%'),
-        outputIgstLedgerId: findLedgerId(['led_out_igst', 'led_output_igst'], '%Output IGST%'),
-        roundOffLedgerId: findLedgerId(['led_roundoff', 'led_round_off'], '%Round Off%'),
-        cogsAmountPaise,
-        cogsLedgerId: findLedgerId(['led_cogs'], '%Cost of Goods%'),
-        inventoryLedgerId: findLedgerId(['led_inventory'], '%Inventory%')
-      });
-    } else if (input.voucherType === 'PURCHASE') {
-      if (!partyLedgerId) throw new Error('Party (Supplier) is mandatory for Purchase voucher.');
-      ledgerLines = DoubleEntryEngine.buildPurchaseEntries({
-        supplierLedgerId: partyLedgerId,
-        purchaseLedgerId: findLedgerId(['led_purchase'], '%Purchase%'),
-        taxableAmountPaise: voucherTotals.taxableAmountPaise,
-        cgstAmountPaise: voucherTotals.cgstAmountPaise,
-        sgstAmountPaise: voucherTotals.sgstAmountPaise,
-        igstAmountPaise: voucherTotals.igstAmountPaise,
-        roundOffPaise: voucherTotals.roundOffPaise,
-        totalAmountPaise: voucherTotals.totalAmountPaise,
-        inputCgstLedgerId: findLedgerId(['led_in_cgst', 'led_input_cgst'], '%Input CGST%'),
-        inputSgstLedgerId: findLedgerId(['led_in_sgst', 'led_input_sgst'], '%Input SGST%'),
-        inputIgstLedgerId: findLedgerId(['led_in_igst', 'led_input_igst'], '%Input IGST%'),
-        roundOffLedgerId: findLedgerId(['led_roundoff', 'led_round_off'], '%Round Off%')
-      });
-    }
+    const voucherStatus: 'DRAFT' | 'POSTED' = input.status === 'DRAFT' ? 'DRAFT' : 'POSTED';
+    const isPosted = voucherStatus === 'POSTED';
 
-    // 4. Validate Fundamental Double-Entry Invariant
-    if (ledgerLines.length > 0) {
-      const balanceCheck = DoubleEntryEngine.validateBalancedEntries(ledgerLines);
-      if (!balanceCheck.isValid) {
-        throw new Error(balanceCheck.errorMessage);
+    if (isPosted) {
+      if (input.customLedgerLines && input.customLedgerLines.length > 0) {
+        ledgerLines = input.customLedgerLines;
+      } else if (input.voucherType === 'SALES') {
+        if (!partyLedgerId) throw new Error('Party (Customer) is mandatory for Sales voucher.');
+        ledgerLines = DoubleEntryEngine.buildSalesEntries({
+          customerLedgerId: partyLedgerId,
+          salesLedgerId: findLedgerId(['led_sales'], '%Sales%'),
+          taxableAmountPaise: voucherTotals.taxableAmountPaise,
+          cgstAmountPaise: voucherTotals.cgstAmountPaise,
+          sgstAmountPaise: voucherTotals.sgstAmountPaise,
+          igstAmountPaise: voucherTotals.igstAmountPaise,
+          roundOffPaise: voucherTotals.roundOffPaise,
+          totalAmountPaise: voucherTotals.totalAmountPaise,
+          outputCgstLedgerId: findLedgerId(['led_out_cgst', 'led_output_cgst'], '%Output CGST%'),
+          outputSgstLedgerId: findLedgerId(['led_out_sgst', 'led_output_sgst'], '%Output SGST%'),
+          outputIgstLedgerId: findLedgerId(['led_out_igst', 'led_output_igst'], '%Output IGST%'),
+          roundOffLedgerId: findLedgerId(['led_roundoff', 'led_round_off'], '%Round Off%'),
+          cogsAmountPaise,
+          cogsLedgerId: findLedgerId(['led_cogs'], '%Cost of Goods%'),
+          inventoryLedgerId: findLedgerId(['led_inventory'], '%Inventory%')
+        });
+      } else if (input.voucherType === 'PURCHASE') {
+        if (!partyLedgerId) throw new Error('Party (Supplier) is mandatory for Purchase voucher.');
+        ledgerLines = DoubleEntryEngine.buildPurchaseEntries({
+          supplierLedgerId: partyLedgerId,
+          purchaseLedgerId: findLedgerId(['led_purchase'], '%Purchase%'),
+          taxableAmountPaise: voucherTotals.taxableAmountPaise,
+          cgstAmountPaise: voucherTotals.cgstAmountPaise,
+          sgstAmountPaise: voucherTotals.sgstAmountPaise,
+          igstAmountPaise: voucherTotals.igstAmountPaise,
+          roundOffPaise: voucherTotals.roundOffPaise,
+          totalAmountPaise: voucherTotals.totalAmountPaise,
+          inputCgstLedgerId: findLedgerId(['led_in_cgst', 'led_input_cgst'], '%Input CGST%'),
+          inputSgstLedgerId: findLedgerId(['led_in_sgst', 'led_input_sgst'], '%Input SGST%'),
+          inputIgstLedgerId: findLedgerId(['led_in_igst', 'led_input_igst'], '%Input IGST%'),
+          roundOffLedgerId: findLedgerId(['led_roundoff', 'led_round_off'], '%Round Off%')
+        });
+      }
+
+      // 4. Validate Fundamental Double-Entry Invariant
+      if (ledgerLines.length > 0) {
+        const balanceCheck = DoubleEntryEngine.validateBalancedEntries(ledgerLines);
+        if (!balanceCheck.isValid) {
+          throw new Error(balanceCheck.errorMessage);
+        }
       }
     }
 
@@ -384,14 +391,14 @@ export class PostingEngine {
         ) VALUES (
           ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?,
-          ?, ?, 'POSTED',
+          ?, ?, ?,
           ?, ?, ?, ?,
           ?, ?, ?
         )
       `).run(
         voucherId, input.companyId, fyId, input.voucherType, voucherNumber,
         input.voucherDate, referenceNumber, referenceDate, paymentMode, termsConditions,
-        input.partyId || null, input.narration || null,
+        input.partyId || null, input.narration || null, voucherStatus,
         voucherTotals.taxableAmountPaise, voucherTotals.cgstAmountPaise, voucherTotals.sgstAmountPaise, voucherTotals.igstAmountPaise,
         voucherTotals.roundOffPaise, finalVoucherTotal, input.createdBy || 'admin'
       );
@@ -421,7 +428,7 @@ export class PostingEngine {
           pl.lineInput.serialNumber || null
         );
 
-        if (pl.lineInput.itemId && pl.lineInput.serialNumber) {
+        if (isPosted && pl.lineInput.itemId && pl.lineInput.serialNumber) {
           const s = pl.lineInput.serialNumber.trim();
           if (input.voucherType === 'SALES' || input.voucherType === 'PURCHASE_RETURN') {
             db.prepare(`UPDATE stock_item_serials SET status = 'SOLD' WHERE item_id = ? AND serial_number = ?`).run(pl.lineInput.itemId, s);
@@ -432,90 +439,92 @@ export class PostingEngine {
         }
       }
 
-      // C. Insert Ledger Entries
-      for (const le of ledgerLines) {
-        const entryId = 'le_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-        db.prepare(`
-          INSERT INTO ledger_entries (
-            entry_id, voucher_id, ledger_id, entry_date, debit_paise, credit_paise, particulars
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          entryId, voucherId, le.ledgerId, input.voucherDate,
-          le.debitPaise, le.creditPaise, le.particulars || null
-        );
-      }
-
-      // D. Insert Stock Entries
-      for (const se of stockMovements) {
-        const stockEntryId = 'se_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-        const validGodownId = resolveValidGodownId(se.godownId);
-        db.prepare(`
-          INSERT INTO stock_entries (
-            stock_entry_id, voucher_id, item_id, godown_id, entry_date,
-            movement_type, quantity, rate_paise, value_paise
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          stockEntryId, voucherId, se.itemId, validGodownId, input.voucherDate,
-          se.movementType, se.quantity, se.ratePaise, se.valuePaise
-        );
-      }
-
-      // E. Insert Statutory Tax Entries
-      if (voucherTotals.cgstAmountPaise > 0) {
-        const taxType = input.voucherType === 'PURCHASE' ? 'INPUT_CGST' : 'OUTPUT_CGST';
-        db.prepare(`
-          INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          'te_' + Date.now().toString(36) + '1', voucherId, taxType, 9.00,
-          voucherTotals.taxableAmountPaise, voucherTotals.cgstAmountPaise, placeOfSupplyStateCode
-        );
-      }
-
-      if (voucherTotals.sgstAmountPaise > 0) {
-        const taxType = input.voucherType === 'PURCHASE' ? 'INPUT_SGST' : 'OUTPUT_SGST';
-        db.prepare(`
-          INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          'te_' + Date.now().toString(36) + '2', voucherId, taxType, 9.00,
-          voucherTotals.taxableAmountPaise, voucherTotals.sgstAmountPaise, placeOfSupplyStateCode
-        );
-      }
-
-      if (voucherTotals.igstAmountPaise > 0) {
-        const taxType = input.voucherType === 'PURCHASE' ? 'INPUT_IGST' : 'OUTPUT_IGST';
-        db.prepare(`
-          INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          'te_' + Date.now().toString(36) + '3', voucherId, taxType, 18.00,
-          voucherTotals.taxableAmountPaise, voucherTotals.igstAmountPaise, placeOfSupplyStateCode
-        );
-      }
-
-      // F. Bill-Wise Allocations
-      if (partyLedgerId && finalVoucherTotal > 0) {
-        const allocId = 'ba_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-        const allocType = input.billAllocation?.allocationType || 'NEW_REF';
-        let refVoucher = voucherId;
-
-        if (allocType === 'AGAINST_REF' && input.billAllocation?.referenceVoucherId) {
-          const refExists = db.prepare(`SELECT voucher_id FROM vouchers WHERE voucher_id = ?`).get(input.billAllocation.referenceVoucherId);
-          if (refExists) {
-            refVoucher = input.billAllocation.referenceVoucherId;
-          }
+      if (isPosted) {
+        // C. Insert Ledger Entries
+        for (const le of ledgerLines) {
+          const entryId = 'le_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+          db.prepare(`
+            INSERT INTO ledger_entries (
+              entry_id, voucher_id, ledger_id, entry_date, debit_paise, credit_paise, particulars
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            entryId, voucherId, le.ledgerId, input.voucherDate,
+            le.debitPaise, le.creditPaise, le.particulars || null
+          );
         }
 
-        db.prepare(`
-          INSERT INTO bill_allocations (
-            allocation_id, voucher_id, ledger_id, reference_voucher_id,
-            allocation_type, amount_paise, due_date
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          allocId, voucherId, partyLedgerId, refVoucher,
-          allocType, finalVoucherTotal, input.billAllocation?.dueDate || null
-        );
+        // D. Insert Stock Entries
+        for (const se of stockMovements) {
+          const stockEntryId = 'se_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+          const validGodownId = resolveValidGodownId(se.godownId);
+          db.prepare(`
+            INSERT INTO stock_entries (
+              stock_entry_id, voucher_id, item_id, godown_id, entry_date,
+              movement_type, quantity, rate_paise, value_paise
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            stockEntryId, voucherId, se.itemId, validGodownId, input.voucherDate,
+            se.movementType, se.quantity, se.ratePaise, se.valuePaise
+          );
+        }
+
+        // E. Insert Statutory Tax Entries
+        if (voucherTotals.cgstAmountPaise > 0) {
+          const taxType = input.voucherType === 'PURCHASE' ? 'INPUT_CGST' : 'OUTPUT_CGST';
+          db.prepare(`
+            INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            'te_' + Date.now().toString(36) + '1', voucherId, taxType, 9.00,
+            voucherTotals.taxableAmountPaise, voucherTotals.cgstAmountPaise, placeOfSupplyStateCode
+          );
+        }
+
+        if (voucherTotals.sgstAmountPaise > 0) {
+          const taxType = input.voucherType === 'PURCHASE' ? 'INPUT_SGST' : 'OUTPUT_SGST';
+          db.prepare(`
+            INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            'te_' + Date.now().toString(36) + '2', voucherId, taxType, 9.00,
+            voucherTotals.taxableAmountPaise, voucherTotals.sgstAmountPaise, placeOfSupplyStateCode
+          );
+        }
+
+        if (voucherTotals.igstAmountPaise > 0) {
+          const taxType = input.voucherType === 'PURCHASE' ? 'INPUT_IGST' : 'OUTPUT_IGST';
+          db.prepare(`
+            INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            'te_' + Date.now().toString(36) + '3', voucherId, taxType, 18.00,
+            voucherTotals.taxableAmountPaise, voucherTotals.igstAmountPaise, placeOfSupplyStateCode
+          );
+        }
+
+        // F. Bill-Wise Allocations
+        if (partyLedgerId && finalVoucherTotal > 0) {
+          const allocId = 'ba_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+          const allocType = input.billAllocation?.allocationType || 'NEW_REF';
+          let refVoucher = voucherId;
+
+          if (allocType === 'AGAINST_REF' && input.billAllocation?.referenceVoucherId) {
+            const refExists = db.prepare(`SELECT voucher_id FROM vouchers WHERE voucher_id = ?`).get(input.billAllocation.referenceVoucherId);
+            if (refExists) {
+              refVoucher = input.billAllocation.referenceVoucherId;
+            }
+          }
+
+          db.prepare(`
+            INSERT INTO bill_allocations (
+              allocation_id, voucher_id, ledger_id, reference_voucher_id,
+              allocation_type, amount_paise, due_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            allocId, voucherId, partyLedgerId, refVoucher,
+            allocType, finalVoucherTotal, input.billAllocation?.dueDate || null
+          );
+        }
       }
 
       // G. Audit Log Entry
@@ -526,12 +535,13 @@ export class PostingEngine {
         'aud_' + Date.now().toString(36),
         input.companyId,
         input.createdBy || 'admin',
-        `POST_${input.voucherType}`,
+        isPosted ? `POST_${input.voucherType}` : `DRAFT_${input.voucherType}`,
         voucherId,
         JSON.stringify({
           voucherNumber,
           totalAmountPaise: finalVoucherTotal,
-          linesCount: input.lines.length
+          linesCount: input.lines.length,
+          status: voucherStatus
         })
       );
 
@@ -540,7 +550,8 @@ export class PostingEngine {
       return {
         voucherId,
         voucherNumber,
-        totalAmountPaise: finalVoucherTotal
+        totalAmountPaise: finalVoucherTotal,
+        status: voucherStatus
       };
     } catch (err: any) {
       db.exec('ROLLBACK;');
