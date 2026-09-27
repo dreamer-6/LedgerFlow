@@ -46,25 +46,27 @@ export const LogoGlyph: React.FC<{ size?: number; className?: string }> = ({ siz
       className={className}
       style={{ display: 'block', flexShrink: 0 }}
     >
-      <rect width="32" height="32" rx="7" fill="#0F172A" />
+      <rect width="32" height="32" rx="8" fill="#FF7A00" />
       <path
         d="M9 7V23C9 24.1046 9.89543 25 11 25H23"
-        stroke="#0B84F3"
+        stroke="#FFFFFF"
         strokeWidth="3.2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <path
         d="M16 11H23"
-        stroke="#22B8CF"
+        stroke="#FFFFFF"
         strokeWidth="2.8"
         strokeLinecap="round"
+        strokeOpacity="0.9"
       />
       <path
         d="M16 16.5H21"
-        stroke="#10B981"
+        stroke="#FFFFFF"
         strokeWidth="2.8"
         strokeLinecap="round"
+        strokeOpacity="0.75"
       />
     </svg>
   );
