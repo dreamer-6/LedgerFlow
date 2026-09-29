@@ -1,29 +1,40 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import { BusinessService } from '../services/business.service.js';
-import { getUserFromToken, resolveCompanyId } from '../api/routes.js'; // Will move later
+import { SecureRequest } from '../middleware/security.js';
+import bcrypt from 'bcryptjs';
 
 export class BusinessController {
   constructor(private db: DatabaseSync) {}
 
-  getBusinesses = (req: Request, res: Response) => {
+  /**
+   * GET /businesses
+   * Returns businesses the authenticated user is a member of.
+   * Requires: authenticate (no company context needed)
+   */
+  getBusinesses = (req: SecureRequest, res: Response) => {
     try {
-      const user = getUserFromToken(req);
-      const businesses = BusinessService.getBusinesses(this.db, user?.userId, user?.role);
+      if (!req.user?.userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      const businesses = BusinessService.getBusinesses(this.db, req.user.userId);
       res.json(businesses);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   };
 
-  createBusiness = (req: Request, res: Response) => {
+  /**
+   * POST /businesses
+   * Creates a new isolated business for the authenticated user.
+   * Requires: authenticate
+   */
+  createBusiness = (req: SecureRequest, res: Response) => {
     try {
-      const user = getUserFromToken(req);
-      if (!user?.userId) {
+      if (!req.user?.userId) {
         return res.status(401).json({ error: 'Authentication required to create a new business.' });
       }
-
-      const company = BusinessService.createBusiness(this.db, user.userId, req.body);
+      const company = BusinessService.createBusiness(this.db, req.user.userId, req.body);
       res.status(201).json({
         company,
         message: 'Business created and isolated accounting initialized successfully.'
@@ -37,41 +48,47 @@ export class BusinessController {
     }
   };
 
-  getCurrentCompanyInfo = (req: Request, res: Response) => {
+  /**
+   * GET /companies/current
+   * Requires: authenticate + resolveCompanyContext
+   */
+  getCurrentCompanyInfo = (req: SecureRequest, res: Response) => {
     try {
-      const user = getUserFromToken(req);
-      const companyId = resolveCompanyId(req, this.db, user);
-      if (!companyId) {
+      if (!req.companyId) {
         return res.json({ company: null, activeFinancialYear: null });
       }
-      
-      const info = BusinessService.getCurrentCompanyInfo(this.db, companyId);
+      const info = BusinessService.getCurrentCompanyInfo(this.db, req.companyId);
       res.json(info);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   };
 
-  updateCurrentCompany = (req: Request, res: Response) => {
+  /**
+   * PUT /companies/current
+   * Requires: authenticate + resolveCompanyContext + ADMIN
+   */
+  updateCurrentCompany = (req: SecureRequest, res: Response) => {
     try {
-      const user = getUserFromToken(req);
-      const companyId = resolveCompanyId(req, this.db, user);
-      const targetId = req.body.company_id || companyId;
-      if (!targetId) {
+      if (!req.companyId) {
         return res.status(400).json({ error: 'No company selected to update.' });
       }
-
-      BusinessService.updateCurrentCompany(this.db, targetId, req.body);
+      // Use the server-resolved companyId — never trust req.body.company_id
+      BusinessService.updateCurrentCompany(this.db, req.companyId, req.body);
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   };
 
-  deleteCompany = (req: Request, res: Response) => {
+  /**
+   * POST /companies/:id/delete
+   * Requires: authenticate (password re-entry provides additional verification)
+   * The user must have OWNER membership in the target company.
+   */
+  deleteCompany = (req: SecureRequest, res: Response) => {
     try {
-      const user = getUserFromToken(req);
-      if (!user?.userId) {
+      if (!req.user?.userId) {
         return res.status(401).json({ error: 'Authentication required to delete company.' });
       }
 
@@ -80,65 +97,87 @@ export class BusinessController {
         return res.status(400).json({ error: 'Account password is required to verify company deletion.' });
       }
 
-      // We should ideally call AuthService for this but for now we duplicate the simple check
-      const bcrypt = require('bcryptjs');
-      const dbUser = this.db.prepare('SELECT user_id, password_hash FROM users WHERE user_id = ?').get(user.userId) as any;
+      const dbUser = this.db.prepare('SELECT user_id, password_hash FROM users WHERE user_id = ?').get(req.user.userId) as any;
       if (!dbUser || !bcrypt.compareSync(password, dbUser.password_hash)) {
         return res.status(401).json({ error: 'Incorrect account password. Company deletion rejected.' });
       }
 
       const targetCompanyId = req.params.id;
-      const result = BusinessService.deleteCompany(this.db, user.userId, targetCompanyId);
+
+      // Verify OWNER membership before allowing deletion
+      const membership = this.db.prepare(
+        "SELECT role FROM user_businesses WHERE user_id = ? AND company_id = ? AND role = 'OWNER'"
+      ).get(req.user.userId, targetCompanyId) as any;
+
+      if (!membership) {
+        return res.status(403).json({ error: 'Forbidden: Only company OWNER can delete this business.' });
+      }
+
+      const result = BusinessService.deleteCompany(this.db, req.user.userId, targetCompanyId);
       res.json(result);
     } catch (err: any) {
       if (err.message.includes('permission')) {
-         res.status(403).json({ error: err.message });
+        res.status(403).json({ error: err.message });
       } else {
-         res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message });
       }
     }
   };
 
-  getFinancialYears = (req: Request, res: Response) => {
+  /**
+   * GET /financial-years
+   * Requires: authenticate + resolveCompanyContext
+   */
+  getFinancialYears = (req: SecureRequest, res: Response) => {
     try {
-      const user = getUserFromToken(req);
-      const companyId = resolveCompanyId(req, this.db, user);
-      if (!companyId) return res.json([]);
-      
-      const fys = BusinessService.getFinancialYears(this.db, companyId);
+      if (!req.companyId) return res.json([]);
+      const fys = BusinessService.getFinancialYears(this.db, req.companyId);
       res.json(fys);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   };
 
-  createFinancialYear = (req: Request, res: Response) => {
+  /**
+   * POST /financial-years
+   * Requires: authenticate + resolveCompanyContext + ADMIN
+   */
+  createFinancialYear = (req: SecureRequest, res: Response) => {
     try {
-      const user = getUserFromToken(req);
-      const targetCompanyId = req.body.companyId || resolveCompanyId(req, this.db, user);
-      if (!targetCompanyId) {
+      if (!req.companyId) {
         return res.status(400).json({ error: 'No company selected for financial year creation.' });
       }
-
-      const fy = BusinessService.createFinancialYear(this.db, targetCompanyId, req.body);
+      // Use server-resolved companyId — never trust req.body.companyId
+      const fy = BusinessService.createFinancialYear(this.db, req.companyId, req.body);
       res.status(201).json(fy);
     } catch (err: any) {
       if (err.message.includes('required')) {
-         res.status(400).json({ error: err.message });
+        res.status(400).json({ error: err.message });
       } else {
-         res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message });
       }
     }
   };
 
-  updateFinancialYearStatus = (req: Request, res: Response) => {
+  /**
+   * PUT /financial-years/:fyId
+   * Requires: authenticate + resolveCompanyContext + ADMIN
+   */
+  updateFinancialYearStatus = (req: SecureRequest, res: Response) => {
     try {
-      const user = getUserFromToken(req);
-      const companyId = resolveCompanyId(req, this.db, user);
+      if (!req.companyId) {
+        return res.status(400).json({ error: 'No company context.' });
+      }
       const { fyId } = req.params;
       const { status } = req.body;
 
-      const updated = BusinessService.updateFinancialYearStatus(this.db, companyId, fyId, status);
+      // Verify the financial year belongs to this company
+      const fy = this.db.prepare('SELECT fy_id FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, req.companyId) as any;
+      if (!fy) {
+        return res.status(404).json({ error: 'Financial year not found for this company.' });
+      }
+
+      const updated = BusinessService.updateFinancialYearStatus(this.db, req.companyId, fyId, status);
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
