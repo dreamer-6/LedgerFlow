@@ -293,7 +293,7 @@ export function createApiRouter(db: DatabaseSync): Router {
           if (currentBal && Math.round(Number(openingBalancePaise)) !== Number(currentBal.opening_balance_paise)) {
             const txCount = (db.prepare('SELECT COUNT(*) as cnt FROM ledger_entries WHERE ledger_id = ?').get(party.ledger_id) as any)?.cnt || 0;
             const vchCount = (db.prepare('SELECT COUNT(*) as cnt FROM vouchers WHERE party_id = ?').get(partyId) as any)?.cnt || 0;
-            const closedFy = db.prepare('SELECT 1 FROM financial_years WHERE company_id = ? AND status = "CLOSED" LIMIT 1').get(req.companyId!);
+            const closedFy = db.prepare('SELECT 1 FROM financial_years WHERE company_id = ? AND status = ? LIMIT 1').get(req.companyId!, 'CLOSED');
             if (txCount > 0 || vchCount > 0 || closedFy) {
               db.exec('ROLLBACK;');
               return res.status(400).json({

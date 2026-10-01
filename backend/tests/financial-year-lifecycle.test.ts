@@ -296,7 +296,7 @@ async function runTestSuite() {
         'x-company-id': companyA
       },
       body: JSON.stringify({
-        name: 'FY 2026-27',
+        name: '2026-2027',
         startDate: '2028-04-01',
         endDate: '2029-03-31'
       })
@@ -378,7 +378,7 @@ async function runTestSuite() {
     assert.strictEqual(crashCount, 0, `Zero 500 crashes permitted, got ${crashCount}`);
 
     // Verify DB state has exactly one record covering 2028-04-01
-    const dbFys = testDb.prepare('SELECT COUNT(*) as cnt FROM financial_years WHERE company_id = ? AND start_date = "2028-04-01"').get(companyA) as any;
+    const dbFys = testDb.prepare('SELECT COUNT(*) as cnt FROM financial_years WHERE company_id = ? AND start_date = ?').get(companyA, '2028-04-01') as any;
     assert.strictEqual(dbFys.cnt, 1, 'Database must contain exactly 1 financial year for 2028-04-01');
   });
 
@@ -405,6 +405,18 @@ async function runTestSuite() {
     INSERT INTO stock_items (item_id, company_id, item_name, unit_id, hsn_sac, purchase_rate_paise, selling_rate_paise, opening_qty, opening_rate_paise)
     VALUES (?, ?, 'Business Laptop', '${companyA}_unit_nos', '84713010', 5000000, 6500000, 20, 5000000)
   `).run(itemId, companyA);
+
+  const fy2526Setup = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = ?').get(companyA, 'FY 2025-26') as any;
+  PostingEngine.recordOpeningStock(testDb, {
+    companyId: companyA,
+    itemId,
+    itemName: 'Business Laptop',
+    quantity: 20,
+    ratePaise: 5000000,
+    godownId: `${companyA}_godown_main`,
+    fyId: fy2526Setup.fy_id,
+    date: '2025-04-01'
+  });
 
   await test('TEST_FY_04: Voucher date auto-resolves to matching FY strictly', async () => {
     // 1. Post voucher in FY 2025-26 (date: 2025-06-15)
@@ -434,7 +446,7 @@ async function runTestSuite() {
 
     // Verify DB voucher has fy_id pointing to FY 2025-26
     const row1 = testDb.prepare('SELECT fy_id FROM vouchers WHERE voucher_id = ?').get(body1.voucherId) as any;
-    const fy2526 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = "FY 2025-26"').get(companyA) as any;
+    const fy2526 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = ?').get(companyA, 'FY 2025-26') as any;
     assert.strictEqual(row1.fy_id, fy2526.fy_id, 'Voucher in 2025-06-15 must resolve to FY 2025-26');
 
     // 2. Post voucher in FY 2026-27 (date: 2026-06-15)
@@ -458,10 +470,10 @@ async function runTestSuite() {
         }]
       })
     });
-    assert.strictEqual(res2.status, 201);
     const body2 = await res2.json();
+    assert.strictEqual(res2.status, 201);
     const row2 = testDb.prepare('SELECT fy_id FROM vouchers WHERE voucher_id = ?').get(body2.voucherId) as any;
-    const fy2627 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = "FY 2026-27"').get(companyA) as any;
+    const fy2627 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND start_date = ?').get(companyA, '2026-04-01') as any;
     assert.strictEqual(row2.fy_id, fy2627.fy_id, 'Voucher in 2026-06-15 must resolve to FY 2026-27');
   });
 
@@ -493,7 +505,7 @@ async function runTestSuite() {
   });
 
   await test('TEST_FY_06: Explicit fyId with mismatched voucherDate rejected with 400', async () => {
-    const fy2526 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = "FY 2025-26"').get(companyA) as any;
+    const fy2526 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = ?').get(companyA, 'FY 2025-26') as any;
     // Explicit FY 2025-26, but date is in 2026-08-01 (outside FY 2025-26)
     const res = await fetch(`${baseUrl}/vouchers`, {
       method: 'POST',
@@ -522,7 +534,7 @@ async function runTestSuite() {
   });
 
   await test('TEST_FY_07: Closed FY rejects voucher posting', async () => {
-    const fy2526 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = "FY 2025-26"').get(companyA) as any;
+    const fy2526 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = ?').get(companyA, 'FY 2025-26') as any;
 
     // Close FY 2025-26
     const closeRes = await fetch(`${baseUrl}/financial-years/${fy2526.fy_id}`, {
@@ -644,13 +656,13 @@ async function runTestSuite() {
   await test('TEST_FY_10: Stock item update cannot bypass closed/missing FY', async () => {
     // In companyB, close the only FY
     const fyB = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ?').get(companyB) as any;
-    testDb.prepare('UPDATE financial_years SET status = "CLOSED" WHERE fy_id = ?').run(fyB.fy_id);
+    testDb.prepare("UPDATE financial_years SET status = 'CLOSED' WHERE fy_id = ?").run(fyB.fy_id);
 
     // Create an item in companyB
     const itemBId = `${companyB}_item_b01`;
     testDb.prepare(`
-      INSERT INTO stock_items (item_id, company_id, item_name, unit_id, purchase_rate_paise, selling_rate_paise, opening_qty, opening_rate_paise)
-      VALUES (?, ?, 'Beta Item 01', '${companyB}_unit_nos', 1000, 2000, 10, 1000)
+      INSERT INTO stock_items (item_id, company_id, item_name, unit_id, hsn_sac, purchase_rate_paise, selling_rate_paise, opening_qty, opening_rate_paise)
+      VALUES (?, ?, 'Beta Item 01', '${companyB}_unit_nos', '84713010', 1000, 2000, 10, 1000)
     `).run(itemBId, companyB);
 
     // Attempt stock adjustment on existing item in companyB with closed FY
@@ -690,6 +702,8 @@ async function runTestSuite() {
         purchaseRatePaise: 5000000
       })
     });
+    const body = await res.json();
+    if (res.status !== 200) console.error('TEST_FY_11A error:', body);
     assert.strictEqual(res.status, 200);
 
     // Verify voucher created: STOCK_JOURNAL with DR Inventory, CR COGS
@@ -894,7 +908,7 @@ async function runTestSuite() {
   console.log('\n[Suite 6: FY Status Lifecycle, Reopening & Security]');
 
   await test('TEST_FY_14: Reopening closed FY requires OWNER authorization, non-empty reason, and audit log', async () => {
-    const fy2526 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = "FY 2025-26"').get(companyA) as any;
+    const fy2526 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = ?').get(companyA, 'FY 2025-26') as any;
 
     // 1. ADMIN attempts to reopen -> 403
     const resAdmin = await fetch(`${baseUrl}/financial-years/${fy2526.fy_id}`, {
@@ -961,7 +975,7 @@ async function runTestSuite() {
   });
 
   await test('TEST_FY_15: Unauthorized FY status mutation rejected with 403', async () => {
-    const fy2627 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = "FY 2026-27"').get(companyA) as any;
+    const fy2627 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND start_date = ?').get(companyA, '2026-04-01') as any;
 
     // VIEWER attempts to lock or close FY -> 403
     const res = await fetch(`${baseUrl}/financial-years/${fy2627.fy_id}`, {
@@ -977,7 +991,7 @@ async function runTestSuite() {
   });
 
   await test('TEST_FY_17: Cross-tenant FY mutation rejected', async () => {
-    const fy2627 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = "FY 2026-27"').get(companyA) as any;
+    const fy2627 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND start_date = ?').get(companyA, '2026-04-01') as any;
 
     // Owner B attempts to update Company A's financial year
     const res = await fetch(`${baseUrl}/financial-years/${fy2627.fy_id}`, {
@@ -994,7 +1008,7 @@ async function runTestSuite() {
   });
 
   await test('SCENARIO_REOPEN: CLOSED -> OWNER REOPEN -> historical voucher -> reconciliation', async () => {
-    const fy2526 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = "FY 2025-26"').get(companyA) as any;
+    const fy2526 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = ?').get(companyA, 'FY 2025-26') as any;
 
     // Now FY 2025-26 is reopened. Post a historical voucher into it
     const resVch = await fetch(`${baseUrl}/vouchers`, {
