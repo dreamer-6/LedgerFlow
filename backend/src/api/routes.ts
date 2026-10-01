@@ -288,6 +288,21 @@ export function createApiRouter(db: DatabaseSync): Router {
       );
 
       if (partyName && party.ledger_id) {
+        if (openingBalancePaise !== undefined && openingBalancePaise !== null) {
+          const currentBal = db.prepare('SELECT opening_balance_paise FROM ledgers WHERE ledger_id = ?').get(party.ledger_id) as any;
+          if (currentBal && Math.round(Number(openingBalancePaise)) !== Number(currentBal.opening_balance_paise)) {
+            const txCount = (db.prepare('SELECT COUNT(*) as cnt FROM ledger_entries WHERE ledger_id = ?').get(party.ledger_id) as any)?.cnt || 0;
+            const vchCount = (db.prepare('SELECT COUNT(*) as cnt FROM vouchers WHERE party_id = ?').get(partyId) as any)?.cnt || 0;
+            const closedFy = db.prepare('SELECT 1 FROM financial_years WHERE company_id = ? AND status = "CLOSED" LIMIT 1').get(req.companyId!);
+            if (txCount > 0 || vchCount > 0 || closedFy) {
+              db.exec('ROLLBACK;');
+              return res.status(400).json({
+                error: `Cannot modify opening balance for party '${party.party_name}': financial transactions already exist or prior financial periods are closed. Use an accounting adjustment voucher instead.`
+              });
+            }
+          }
+        }
+
         db.prepare(`
           UPDATE ledgers SET
             ledger_name = ?,
@@ -474,25 +489,123 @@ export function createApiRouter(db: DatabaseSync): Router {
           existing.item_id
         );
 
-        if (qty > 0) {
-          const valPaise = Math.round(qty * rate);
-          // C-3 / Amendment 1: Real STOCK_JOURNAL voucher with crypto.randomUUID() and safe voucher numbering
-          const activeFy = db.prepare("SELECT fy_id FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(companyId) as any;
-          const fyId = activeFy?.fy_id || 'fy_default';
-          const voucherId = 'vch_' + crypto.randomUUID().replace(/-/g, '');
-          const voucherNumber = PostingEngine.getNextVoucherNumber(db, companyId, fyId, 'STOCK_JOURNAL');
+        if (qty !== 0) {
           const today = new Date().toISOString().split('T')[0];
+          const dateFy = db.prepare(`
+            SELECT fy_id, status, name FROM financial_years 
+            WHERE company_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1
+          `).get(companyId, today) as any;
 
-          db.prepare(`
-            INSERT INTO vouchers (voucher_id, company_id, fy_id, voucher_type, voucher_number, voucher_date, narration, status, total_amount_paise, created_by)
-            VALUES (?, ?, ?, 'STOCK_JOURNAL', ?, ?, ?, 'POSTED', ?, ?)
-          `).run(voucherId, companyId, fyId, voucherNumber, `Stock update adjustment for '${existing.item_name}'`, valPaise, (req as any).user?.username || 'system');
+          if (!dateFy) {
+            db.exec('ROLLBACK;');
+            return res.status(400).json({
+              error: `Cannot adjust stock: No financial year found covering date '${today}'. Please create the appropriate financial year first.`
+            });
+          }
+          if (dateFy.status !== 'OPEN') {
+            db.exec('ROLLBACK;');
+            return res.status(400).json({
+              error: `Cannot adjust stock: Financial Year '${dateFy.name}' is ${dateFy.status}. Stock adjustments are prohibited in closed or locked periods.`
+            });
+          }
 
-          const entryId = 'se_upd_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-          db.prepare(`
-            INSERT INTO stock_entries (stock_entry_id, voucher_id, item_id, godown_id, entry_date, movement_type, quantity, rate_paise, value_paise)
-            VALUES (?, ?, ?, ?, ?, 'IN', ?, ?, ?)
-          `).run(entryId, voucherId, existing.item_id, godownId, today, qty, rate, valPaise);
+          const invRow = db.prepare(`
+            SELECT ledger_id FROM ledgers 
+            WHERE company_id = ? AND (ledger_id = ? OR ledger_name LIKE '%Inventory%') 
+            LIMIT 1
+          `).get(companyId, `${companyId}_led_inventory`) as any;
+          const inventoryLedgerId = invRow?.ledger_id || `${companyId}_led_inventory`;
+
+          const cogsRow = db.prepare(`
+            SELECT ledger_id FROM ledgers 
+            WHERE company_id = ? AND (ledger_id = ? OR ledger_name LIKE '%Cost of Goods%' OR ledger_name LIKE '%COGS%') 
+            LIMIT 1
+          `).get(companyId, `${companyId}_led_cogs`) as any;
+          const cogsLedgerId = cogsRow?.ledger_id || `${companyId}_led_cogs`;
+
+          if (qty > 0) {
+            const summary = InventoryEngine.getItemStockSummary(db, existing.item_id, today);
+            const effectiveRate = rate > 0
+              ? rate
+              : (summary.weightedAverageRatePaise > 0
+                  ? summary.weightedAverageRatePaise
+                  : (Number(existing.purchase_rate_paise) || 0));
+            const valPaise = Math.round(qty * effectiveRate);
+            PostingEngine.postVoucher(db, {
+              companyId,
+              fyId: dateFy.fy_id,
+              voucherType: 'STOCK_JOURNAL',
+              voucherDate: today,
+              narration: `Stock adjustment inflow for '${existing.item_name}'`,
+              status: 'POSTED',
+              lines: [{
+                itemId: existing.item_id,
+                godownId,
+                quantity: qty,
+                ratePaise: effectiveRate,
+                movementType: 'IN'
+              }],
+              customLedgerLines: [
+                {
+                  ledgerId: inventoryLedgerId,
+                  debitPaise: valPaise,
+                  creditPaise: 0,
+                  particulars: `Inventory Asset Inflow - ${existing.item_name}`
+                },
+                {
+                  ledgerId: cogsLedgerId,
+                  debitPaise: 0,
+                  creditPaise: valPaise,
+                  particulars: `Stock Adjustment Inflow - ${existing.item_name}`
+                }
+              ]
+            });
+          } else {
+            const absQty = Math.abs(qty);
+            const allowNegative = b.allowNegativeStock === true;
+            const avail = InventoryEngine.validateStockAvailability(db, existing.item_id, godownId, absQty, allowNegative);
+            if (!avail.isValid) {
+              db.exec('ROLLBACK;');
+              return res.status(400).json({
+                error: `Insufficient stock for item '${existing.item_name}' in godown '${godownId}'. Available: ${avail.currentQty}, Requested reduction: ${absQty}.`
+              });
+            }
+
+            const summary = InventoryEngine.getItemStockSummary(db, existing.item_id, today);
+            const unitCost = summary.weightedAverageRatePaise > 0 ? summary.weightedAverageRatePaise : (rate > 0 ? rate : (Number(existing.purchase_rate_paise) || 0));
+            const valPaise = Math.round(absQty * unitCost);
+
+            PostingEngine.postVoucher(db, {
+              companyId,
+              fyId: dateFy.fy_id,
+              voucherType: 'STOCK_JOURNAL',
+              voucherDate: today,
+              narration: `Stock adjustment reduction for '${existing.item_name}'`,
+              status: 'POSTED',
+              allowNegativeStock: allowNegative,
+              lines: [{
+                itemId: existing.item_id,
+                godownId,
+                quantity: absQty,
+                ratePaise: unitCost,
+                movementType: 'OUT'
+              }],
+              customLedgerLines: [
+                {
+                  ledgerId: cogsLedgerId,
+                  debitPaise: valPaise,
+                  creditPaise: 0,
+                  particulars: `Stock Adjustment Reduction - ${existing.item_name}`
+                },
+                {
+                  ledgerId: inventoryLedgerId,
+                  debitPaise: 0,
+                  creditPaise: valPaise,
+                  particulars: `Inventory Asset Reduction - ${existing.item_name}`
+                }
+              ]
+            });
+          }
         }
 
         db.exec('COMMIT;');
@@ -500,7 +613,7 @@ export function createApiRouter(db: DatabaseSync): Router {
           itemId: existing.item_id,
           itemName: existing.item_name,
           updated: true,
-          message: `Stock updated successfully for '${existing.item_name}'. ${qty > 0 ? `Added ${qty} units.` : 'Details updated.'}`
+          message: `Stock updated successfully for '${existing.item_name}'. ${qty !== 0 ? `Adjusted by ${qty} units.` : 'Details updated.'}`
         });
       }
 
@@ -778,25 +891,40 @@ export function createApiRouter(db: DatabaseSync): Router {
     try {
       const companyId = req.companyId!;
 
-      // Resolve FY — always validate against company, never trust body FY blindly
+      // Resolve FY — strictly validate against company and voucherDate
+      const vDate = req.body.voucherDate || new Date().toISOString().split('T')[0];
       let fyId = req.body.fyId;
-      const validFy = fyId
-        ? db.prepare('SELECT fy_id FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, companyId) as any
-        : null;
 
-      if (!validFy) {
-        const vDate = req.body.voucherDate || new Date().toISOString().split('T')[0];
-        const dateFy = db.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1').get(companyId, vDate) as any;
-        if (dateFy) {
-          fyId = dateFy.fy_id;
-        } else {
-          const activeFy = db.prepare("SELECT fy_id FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(companyId) as any;
-          fyId = activeFy?.fy_id;
+      if (fyId) {
+        const explicitFy = db.prepare('SELECT fy_id, status, name, start_date, end_date FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, companyId) as any;
+        if (!explicitFy) {
+          return res.status(400).json({ error: `Financial year '${fyId}' not found for this company.` });
         }
-      }
+        if (vDate < explicitFy.start_date || vDate > explicitFy.end_date) {
+          return res.status(400).json({
+            error: `Voucher date ${vDate} is outside specified Financial Year '${explicitFy.name || fyId}' (${explicitFy.start_date} to ${explicitFy.end_date}).`
+          });
+        }
+        if (explicitFy.status !== 'OPEN') {
+          return res.status(400).json({ error: `Financial Year '${explicitFy.name || fyId}' is ${explicitFy.status}. Posting prohibited.` });
+        }
+      } else {
+        const dateFy = db.prepare(`
+          SELECT fy_id, status, name, start_date, end_date FROM financial_years 
+          WHERE company_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1
+        `).get(companyId, vDate) as any;
 
-      if (!fyId) {
-        return res.status(400).json({ error: 'No open financial year found for this company and date.' });
+        if (!dateFy) {
+          return res.status(400).json({
+            error: `No financial year found covering voucher date '${vDate}'. Please create the appropriate financial year first.`
+          });
+        }
+        if (dateFy.status !== 'OPEN') {
+          return res.status(400).json({
+            error: `Financial Year '${dateFy.name}' covering date '${vDate}' is ${dateFy.status}. Posting prohibited.`
+          });
+        }
+        fyId = dateFy.fy_id;
       }
 
       // Build payload — use server-resolved companyId, never trust body.companyId

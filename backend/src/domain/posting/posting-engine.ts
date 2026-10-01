@@ -1348,12 +1348,34 @@ export class PostingEngine {
       throw new Error('Opening stock quantity and rate must be greater than zero.');
     }
     const openingVal = Math.round(qty * rate);
+    const entryDate = params.date || new Date().toISOString().split('T')[0];
 
-    const activeFy = db.prepare("SELECT fy_id FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(params.companyId) as any;
-    const fyId = params.fyId || activeFy?.fy_id || 'fy_default';
+    let fyId: string;
+    if (params.fyId) {
+      const explicitFy = db.prepare('SELECT status, start_date, end_date FROM financial_years WHERE fy_id = ? AND company_id = ?')
+        .get(params.fyId, params.companyId) as any;
+      if (!explicitFy) {
+        throw new Error(`Cannot record opening stock: Financial Year '${params.fyId}' not found for company '${params.companyId}'.`);
+      }
+      if (explicitFy.status !== 'OPEN') {
+        throw new Error(`Cannot record opening stock: Financial Year '${params.fyId}' is ${explicitFy.status}. Posting prohibited.`);
+      }
+      fyId = params.fyId;
+    } else {
+      const dateFy = db.prepare(`
+        SELECT fy_id, status FROM financial_years 
+        WHERE company_id = ? AND ? BETWEEN start_date AND end_date AND status = 'OPEN' 
+        LIMIT 1
+      `).get(params.companyId, entryDate) as any;
+
+      if (!dateFy) {
+        throw new Error(`Cannot record opening stock: No open financial year found for company '${params.companyId}' covering date '${entryDate}'.`);
+      }
+      fyId = dateFy.fy_id;
+    }
+
     const voucherId = 'vch_' + crypto.randomUUID().replace(/-/g, '');
     const voucherNumber = PostingEngine.getNextVoucherNumber(db, params.companyId, fyId, 'STOCK_JOURNAL');
-    const entryDate = params.date || new Date().toISOString().split('T')[0];
 
     const itemName = params.itemName || (db.prepare('SELECT item_name FROM stock_items WHERE item_id = ?').get(params.itemId) as any)?.item_name || 'Item';
 

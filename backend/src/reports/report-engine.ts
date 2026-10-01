@@ -90,23 +90,54 @@ export class ReportEngine {
     closingBalanceType: 'DR' | 'CR';
     lines: LedgerStatementLine[];
   } {
-    const ledger = db.prepare('SELECT ledger_name, opening_balance_paise, opening_balance_type FROM ledgers WHERE ledger_id = ? AND company_id = ?')
-      .get(ledgerId, companyId) as { ledger_name: string; opening_balance_paise: number; opening_balance_type: 'DR' | 'CR' } | undefined;
+    const ledger = db.prepare(`
+      SELECT l.ledger_name, l.opening_balance_paise, l.opening_balance_type, g.nature
+      FROM ledgers l
+      JOIN ledger_groups g ON l.group_id = g.group_id
+      WHERE l.ledger_id = ? AND l.company_id = ?
+    `).get(ledgerId, companyId) as { ledger_name: string; opening_balance_paise: number; opening_balance_type: 'DR' | 'CR'; nature: string } | undefined;
 
     if (!ledger) throw new Error(`Ledger '${ledgerId}' not found for company '${companyId}'.`);
 
     // 1. Calculate opening balance prior to fromDate (DEF-REP-12: POSTED vouchers only)
-    const priorEntries = db.prepare(`
-      SELECT 
-        COALESCE(SUM(le.debit_paise), 0) AS total_dr,
-        COALESCE(SUM(le.credit_paise), 0) AS total_cr
-      FROM ledger_entries le
-      JOIN vouchers v ON le.voucher_id = v.voucher_id
-      WHERE le.ledger_id = ? AND le.entry_date < ? AND v.status = 'POSTED'
-    `).get(ledgerId, fromDate) as { total_dr: number; total_cr: number };
+    // DEF-FY-05: For nominal accounts (INCOME / EXPENSE), opening balance resets to 0 at FY boundary
+    let netOpeningDr = 0;
+    if (ledger.nature === 'INCOME' || ledger.nature === 'EXPENSE') {
+      const fy = db.prepare(`
+        SELECT start_date FROM financial_years
+        WHERE company_id = ? AND ? BETWEEN start_date AND end_date
+        LIMIT 1
+      `).get(companyId, fromDate) as { start_date: string } | undefined;
 
-    let netOpeningDr = (ledger.opening_balance_type === 'DR' ? ledger.opening_balance_paise : -ledger.opening_balance_paise)
-      + (Number(priorEntries.total_dr) - Number(priorEntries.total_cr));
+      const fyStartDate = fy?.start_date || fromDate;
+      if (fromDate > fyStartDate) {
+        const priorEntries = db.prepare(`
+          SELECT 
+            COALESCE(SUM(le.debit_paise), 0) AS total_dr,
+            COALESCE(SUM(le.credit_paise), 0) AS total_cr
+          FROM ledger_entries le
+          JOIN vouchers v ON le.voucher_id = v.voucher_id
+          WHERE le.ledger_id = ? AND le.entry_date >= ? AND le.entry_date < ? AND v.status = 'POSTED'
+        `).get(ledgerId, fyStartDate, fromDate) as { total_dr: number; total_cr: number };
+
+        netOpeningDr = (Number(priorEntries.total_dr) - Number(priorEntries.total_cr));
+      } else {
+        netOpeningDr = 0;
+      }
+    } else {
+      // Balance sheet accounts (ASSET / LIABILITY / EQUITY): cumulative lifetime from inception
+      const priorEntries = db.prepare(`
+        SELECT 
+          COALESCE(SUM(le.debit_paise), 0) AS total_dr,
+          COALESCE(SUM(le.credit_paise), 0) AS total_cr
+        FROM ledger_entries le
+        JOIN vouchers v ON le.voucher_id = v.voucher_id
+        WHERE le.ledger_id = ? AND le.entry_date < ? AND v.status = 'POSTED'
+      `).get(ledgerId, fromDate) as { total_dr: number; total_cr: number };
+
+      netOpeningDr = (ledger.opening_balance_type === 'DR' ? ledger.opening_balance_paise : -ledger.opening_balance_paise)
+        + (Number(priorEntries.total_dr) - Number(priorEntries.total_cr));
+    }
 
     const openingBalancePaise = Math.abs(netOpeningDr);
     const openingBalanceType: 'DR' | 'CR' = netOpeningDr >= 0 ? 'DR' : 'CR';
