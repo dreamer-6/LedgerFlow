@@ -55,18 +55,19 @@ class GstEngine {
             totalTaxPaise = netLineAmountPaise - taxableAmountPaise;
             if (isInterState) {
                 igstRate = gstRate;
-                igstAmountPaise = totalTaxPaise;
+                igstAmountPaise = Math.round((taxableAmountPaise * igstRate) / 100);
             }
             else {
                 cgstRate = gstRate / 2;
                 sgstRate = gstRate / 2;
-                cgstAmountPaise = Math.floor(totalTaxPaise / 2);
-                sgstAmountPaise = totalTaxPaise - cgstAmountPaise;
+                cgstAmountPaise = Math.round((taxableAmountPaise * cgstRate) / 100);
+                sgstAmountPaise = cgstAmountPaise;
             }
             if (cessRate > 0) {
                 cessAmountPaise = Math.round((taxableAmountPaise * cessRate) / 100);
             }
-            totalAmountPaise = netLineAmountPaise; // Exact match to selling price!
+            totalTaxPaise = cgstAmountPaise + sgstAmountPaise + igstAmountPaise + cessAmountPaise;
+            totalAmountPaise = taxableAmountPaise + totalTaxPaise;
         }
         else {
             taxableAmountPaise = netLineAmountPaise;

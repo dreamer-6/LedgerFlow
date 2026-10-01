@@ -3,22 +3,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BusinessService = void 0;
 const seed_js_1 = require("../database/seed.js");
 class BusinessService {
-    static getBusinesses(db, userId, userRole) {
-        if (userRole === 'ADMIN') {
-            return db.prepare("SELECT *, 'ADMIN' as role FROM companies ORDER BY created_at ASC").all();
-        }
-        if (userId) {
-            return db.prepare(`
-        SELECT c.*, ub.role
-        FROM companies c
-        JOIN user_businesses ub ON c.company_id = ub.company_id
-        WHERE ub.user_id = ?
-        ORDER BY c.created_at ASC
-      `).all(userId);
-        }
-        else {
-            return db.prepare('SELECT * FROM companies ORDER BY created_at ASC').all();
-        }
+    /**
+     * Returns ONLY the companies this user has user_businesses membership in.
+     * Global users.role is NEVER used to expand company visibility.
+     */
+    static getBusinesses(db, userId) {
+        if (!userId)
+            return [];
+        return db.prepare(`
+      SELECT c.*, ub.role
+      FROM companies c
+      JOIN user_businesses ub ON c.company_id = ub.company_id
+      WHERE ub.user_id = ?
+      ORDER BY c.created_at ASC
+    `).all(userId);
     }
     static createBusiness(db, userId, payload) {
         const { companyName, legalName, gstin, state, stateCode, mailingName, vaultPassword, logoBase64 } = payload;

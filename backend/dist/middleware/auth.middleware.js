@@ -1,55 +1,16 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+/**
+ * Auth Middleware — DEPRECATED / COMPATIBILITY WRAPPER
+ *
+ * This module has been superseded by src/middleware/security.ts as part of TASK 001.
+ * All security middleware functions are re-exported from security.ts for backward compatibility.
+ * Direct hardcoded secrets and unmounted helpers have been removed.
+ */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireAuth = requireAuth;
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const JWT_SECRET = process.env.JWT_SECRET || 'ledgerflow_secure_secret_key_2026';
-function requireAuth(db) {
-    return (req, res, next) => {
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-            return res.status(401).json({ error: 'Unauthorized: Missing token' });
-        }
-        try {
-            const token = authHeader.replace('Bearer ', '');
-            const user = jsonwebtoken_1.default.verify(token, JWT_SECRET);
-            req.user = user;
-            // Resolve company context
-            const headerId = req.headers['x-company-id'];
-            const queryId = req.query.companyId;
-            const requested = headerId || queryId;
-            if (requested) {
-                const access = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? AND company_id = ?').get(user.userId, requested);
-                if (access) {
-                    req.companyId = access.company_id;
-                }
-                else if (user.role === 'ADMIN') {
-                    const compExists = db.prepare('SELECT company_id FROM companies WHERE company_id = ?').get(requested);
-                    if (compExists)
-                        req.companyId = compExists.company_id;
-                }
-            }
-            if (!req.companyId) {
-                // Fallback to first company
-                const first = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? ORDER BY created_at ASC LIMIT 1').get(user.userId);
-                if (first) {
-                    req.companyId = first.company_id;
-                }
-                else if (user.role === 'ADMIN') {
-                    const anyComp = db.prepare('SELECT company_id FROM companies ORDER BY created_at ASC LIMIT 1').get();
-                    if (anyComp)
-                        req.companyId = anyComp.company_id;
-                }
-            }
-            if (!req.companyId) {
-                return res.status(403).json({ error: 'Forbidden: No business context found.' });
-            }
-            next();
-        }
-        catch (err) {
-            return res.status(401).json({ error: 'Unauthorized: Invalid token' });
-        }
-    };
-}
+exports.jwtSecret = exports.assertResourceOwnership = exports.authorize = exports.resolveCompanyContext = exports.authenticate = void 0;
+var security_js_1 = require("./security.js");
+Object.defineProperty(exports, "authenticate", { enumerable: true, get: function () { return security_js_1.authenticate; } });
+Object.defineProperty(exports, "resolveCompanyContext", { enumerable: true, get: function () { return security_js_1.resolveCompanyContext; } });
+Object.defineProperty(exports, "authorize", { enumerable: true, get: function () { return security_js_1.authorize; } });
+Object.defineProperty(exports, "assertResourceOwnership", { enumerable: true, get: function () { return security_js_1.assertResourceOwnership; } });
+Object.defineProperty(exports, "jwtSecret", { enumerable: true, get: function () { return security_js_1.jwtSecret; } });

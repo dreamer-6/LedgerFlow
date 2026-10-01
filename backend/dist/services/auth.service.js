@@ -7,7 +7,7 @@ exports.AuthService = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const seed_js_1 = require("../database/seed.js");
-const JWT_SECRET = process.env.JWT_SECRET || 'ledgerflow_secure_secret_key_2026';
+const security_js_1 = require("../middleware/security.js");
 class AuthService {
     static register(db, payload) {
         const { email, password, fullName, businessName, companyName, legalName, gstin, state, stateCode } = payload;
@@ -22,14 +22,14 @@ class AuthService {
             throw new Error('An account with this email address already exists. Please sign in.');
         }
         const userId = 'usr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-        const salt = bcryptjs_1.default.genSaltSync(10);
+        const salt = bcryptjs_1.default.genSaltSync(12);
         const passwordHash = bcryptjs_1.default.hashSync(password, salt);
-        // 1. Create User
+        // New users receive ADMIN role on their own businesses only (user_businesses.role = OWNER)
         db.prepare(`
       INSERT INTO users (user_id, username, email, password_hash, full_name, role)
-      VALUES (?, ?, ?, ?, ?, 'ADMIN')
+      VALUES (?, ?, ?, ?, ?, 'USER')
     `).run(userId, cleanEmail, cleanEmail, passwordHash, fullName.trim());
-        // 2. Provision Isolated Business
+        // Provision isolated business
         const companyId = 'comp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
         (0, seed_js_1.initializeBusiness)(db, {
             companyId,
@@ -40,7 +40,7 @@ class AuthService {
             stateCode: stateCode || '33',
             ownerUserId: userId
         });
-        const token = jsonwebtoken_1.default.sign({ userId, username: cleanEmail, role: 'ADMIN', name: fullName.trim(), email: cleanEmail }, JWT_SECRET, { expiresIn: '30d' });
+        const token = jsonwebtoken_1.default.sign({ userId, username: cleanEmail, role: 'USER', name: fullName.trim(), email: cleanEmail }, (0, security_js_1.jwtSecret)(), { expiresIn: '7d' });
         const businesses = db.prepare(`
       SELECT c.*, ub.role
       FROM companies c
@@ -54,7 +54,7 @@ class AuthService {
                 userId,
                 email: cleanEmail,
                 fullName: fullName.trim(),
-                role: 'ADMIN'
+                role: 'USER'
             },
             activeCompanyId: companyId,
             company: businesses[0] || null,
@@ -67,41 +67,24 @@ class AuthService {
         if (!identifier || !password) {
             throw new Error('Email/username and password are required.');
         }
+        // Match only on email or username — no full_name matching, no aliases
         const user = db.prepare(`
-      SELECT user_id, username, email, password_hash, full_name, role
+      SELECT user_id, username, email, password_hash, full_name, role, is_active
       FROM users
-      WHERE (
-        LOWER(username) = ? 
-        OR LOWER(email) = ? 
-        OR LOWER(full_name) = ?
-        OR (LOWER(?) IN ('system administrator', 'administrator', 'system admin', 'admin') AND username = 'admin')
-      ) AND is_active = 1
-    `).get(identifier, identifier, identifier, identifier);
+      WHERE (LOWER(username) = ? OR LOWER(email) = ?) AND is_active = 1
+    `).get(identifier, identifier);
         if (!user || !bcryptjs_1.default.compareSync(password, user.password_hash)) {
             throw new Error('Invalid email or password.');
         }
-        const token = jsonwebtoken_1.default.sign({ userId: user.user_id, username: user.username, role: user.role, name: user.full_name, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
-        let businesses = [];
-        if (user.role === 'ADMIN') {
-            businesses = db.prepare("SELECT *, 'ADMIN' as role FROM companies ORDER BY created_at ASC").all();
-        }
-        else {
-            businesses = db.prepare(`
-        SELECT c.*, ub.role
-        FROM companies c
-        JOIN user_businesses ub ON c.company_id = ub.company_id
-        WHERE ub.user_id = ?
-        ORDER BY c.created_at ASC
-      `).all(user.user_id);
-        }
-        if (businesses.length === 0) {
-            const defCompany = db.prepare('SELECT * FROM companies LIMIT 1').get();
-            if (defCompany) {
-                db.prepare('INSERT OR IGNORE INTO user_businesses (user_id, company_id, role) VALUES (?, ?, ?)')
-                    .run(user.user_id, defCompany.company_id, 'OWNER');
-                businesses = [{ ...defCompany, role: 'OWNER' }];
-            }
-        }
+        const token = jsonwebtoken_1.default.sign({ userId: user.user_id, username: user.username, role: user.role, name: user.full_name, email: user.email }, (0, security_js_1.jwtSecret)(), { expiresIn: '7d' });
+        // Return ONLY businesses the user is a member of
+        const businesses = db.prepare(`
+      SELECT c.*, ub.role
+      FROM companies c
+      JOIN user_businesses ub ON c.company_id = ub.company_id
+      WHERE ub.user_id = ?
+      ORDER BY c.created_at ASC
+    `).all(user.user_id);
         return {
             token,
             user: {
@@ -115,106 +98,32 @@ class AuthService {
             businesses
         };
     }
-    static ssoLogin(db, payload) {
-        const { provider = 'google', email, name } = payload;
-        const cleanEmail = (email || '').trim().toLowerCase();
-        if (!cleanEmail) {
-            throw new Error('Email is required for SSO authentication.');
-        }
-        // Lookup existing user by email, username, or admin aliases
-        let user = db.prepare(`
-      SELECT user_id, username, email, password_hash, full_name, role, is_active
-      FROM users
-      WHERE LOWER(email) = ? 
-         OR LOWER(username) = ?
-         OR (LOWER(?) IN ('admin@ledgerflow.com', 'admin', 'system administrator', 'administrator') AND username = 'admin')
-    `).get(cleanEmail, cleanEmail, cleanEmail);
-        if (!user) {
-            // Auto-provision user account seamlessly
-            const userId = 'usr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
-            const baseUsername = cleanEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() || 'user';
-            let username = baseUsername;
-            let counter = 1;
-            while (db.prepare('SELECT user_id FROM users WHERE username = ?').get(username)) {
-                username = `${baseUsername}${counter++}`;
-            }
-            const rawName = name?.trim() || cleanEmail.split('@')[0].replace(/[._-]/g, ' ');
-            const formattedName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-            const salt = bcryptjs_1.default.genSaltSync(10);
-            const randomPassword = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10);
-            const passwordHash = bcryptjs_1.default.hashSync(randomPassword, salt);
-            db.prepare(`
-        INSERT INTO users (user_id, username, email, password_hash, full_name, role, is_active)
-        VALUES (?, ?, ?, ?, ?, 'ADMIN', 1)
-      `).run(userId, username, cleanEmail, passwordHash, formattedName);
-            user = {
-                user_id: userId,
-                username,
-                email: cleanEmail,
-                full_name: formattedName,
-                role: 'ADMIN',
-                is_active: 1
-            };
-        }
-        if (user.is_active === 0) {
-            throw new Error('This account has been deactivated. Please contact your system administrator.');
-        }
-        // Resolve companies/businesses
-        let businesses = [];
-        if (user.role === 'ADMIN') {
-            businesses = db.prepare("SELECT *, 'ADMIN' as role FROM companies ORDER BY created_at ASC").all();
-        }
-        else {
-            businesses = db.prepare(`
-        SELECT c.*, ub.role
-        FROM companies c
-        JOIN user_businesses ub ON c.company_id = ub.company_id
-        WHERE ub.user_id = ?
-        ORDER BY c.created_at ASC
-      `).all(user.user_id);
-        }
-        if (businesses.length === 0) {
-            const defCompany = db.prepare('SELECT * FROM companies ORDER BY created_at ASC LIMIT 1').get();
-            if (defCompany) {
-                db.prepare('INSERT OR IGNORE INTO user_businesses (user_id, company_id, role) VALUES (?, ?, ?)')
-                    .run(user.user_id, defCompany.company_id, 'OWNER');
-                businesses = [{ ...defCompany, role: 'OWNER' }];
-            }
-        }
-        const token = jsonwebtoken_1.default.sign({ userId: user.user_id, username: user.username, role: user.role, name: user.full_name, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
-        return {
-            token,
-            user: {
-                userId: user.user_id,
-                email: user.email || user.username,
-                username: user.username,
-                fullName: user.full_name,
-                role: user.role
-            },
-            activeCompanyId: businesses[0]?.company_id || null,
-            businesses
-        };
+    /**
+     * SSO is DISABLED — returns HTTP 501.
+     * This method should never be called; the route returns 501 directly.
+     * Left here for clarity in case of future OAuth/OIDC implementation.
+     */
+    static ssoDisabled() {
+        throw new Error('SSO_DISABLED');
     }
     static getMe(db, userId) {
-        const dbUser = db.prepare('SELECT user_id, username, email, full_name, role FROM users WHERE user_id = ?').get(userId);
-        let businesses = [];
-        if (dbUser?.role === 'ADMIN') {
-            businesses = db.prepare("SELECT *, 'ADMIN' as role FROM companies ORDER BY created_at ASC").all();
+        // Always re-fetch from DB to reflect current state (handles deactivated users)
+        const dbUser = db.prepare('SELECT user_id, username, email, full_name, role, is_active FROM users WHERE user_id = ?').get(userId);
+        if (!dbUser || dbUser.is_active === 0) {
+            throw new Error('USER_NOT_FOUND');
         }
-        else {
-            businesses = db.prepare(`
-        SELECT c.*, ub.role
-        FROM companies c
-        JOIN user_businesses ub ON c.company_id = ub.company_id
-        WHERE ub.user_id = ?
-        ORDER BY c.created_at ASC
-      `).all(userId);
-        }
+        const businesses = db.prepare(`
+      SELECT c.*, ub.role
+      FROM companies c
+      JOIN user_businesses ub ON c.company_id = ub.company_id
+      WHERE ub.user_id = ?
+      ORDER BY c.created_at ASC
+    `).all(userId);
         return {
             user: {
                 userId: dbUser.user_id,
-                username: dbUser.username,
                 email: dbUser.email,
+                username: dbUser.username,
                 fullName: dbUser.full_name,
                 role: dbUser.role
             },

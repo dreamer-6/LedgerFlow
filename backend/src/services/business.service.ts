@@ -1,23 +1,23 @@
 import { DatabaseSync } from 'node:sqlite';
+import crypto from 'node:crypto';
 import { initializeBusiness } from '../database/seed.js';
 
 export class BusinessService {
-  static getBusinesses(db: DatabaseSync, userId?: string, userRole?: string) {
-    if (userRole === 'ADMIN') {
-      return db.prepare("SELECT *, 'ADMIN' as role FROM companies ORDER BY created_at ASC").all();
-    }
-    if (userId) {
-      return db.prepare(`
-        SELECT c.*, ub.role
-        FROM companies c
-        JOIN user_businesses ub ON c.company_id = ub.company_id
-        WHERE ub.user_id = ?
-        ORDER BY c.created_at ASC
-      `).all(userId);
-    } else {
-      return db.prepare('SELECT * FROM companies ORDER BY created_at ASC').all();
-    }
+  /**
+   * Returns ONLY the companies this user has user_businesses membership in.
+   * Global users.role is NEVER used to expand company visibility.
+   */
+  static getBusinesses(db: DatabaseSync, userId: string) {
+    if (!userId) return [];
+    return db.prepare(`
+      SELECT c.*, ub.role
+      FROM companies c
+      JOIN user_businesses ub ON c.company_id = ub.company_id
+      WHERE ub.user_id = ?
+      ORDER BY c.created_at ASC
+    `).all(userId);
   }
+
 
   static createBusiness(db: DatabaseSync, userId: string, payload: any) {
     const { companyName, legalName, gstin, state, stateCode, mailingName, vaultPassword, logoBase64 } = payload;
@@ -187,30 +187,109 @@ export class BusinessService {
 
   static createFinancialYear(db: DatabaseSync, companyId: string, payload: any) {
     const { name, startDate, endDate, status } = payload;
-    if (!name || !startDate || !endDate) {
+    if (!name || !name.trim() || !startDate || !endDate) {
       throw new Error('Financial year name, start date, and end date are required.');
     }
 
-    const fyId = `${companyId}_fy_${name.trim().replace(/[^a-zA-Z0-9]/g, '_')}`;
+    const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!isoDateRegex.test(startDate) || isNaN(Date.parse(startDate))) {
+      throw new Error(`Invalid start date format '${startDate}'. Must be YYYY-MM-DD.`);
+    }
+    if (!isoDateRegex.test(endDate) || isNaN(Date.parse(endDate))) {
+      throw new Error(`Invalid end date format '${endDate}'. Must be YYYY-MM-DD.`);
+    }
+
+    if (startDate >= endDate) {
+      throw new Error(`Financial year start date (${startDate}) must be strictly before end date (${endDate}).`);
+    }
+
+    const trimmedName = name.trim();
+    const fyId = `${companyId}_fy_${trimmedName.replace(/[^a-zA-Z0-9]/g, '_')}`;
     let fyStatus = (status || 'OPEN').toUpperCase();
     if (fyStatus === 'ACTIVE') fyStatus = 'OPEN';
     if (!['OPEN', 'LOCKED', 'CLOSED'].includes(fyStatus)) {
       fyStatus = 'OPEN';
     }
 
-    db.prepare(`
-      INSERT INTO financial_years (fy_id, company_id, name, start_date, end_date, status)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(fyId, companyId, name.trim(), startDate, endDate, fyStatus);
+    // Atomic transaction for overlap and duplicate checks
+    db.exec('BEGIN IMMEDIATE;');
+    try {
+      // 1. Check duplicate name
+      const existingName = db.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND name = ?').get(companyId, trimmedName) as any;
+      if (existingName) {
+        throw new Error(`Financial year with name '${trimmedName}' already exists for this company.`);
+      }
+
+      // 2. Check date overlap
+      const existingFys = db.prepare('SELECT name, start_date, end_date FROM financial_years WHERE company_id = ?').all(companyId) as any[];
+      for (const ef of existingFys) {
+        if (startDate <= ef.end_date && endDate >= ef.start_date) {
+          throw new Error(`Financial year date range [${startDate} to ${endDate}] overlaps with existing financial year '${ef.name}' [${ef.start_date} to ${ef.end_date}].`);
+        }
+      }
+
+      db.prepare(`
+        INSERT INTO financial_years (fy_id, company_id, name, start_date, end_date, status)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(fyId, companyId, trimmedName, startDate, endDate, fyStatus);
+
+      db.exec('COMMIT;');
+    } catch (err: any) {
+      try { db.exec('ROLLBACK;'); } catch (_) {}
+      throw err;
+    }
 
     return db.prepare('SELECT * FROM financial_years WHERE fy_id = ?').get(fyId);
   }
 
-  static updateFinancialYearStatus(db: DatabaseSync, companyId: string, fyId: string, status: string) {
+  static updateFinancialYearStatus(
+    db: DatabaseSync,
+    companyId: string,
+    fyId: string,
+    status: string,
+    userRole?: string,
+    reason?: string,
+    userId?: string
+  ) {
     let fyStatus = (status || 'OPEN').toUpperCase();
     if (fyStatus === 'ACTIVE') fyStatus = 'OPEN';
     if (!['OPEN', 'LOCKED', 'CLOSED'].includes(fyStatus)) {
       fyStatus = 'OPEN';
+    }
+
+    const currentFy = db.prepare('SELECT * FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, companyId) as any;
+    if (!currentFy) {
+      throw new Error(`Financial year '${fyId}' not found for this company.`);
+    }
+
+    // State machine check: reopening CLOSED -> OPEN requires OWNER + reason
+    if (currentFy.status === 'CLOSED' && fyStatus === 'OPEN') {
+      if (userRole !== 'OWNER') {
+        throw new Error('Only the company OWNER can reopen a closed financial year.');
+      }
+      if (!reason || !reason.trim()) {
+        throw new Error('A valid business reason is required to reopen a closed financial year.');
+      }
+
+      db.prepare(`
+        UPDATE financial_years
+        SET status = ?
+        WHERE fy_id = ? AND company_id = ?
+      `).run(fyStatus, fyId, companyId);
+
+      // Record high-priority audit log
+      db.prepare(`
+        INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
+        VALUES (?, ?, ?, 'REOPEN_FINANCIAL_YEAR', 'FINANCIAL_YEAR', ?, ?)
+      `).run(
+        'aud_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16),
+        companyId,
+        userId || 'system',
+        fyId,
+        JSON.stringify({ fyId, previousStatus: currentFy.status, newStatus: fyStatus, reason: reason.trim() })
+      );
+
+      return db.prepare('SELECT * FROM financial_years WHERE fy_id = ?').get(fyId);
     }
 
     db.prepare(`
@@ -222,3 +301,4 @@ export class BusinessService {
     return db.prepare('SELECT * FROM financial_years WHERE fy_id = ?').get(fyId);
   }
 }
+

@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { InventoryEngine } from '../domain/inventory/valuation.js';
 
 export interface DayBookEntry {
   voucherId: string;
@@ -33,17 +34,29 @@ export interface TrialBalanceItem {
 
 export class ReportEngine {
   /**
-   * Day Book: All transactions within date range
+   * Day Book: All transactions within date range (active POSTED vouchers only)
+   * DEF-REP-18: Expose primary opposing ledgers for non-party vouchers (JOURNAL, CONTRA, etc.)
    */
   public static getDayBook(db: DatabaseSync, companyId: string, fromDate: string, toDate: string): DayBookEntry[] {
     const rows = db.prepare(`
       SELECT 
         v.voucher_id, v.voucher_number, v.voucher_date, v.voucher_type,
         v.narration, v.total_amount_paise, v.status,
-        p.party_name
+        p.party_name,
+        (
+          SELECT GROUP_CONCAT(l.ledger_name, ' / ')
+          FROM (
+            SELECT l.ledger_name
+            FROM ledger_entries le
+            JOIN ledgers l ON le.ledger_id = l.ledger_id
+            WHERE le.voucher_id = v.voucher_id
+            ORDER BY le.debit_paise DESC, le.credit_paise DESC
+            LIMIT 2
+          ) l
+        ) AS ledger_particulars
       FROM vouchers v
       LEFT JOIN parties p ON v.party_id = p.party_id
-      WHERE v.company_id = ? AND v.voucher_date >= ? AND v.voucher_date <= ?
+      WHERE v.company_id = ? AND v.voucher_date >= ? AND v.voucher_date <= ? AND v.status = 'POSTED'
       ORDER BY v.voucher_date ASC, v.created_at ASC
     `).all(companyId, fromDate, toDate) as any[];
 
@@ -53,7 +66,7 @@ export class ReportEngine {
       voucherDate: r.voucher_date,
       voucherType: r.voucher_type,
       partyName: r.party_name || undefined,
-      particulars: r.party_name || r.narration || r.voucher_type,
+      particulars: r.party_name || r.ledger_particulars || r.narration || r.voucher_type,
       totalAmountPaise: Number(r.total_amount_paise),
       status: r.status
     }));
@@ -61,9 +74,11 @@ export class ReportEngine {
 
   /**
    * Ledger Statement with Opening Balance, Transaction Stream, and Running Balance
+   * DEF-REP-16: Tenant Hardening — Validate ledgerId belongs to companyId
    */
   public static getLedgerStatement(
     db: DatabaseSync,
+    companyId: string,
     ledgerId: string,
     fromDate: string,
     toDate: string
@@ -75,34 +90,66 @@ export class ReportEngine {
     closingBalanceType: 'DR' | 'CR';
     lines: LedgerStatementLine[];
   } {
-    const ledger = db.prepare('SELECT ledger_name, opening_balance_paise, opening_balance_type FROM ledgers WHERE ledger_id = ?')
-      .get(ledgerId) as { ledger_name: string; opening_balance_paise: number; opening_balance_type: 'DR' | 'CR' } | undefined;
+    const ledger = db.prepare(`
+      SELECT l.ledger_name, l.opening_balance_paise, l.opening_balance_type, g.nature
+      FROM ledgers l
+      JOIN ledger_groups g ON l.group_id = g.group_id
+      WHERE l.ledger_id = ? AND l.company_id = ?
+    `).get(ledgerId, companyId) as { ledger_name: string; opening_balance_paise: number; opening_balance_type: 'DR' | 'CR'; nature: string } | undefined;
 
-    if (!ledger) throw new Error(`Ledger '${ledgerId}' not found.`);
+    if (!ledger) throw new Error(`Ledger '${ledgerId}' not found for company '${companyId}'.`);
 
-    // 1. Calculate opening balance prior to fromDate
-    const priorEntries = db.prepare(`
-      SELECT 
-        COALESCE(SUM(debit_paise), 0) AS total_dr,
-        COALESCE(SUM(credit_paise), 0) AS total_cr
-      FROM ledger_entries
-      WHERE ledger_id = ? AND entry_date < ?
-    `).get(ledgerId, fromDate) as { total_dr: number; total_cr: number };
+    // 1. Calculate opening balance prior to fromDate (DEF-REP-12: POSTED vouchers only)
+    // DEF-FY-05: For nominal accounts (INCOME / EXPENSE), opening balance resets to 0 at FY boundary
+    let netOpeningDr = 0;
+    if (ledger.nature === 'INCOME' || ledger.nature === 'EXPENSE') {
+      const fy = db.prepare(`
+        SELECT start_date FROM financial_years
+        WHERE company_id = ? AND ? BETWEEN start_date AND end_date
+        LIMIT 1
+      `).get(companyId, fromDate) as { start_date: string } | undefined;
 
-    let netOpeningDr = (ledger.opening_balance_type === 'DR' ? ledger.opening_balance_paise : -ledger.opening_balance_paise)
-      + (Number(priorEntries.total_dr) - Number(priorEntries.total_cr));
+      const fyStartDate = fy?.start_date || fromDate;
+      if (fromDate > fyStartDate) {
+        const priorEntries = db.prepare(`
+          SELECT 
+            COALESCE(SUM(le.debit_paise), 0) AS total_dr,
+            COALESCE(SUM(le.credit_paise), 0) AS total_cr
+          FROM ledger_entries le
+          JOIN vouchers v ON le.voucher_id = v.voucher_id
+          WHERE le.ledger_id = ? AND le.entry_date >= ? AND le.entry_date < ? AND v.status = 'POSTED'
+        `).get(ledgerId, fyStartDate, fromDate) as { total_dr: number; total_cr: number };
+
+        netOpeningDr = (Number(priorEntries.total_dr) - Number(priorEntries.total_cr));
+      } else {
+        netOpeningDr = 0;
+      }
+    } else {
+      // Balance sheet accounts (ASSET / LIABILITY / EQUITY): cumulative lifetime from inception
+      const priorEntries = db.prepare(`
+        SELECT 
+          COALESCE(SUM(le.debit_paise), 0) AS total_dr,
+          COALESCE(SUM(le.credit_paise), 0) AS total_cr
+        FROM ledger_entries le
+        JOIN vouchers v ON le.voucher_id = v.voucher_id
+        WHERE le.ledger_id = ? AND le.entry_date < ? AND v.status = 'POSTED'
+      `).get(ledgerId, fromDate) as { total_dr: number; total_cr: number };
+
+      netOpeningDr = (ledger.opening_balance_type === 'DR' ? ledger.opening_balance_paise : -ledger.opening_balance_paise)
+        + (Number(priorEntries.total_dr) - Number(priorEntries.total_cr));
+    }
 
     const openingBalancePaise = Math.abs(netOpeningDr);
     const openingBalanceType: 'DR' | 'CR' = netOpeningDr >= 0 ? 'DR' : 'CR';
 
-    // 2. Fetch active entries between fromDate and toDate
+    // 2. Fetch active entries between fromDate and toDate (DEF-REP-12: POSTED vouchers only)
     const entries = db.prepare(`
       SELECT 
         le.entry_date, le.debit_paise, le.credit_paise, le.particulars,
         v.voucher_number, v.voucher_type
       FROM ledger_entries le
       JOIN vouchers v ON le.voucher_id = v.voucher_id
-      WHERE le.ledger_id = ? AND le.entry_date >= ? AND le.entry_date <= ?
+      WHERE le.ledger_id = ? AND le.entry_date >= ? AND le.entry_date <= ? AND v.status = 'POSTED'
       ORDER BY le.entry_date ASC, le.created_at ASC
     `).all(ledgerId, fromDate, toDate) as any[];
 
@@ -150,6 +197,7 @@ export class ReportEngine {
     differencePaise: number;
     isBalanced: boolean;
   } {
+    // DEF-REP-12: Defensive POSTED voucher filtering
     const query = `
       SELECT 
         l.ledger_id, l.ledger_name, l.opening_balance_paise, l.opening_balance_type,
@@ -158,7 +206,12 @@ export class ReportEngine {
         COALESCE(SUM(le.credit_paise), 0) AS total_cr
       FROM ledgers l
       JOIN ledger_groups g ON l.group_id = g.group_id
-      LEFT JOIN ledger_entries le ON l.ledger_id = le.ledger_id AND le.entry_date <= ?
+      LEFT JOIN (
+        SELECT le.ledger_id, le.debit_paise, le.credit_paise
+        FROM ledger_entries le
+        JOIN vouchers v ON le.voucher_id = v.voucher_id
+        WHERE v.status = 'POSTED' AND le.entry_date <= ?
+      ) le ON l.ledger_id = le.ledger_id
       WHERE l.company_id = ?
       GROUP BY l.ledger_id
       ORDER BY g.nature, g.group_name, l.ledger_name
@@ -226,6 +279,7 @@ export class ReportEngine {
     incomeLedgers: Array<{ ledgerName: string; amountPaise: number }>;
     expenseLedgers: Array<{ ledgerName: string; amountPaise: number }>;
   } {
+    // DEF-REP-12: Defensive POSTED voucher filtering
     const entries = db.prepare(`
       SELECT 
         l.ledger_name, g.nature, g.affects_gross_profit,
@@ -234,7 +288,9 @@ export class ReportEngine {
       FROM ledgers l
       JOIN ledger_groups g ON l.group_id = g.group_id
       JOIN ledger_entries le ON l.ledger_id = le.ledger_id
+      JOIN vouchers v ON le.voucher_id = v.voucher_id
       WHERE l.company_id = ? AND le.entry_date >= ? AND le.entry_date <= ?
+        AND v.status = 'POSTED'
         AND g.nature IN ('INCOME', 'EXPENSE')
       GROUP BY l.ledger_id
     `).all(companyId, fromDate, toDate) as any[];
@@ -299,10 +355,27 @@ export class ReportEngine {
     liabilities: Array<{ ledgerName: string; amountPaise: number }>;
     equity: Array<{ ledgerName: string; amountPaise: number }>;
     netProfitPaise: number;
+    retainedEarningsPaise?: number;
     isBalanced: boolean;
   } {
     const tb = this.getTrialBalance(db, companyId, asOnDate);
-    const pnl = this.getProfitAndLoss(db, companyId, '2000-01-01', asOnDate);
+    // DEF-REP-01 / F-1: Scope Net Profit to active Financial Year, and dynamically compute prior periods' Retained Earnings
+    const activeFy = db.prepare(`
+      SELECT start_date FROM financial_years 
+      WHERE company_id = ? AND start_date <= ? AND end_date >= ?
+      ORDER BY start_date DESC LIMIT 1
+    `).get(companyId, asOnDate, asOnDate) as { start_date: string } | undefined;
+    const fyStartDate = activeFy?.start_date || '2000-01-01';
+    const pnl = this.getProfitAndLoss(db, companyId, fyStartDate, asOnDate);
+
+    let retainedEarningsPaise = 0;
+    if (activeFy && fyStartDate > '2000-01-01') {
+      const prevDate = new Date(fyStartDate);
+      prevDate.setDate(prevDate.getDate() - 1);
+      const priorEndDate = prevDate.toISOString().split('T')[0];
+      const priorPnl = this.getProfitAndLoss(db, companyId, '2000-01-01', priorEndDate);
+      retainedEarningsPaise = priorPnl.netProfitPaise;
+    }
 
     const assets: Array<{ ledgerName: string; amountPaise: number }> = [];
     const liabilities: Array<{ ledgerName: string; amountPaise: number }> = [];
@@ -327,7 +400,13 @@ export class ReportEngine {
       }
     }
 
-    // Add Net Profit to Equity
+    // Add Prior Periods' Retained Earnings to Equity
+    if (retainedEarningsPaise !== 0) {
+      equity.push({ ledgerName: 'Retained Earnings (Prior Years)', amountPaise: retainedEarningsPaise });
+      totalLiabEquityPaise += retainedEarningsPaise;
+    }
+
+    // Add Current Year Net Profit to Equity
     totalLiabEquityPaise += pnl.netProfitPaise;
 
     return {
@@ -337,14 +416,21 @@ export class ReportEngine {
       liabilities,
       equity,
       netProfitPaise: pnl.netProfitPaise,
+      retainedEarningsPaise,
       isBalanced: Math.abs(totalAssetsPaise - totalLiabEquityPaise) === 0
     };
   }
 
   /**
-   * Stock Summary Report
+   * Stock Summary Report — C-1: Evaluated at true Weighted Average Rate
+   * DEF-REP-15: Support optional asOfDate for historical stock valuation
+   * DEF-REP-09: Expose reorderLevel for dashboard alerts
    */
-  public static getStockSummary(db: DatabaseSync, companyId: string): Array<{
+  public static getStockSummary(
+    db: DatabaseSync,
+    companyId: string,
+    asOfDate?: string
+  ): Array<{
     itemId: string;
     item_id: string;
     itemName: string;
@@ -356,6 +442,9 @@ export class ReportEngine {
     unit_symbol: string;
     quantity: number;
     closing_qty: number;
+    currentStock: number;
+    reorderLevel: number;
+    reorder_level: number;
     avgRatePaise: number;
     avg_rate_paise: number;
     totalValuePaise: number;
@@ -363,21 +452,25 @@ export class ReportEngine {
   }> {
     const items = db.prepare(`
       SELECT 
-        si.item_id, si.item_name, si.sku, si.hsn_sac, COALESCE(u.symbol, 'Nos') as unit_symbol,
-        COALESCE(SUM(CASE WHEN se.movement_type = 'IN' THEN se.quantity ELSE 0 END), 0) -
-        COALESCE(SUM(CASE WHEN se.movement_type = 'OUT' THEN se.quantity ELSE 0 END), 0) AS current_qty,
-        COALESCE(AVG(CASE WHEN se.movement_type = 'IN' THEN se.rate_paise ELSE NULL END), si.purchase_rate_paise, 0) AS avg_rate
+        si.item_id, si.item_name, si.sku, si.hsn_sac, si.reorder_level, COALESCE(u.symbol, 'Nos') as unit_symbol, si.purchase_rate_paise
       FROM stock_items si
       LEFT JOIN units u ON si.unit_id = u.unit_id
-      LEFT JOIN stock_entries se ON si.item_id = se.item_id
       WHERE si.company_id = ? AND si.is_active = 1
-      GROUP BY si.item_id
       ORDER BY si.item_name ASC
     `).all(companyId) as any[];
 
     return items.map(i => {
-      const qty = Math.max(0, Number(i.current_qty));
-      const rate = Math.round(Number(i.avg_rate) || 0);
+      const summary = InventoryEngine.getItemStockSummary(db, i.item_id, asOfDate);
+      const qty = summary.totalQuantity;
+      const rate = summary.weightedAverageRatePaise > 0
+        ? summary.weightedAverageRatePaise
+        : Math.round(Number(i.purchase_rate_paise) || 0);
+      const totalVal = summary.totalValuePaise > 0
+        ? summary.totalValuePaise
+        : Math.round(qty * rate);
+
+      const reorderLvl = Number(i.reorder_level) || 0;
+
       return {
         itemId: i.item_id,
         item_id: i.item_id,
@@ -390,21 +483,31 @@ export class ReportEngine {
         unit_symbol: i.unit_symbol || 'Nos',
         quantity: qty,
         closing_qty: qty,
+        currentStock: qty,
+        reorderLevel: reorderLvl,
+        reorder_level: reorderLvl,
         avgRatePaise: rate,
         avg_rate_paise: rate,
-        totalValuePaise: Math.round(qty * rate),
-        total_value_paise: Math.round(qty * rate)
+        totalValuePaise: totalVal,
+        total_value_paise: totalVal
       };
     });
   }
 
   /**
    * Outstanding Receivables and Payables with Ageing (0-30, 31-60, 61-90, 90+)
+   * Outstanding Receivables / Payables Report with Aging Analysis
+   * DEF-REP-02: Party opening balances in oldest bucket
+   * DEF-REP-03: ON_ACCOUNT / ADVANCE settlement via LedgerFlow FIFO policy
+   * DEF-REP-04: Strict CUSTOMER vs SUPPLIER separation (party_type = BOTH isolation)
+   * DEF-REP-05: Returns (SALES_RETURN, PURCHASE_RETURN) and Notes (CREDIT_NOTE, DEBIT_NOTE) integration
+   * DEF-REP-14: Historical asOnDate filtering and point-in-time aging
    */
   public static getOutstandingReport(
     db: DatabaseSync,
     companyId: string,
-    type: 'CUSTOMER' | 'SUPPLIER'
+    type: 'CUSTOMER' | 'SUPPLIER',
+    asOnDate?: string
   ): Array<{
     partyId: string;
     partyName: string;
@@ -416,29 +519,163 @@ export class ReportEngine {
     bucket90PlusPaise: number;
   }> {
     const parties = db.prepare(`
-      SELECT p.party_id, p.party_name, p.phone, p.ledger_id
+      SELECT p.party_id, p.party_name, p.phone, p.ledger_id,
+             COALESCE(l.opening_balance_paise, 0) AS opening_balance_paise,
+             COALESCE(l.opening_balance_type, 'DR') AS opening_balance_type
       FROM parties p
+      JOIN ledgers l ON p.ledger_id = l.ledger_id
       WHERE p.company_id = ? AND (p.party_type = ? OR p.party_type = 'BOTH')
     `).all(companyId, type) as any[];
 
     const result = [];
-    const today = new Date();
+    const referenceDate = asOnDate ? new Date(asOnDate) : new Date();
+
+    const invoiceVoucherType = type === 'CUSTOMER' ? 'SALES' : 'PURCHASE';
+    const settlementVoucherTypes = type === 'CUSTOMER'
+      ? ['RECEIPT', 'SALES_RETURN', 'CREDIT_NOTE']
+      : ['PAYMENT', 'PURCHASE_RETURN', 'DEBIT_NOTE'];
 
     for (const p of parties) {
-      // Find all invoices (vouchers) and receipts/payments
-      const bills = db.prepare(`
-        SELECT 
-          v.voucher_id, v.voucher_date, v.total_amount_paise,
-          COALESCE((
-            SELECT SUM(ba2.amount_paise)
-            FROM bill_allocations ba2
-            WHERE ba2.reference_voucher_id = v.voucher_id AND ba2.allocation_type = 'AGAINST_REF'
-          ), 0) AS settled_paise
+      const openingPaise = Number(p.opening_balance_paise || 0);
+      const openingType = p.opening_balance_type || 'DR';
+
+      let openingInvoicePaise = 0;
+      let unallocatedPool = 0;
+
+      // DEF-REP-02: For CUSTOMER: DR is receivable (invoice), CR is unallocated advance
+      // For SUPPLIER: CR is payable (invoice), DR is unallocated advance
+      if (type === 'CUSTOMER') {
+        if (openingType === 'DR') {
+          openingInvoicePaise = openingPaise;
+        } else {
+          unallocatedPool += openingPaise;
+        }
+      } else {
+        if (openingType === 'CR') {
+          openingInvoicePaise = openingPaise;
+        } else {
+          unallocatedPool += openingPaise;
+        }
+      }
+
+      // 1. Fetch posted invoices up to asOnDate (chronological order)
+      let invoiceQuery = `
+        SELECT v.voucher_id, v.voucher_date, v.total_amount_paise
         FROM vouchers v
         WHERE v.company_id = ? AND v.party_id = ? AND v.status = 'POSTED'
-          AND v.voucher_type IN ('SALES', 'PURCHASE')
-      `).all(companyId, p.party_id) as any[];
+          AND v.voucher_type = ?
+      `;
+      const invoiceParams: any[] = [companyId, p.party_id, invoiceVoucherType];
+      if (asOnDate) {
+        invoiceQuery += ` AND v.voucher_date <= ?`;
+        invoiceParams.push(asOnDate);
+      }
+      invoiceQuery += ` ORDER BY v.voucher_date ASC, v.created_at ASC`;
+      const rawInvoices = db.prepare(invoiceQuery).all(...invoiceParams) as any[];
 
+      interface BillItem {
+        id: string;
+        date: string;
+        isOpening: boolean;
+        totalPaise: number;
+        settledPaise: number;
+      }
+
+      const bills: BillItem[] = [];
+      if (openingInvoicePaise > 0) {
+        bills.push({
+          id: 'OPENING_BAL',
+          date: '1970-01-01',
+          isOpening: true,
+          totalPaise: openingInvoicePaise,
+          settledPaise: 0
+        });
+      }
+
+      for (const inv of rawInvoices) {
+        bills.push({
+          id: inv.voucher_id,
+          date: inv.voucher_date,
+          isOpening: false,
+          totalPaise: Number(inv.total_amount_paise),
+          settledPaise: 0
+        });
+      }
+
+      // 2. Fetch explicit AGAINST_REF allocations
+      let allocQuery = `
+        SELECT ba.reference_voucher_id, SUM(ba.amount_paise) AS total_settled
+        FROM bill_allocations ba
+        JOIN vouchers v ON ba.voucher_id = v.voucher_id
+        WHERE v.company_id = ? AND ba.ledger_id = ? AND ba.allocation_type = 'AGAINST_REF'
+          AND v.status = 'POSTED'
+      `;
+      const allocParams: any[] = [companyId, p.ledger_id];
+      if (asOnDate) {
+        allocQuery += ` AND v.voucher_date <= ?`;
+        allocParams.push(asOnDate);
+      }
+      allocQuery += ` GROUP BY ba.reference_voucher_id`;
+      const explicitAllocs = db.prepare(allocQuery).all(...allocParams) as any[];
+
+      const allocMap = new Map<string, number>();
+      for (const a of explicitAllocs) {
+        if (a.reference_voucher_id) {
+          allocMap.set(a.reference_voucher_id, Number(a.total_settled));
+        }
+      }
+
+      for (const b of bills) {
+        if (!b.isOpening && allocMap.has(b.id)) {
+          const againstRefAmount = allocMap.get(b.id)!;
+          b.settledPaise += Math.min(againstRefAmount, b.totalPaise);
+        }
+      }
+
+      // 3. Fetch settlement vouchers and compute unallocated pool
+      const placeholders = settlementVoucherTypes.map(() => '?').join(',');
+      let stlQuery = `
+        SELECT v.voucher_id, v.total_amount_paise,
+               COALESCE((
+                 SELECT SUM(ba.amount_paise)
+                 FROM bill_allocations ba
+                 JOIN vouchers rv ON ba.reference_voucher_id = rv.voucher_id
+                 WHERE ba.voucher_id = v.voucher_id AND ba.allocation_type = 'AGAINST_REF'
+                   AND rv.status = 'POSTED'
+               ), 0) AS against_ref_paise
+        FROM vouchers v
+        WHERE v.company_id = ? AND v.party_id = ? AND v.status = 'POSTED'
+          AND v.voucher_type IN (${placeholders})
+      `;
+      const stlParams: any[] = [companyId, p.party_id, ...settlementVoucherTypes];
+      if (asOnDate) {
+        stlQuery += ` AND v.voucher_date <= ?`;
+        stlParams.push(asOnDate);
+      }
+      stlQuery += ` ORDER BY v.voucher_date ASC, v.created_at ASC`;
+      const settlementVouchers = db.prepare(stlQuery).all(...stlParams) as any[];
+
+      for (const sv of settlementVouchers) {
+        const totalVch = Number(sv.total_amount_paise);
+        const allocatedAgainstRef = Number(sv.against_ref_paise);
+        const unallocatedFromVch = Math.max(0, totalVch - allocatedAgainstRef);
+        unallocatedPool += unallocatedFromVch;
+      }
+
+      // 4. Apply unallocated pool via FIFO to oldest bills first
+      if (unallocatedPool > 0) {
+        for (const b of bills) {
+          const remainingUnpaid = b.totalPaise - b.settledPaise;
+          if (remainingUnpaid > 0) {
+            const deduct = Math.min(remainingUnpaid, unallocatedPool);
+            b.settledPaise += deduct;
+            unallocatedPool -= deduct;
+            if (unallocatedPool <= 0) break;
+          }
+        }
+      }
+
+      // 5. Calculate aging buckets
       let totalOutstanding = 0;
       let b0_30 = 0;
       let b31_60 = 0;
@@ -446,19 +683,19 @@ export class ReportEngine {
       let b90_plus = 0;
 
       for (const b of bills) {
-        const invTotal = Number(b.total_amount_paise);
-        const settled = Number(b.settled_paise);
-        const pending = invTotal - settled;
-
+        const pending = b.totalPaise - b.settledPaise;
         if (pending > 0) {
           totalOutstanding += pending;
-          const billDate = new Date(b.voucher_date);
-          const diffDays = Math.floor((today.getTime() - billDate.getTime()) / (1000 * 3600 * 24));
-
-          if (diffDays <= 30) b0_30 += pending;
-          else if (diffDays <= 60) b31_60 += pending;
-          else if (diffDays <= 90) b61_90 += pending;
-          else b90_plus += pending;
+          if (b.isOpening) {
+            b90_plus += pending;
+          } else {
+            const billDate = new Date(b.date);
+            const diffDays = Math.floor((referenceDate.getTime() - billDate.getTime()) / (1000 * 3600 * 24));
+            if (diffDays <= 30) b0_30 += pending;
+            else if (diffDays <= 60) b31_60 += pending;
+            else if (diffDays <= 90) b61_90 += pending;
+            else b90_plus += pending;
+          }
         }
       }
 
@@ -481,44 +718,60 @@ export class ReportEngine {
 
   /**
    * GST Tax Registers (GSTR-1 Outward & GSTR-2 Inward Summary)
+   * DEF-REP-06: Include and separate CESS tax entries (output, input, net)
+   * DEF-REP-08: Safe default date fallbacks
+   * DEF-REP-13: Reconcile zero-tax / 0% turnover
    */
   public static getGstSummary(
     db: DatabaseSync,
     companyId: string,
-    fromDate: string,
-    toDate: string
+    fromDate?: string,
+    toDate?: string
   ): {
     outwardTaxablePaise: number;
     outputCgstPaise: number;
     outputSgstPaise: number;
     outputIgstPaise: number;
+    outputCessPaise: number;
     totalOutputTaxPaise: number;
+    outwardZeroTaxTurnoverPaise: number;
+    totalOutwardTurnoverPaise: number;
     inwardTaxablePaise: number;
     inputCgstPaise: number;
     inputSgstPaise: number;
     inputIgstPaise: number;
+    inputCessPaise: number;
     totalInputTaxPaise: number;
+    inwardZeroTaxTurnoverPaise: number;
+    totalInwardTurnoverPaise: number;
     netGstPayablePaise: number;
+    netCessPayablePaise: number;
   } {
+    const effectiveFromDate = fromDate || '2000-01-01';
+    const effectiveToDate = toDate || new Date().toISOString().split('T')[0];
+
     const rows = db.prepare(`
       SELECT 
         te.tax_type,
+        v.voucher_type,
         SUM(te.taxable_amount_paise) as taxable,
         SUM(te.tax_amount_paise) as tax
       FROM tax_entries te
       JOIN vouchers v ON te.voucher_id = v.voucher_id
       WHERE v.company_id = ? AND v.voucher_date >= ? AND v.voucher_date <= ? AND v.status = 'POSTED'
-      GROUP BY te.tax_type
-    `).all(companyId, fromDate, toDate) as any[];
+      GROUP BY te.tax_type, v.voucher_type
+    `).all(companyId, effectiveFromDate, effectiveToDate) as any[];
 
     let outTaxable = 0;
     let outCgst = 0;
     let outSgst = 0;
     let outIgst = 0;
+    let outCess = 0;
     let inTaxable = 0;
     let inCgst = 0;
     let inSgst = 0;
     let inIgst = 0;
+    let inCess = 0;
 
     for (const r of rows) {
       const taxable = Number(r.taxable || 0);
@@ -547,24 +800,66 @@ export class ReportEngine {
           inTaxable += taxable;
           inIgst += tax;
           break;
+        case 'CESS':
+          if (['SALES', 'SALES_RETURN', 'CREDIT_NOTE'].includes(r.voucher_type)) {
+            outCess += tax;
+          } else if (['PURCHASE', 'PURCHASE_RETURN', 'DEBIT_NOTE'].includes(r.voucher_type)) {
+            inCess += tax;
+          }
+          break;
       }
     }
 
-    const totalOutput = outCgst + outSgst + outIgst;
-    const totalInput = inCgst + inSgst + inIgst;
+    // DEF-REP-13: Reconcile zero-tax / 0% turnover from voucher_lines
+    const zeroTaxRows = db.prepare(`
+      SELECT 
+        v.voucher_type,
+        SUM(vl.taxable_amount_paise) as zero_taxable
+      FROM voucher_lines vl
+      JOIN vouchers v ON vl.voucher_id = v.voucher_id
+      WHERE v.company_id = ? AND v.voucher_date >= ? AND v.voucher_date <= ? AND v.status = 'POSTED'
+        AND vl.gst_rate = 0
+      GROUP BY v.voucher_type
+    `).all(companyId, effectiveFromDate, effectiveToDate) as any[];
+
+    let outZeroTax = 0;
+    let inZeroTax = 0;
+
+    for (const z of zeroTaxRows) {
+      const amt = Number(z.zero_taxable || 0);
+      if (z.voucher_type === 'SALES') {
+        outZeroTax += amt;
+      } else if (z.voucher_type === 'SALES_RETURN' || z.voucher_type === 'CREDIT_NOTE') {
+        outZeroTax -= amt;
+      } else if (z.voucher_type === 'PURCHASE') {
+        inZeroTax += amt;
+      } else if (z.voucher_type === 'PURCHASE_RETURN' || z.voucher_type === 'DEBIT_NOTE') {
+        inZeroTax -= amt;
+      }
+    }
+
+    const totalOutput = outCgst + outSgst + outIgst + outCess;
+    const totalInput = inCgst + inSgst + inIgst + inCess;
 
     return {
       outwardTaxablePaise: outTaxable,
       outputCgstPaise: outCgst,
       outputSgstPaise: outSgst,
       outputIgstPaise: outIgst,
+      outputCessPaise: outCess,
       totalOutputTaxPaise: totalOutput,
+      outwardZeroTaxTurnoverPaise: outZeroTax,
+      totalOutwardTurnoverPaise: outTaxable + outZeroTax,
       inwardTaxablePaise: inTaxable,
       inputCgstPaise: inCgst,
       inputSgstPaise: inSgst,
       inputIgstPaise: inIgst,
+      inputCessPaise: inCess,
       totalInputTaxPaise: totalInput,
-      netGstPayablePaise: totalOutput - totalInput
+      inwardZeroTaxTurnoverPaise: inZeroTax,
+      totalInwardTurnoverPaise: inTaxable + inZeroTax,
+      netGstPayablePaise: totalOutput - totalInput,
+      netCessPayablePaise: outCess - inCess
     };
   }
 }
