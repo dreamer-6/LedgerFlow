@@ -433,7 +433,6 @@ export function createApiRouter(db: DatabaseSync): Router {
       }
     }
 
-    db.exec('BEGIN TRANSACTION;');
     try {
       const existing = db.prepare(`
         SELECT item_id, item_name, serial_numbers, purchase_rate_paise, selling_rate_paise
@@ -497,13 +496,11 @@ export function createApiRouter(db: DatabaseSync): Router {
           `).get(companyId, today) as any;
 
           if (!dateFy) {
-            db.exec('ROLLBACK;');
             return res.status(400).json({
               error: `Cannot adjust stock: No financial year found covering date '${today}'. Please create the appropriate financial year first.`
             });
           }
           if (dateFy.status !== 'OPEN') {
-            db.exec('ROLLBACK;');
             return res.status(400).json({
               error: `Cannot adjust stock: Financial Year '${dateFy.name}' is ${dateFy.status}. Stock adjustments are prohibited in closed or locked periods.`
             });
@@ -543,6 +540,7 @@ export function createApiRouter(db: DatabaseSync): Router {
                 godownId,
                 quantity: qty,
                 ratePaise: effectiveRate,
+                gstRate: 0,
                 movementType: 'IN'
               }],
               customLedgerLines: [
@@ -565,7 +563,6 @@ export function createApiRouter(db: DatabaseSync): Router {
             const allowNegative = b.allowNegativeStock === true;
             const avail = InventoryEngine.validateStockAvailability(db, existing.item_id, godownId, absQty, allowNegative);
             if (!avail.isValid) {
-              db.exec('ROLLBACK;');
               return res.status(400).json({
                 error: `Insufficient stock for item '${existing.item_name}' in godown '${godownId}'. Available: ${avail.currentQty}, Requested reduction: ${absQty}.`
               });
@@ -588,6 +585,7 @@ export function createApiRouter(db: DatabaseSync): Router {
                 godownId,
                 quantity: absQty,
                 ratePaise: unitCost,
+                gstRate: 0,
                 movementType: 'OUT'
               }],
               customLedgerLines: [
@@ -608,7 +606,6 @@ export function createApiRouter(db: DatabaseSync): Router {
           }
         }
 
-        db.exec('COMMIT;');
         return res.status(200).json({
           itemId: existing.item_id,
           itemName: existing.item_name,
@@ -623,6 +620,7 @@ export function createApiRouter(db: DatabaseSync): Router {
         unitId = defUnit?.unit_id || unitId || 'unit_nos';
       }
 
+      db.exec('BEGIN TRANSACTION;');
       const itemId = 'item_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
       db.prepare(`
         INSERT INTO stock_items (
@@ -664,7 +662,7 @@ export function createApiRouter(db: DatabaseSync): Router {
       try {
         db.exec('ROLLBACK;');
       } catch { /* ignore rollback error */ }
-      return res.status(500).json({ error: err.message });
+      return res.status(400).json({ error: err.message });
     }
   });
 

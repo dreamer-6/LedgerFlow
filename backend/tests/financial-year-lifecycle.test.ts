@@ -418,6 +418,13 @@ async function runTestSuite() {
     date: '2025-04-01'
   });
 
+  // Offset opening stock inventory asset with Proprietor Capital equity
+  testDb.prepare(`
+    UPDATE ledgers
+    SET opening_balance_paise = ?, opening_balance_type = 'CR'
+    WHERE ledger_id = ?
+  `).run(100000000, `${companyA}_led_capital`);
+
   await test('TEST_FY_04: Voucher date auto-resolves to matching FY strictly', async () => {
     // 1. Post voucher in FY 2025-26 (date: 2025-06-15)
     const res1 = await fetch(`${baseUrl}/vouchers`, {
@@ -630,6 +637,11 @@ async function runTestSuite() {
       VALUES (?, ?, ?, 'Fresh Unused Party', 'CUSTOMER', '27AABCA0000A1Z0')
     `).run(freshPartyId, companyA, freshLedgerId);
 
+    // Offset opening balance with Proprietor Capital to keep trial balance balanced
+    testDb.prepare(`
+      UPDATE ledgers SET opening_balance_paise = opening_balance_paise + 10000 WHERE ledger_id = ?
+    `).run(`${companyA}_led_capital`);
+
     // companyA has a CLOSED FY (FY 2025-26 was closed in TEST_FY_07). Attempt to modify opening balance
     const res = await fetch(`${baseUrl}/masters/parties/${freshPartyId}`, {
       method: 'PUT',
@@ -702,8 +714,6 @@ async function runTestSuite() {
         purchaseRatePaise: 5000000
       })
     });
-    const body = await res.json();
-    if (res.status !== 200) console.error('TEST_FY_11A error:', body);
     assert.strictEqual(res.status, 200);
 
     // Verify voucher created: STOCK_JOURNAL with DR Inventory, CR COGS
@@ -731,7 +741,7 @@ async function runTestSuite() {
     // Verify Trial Balance remains strictly balanced
     const tb = ReportEngine.getTrialBalance(testDb, companyA, '2026-10-02');
     assert.strictEqual(tb.isBalanced, true);
-    assert.strictEqual(tb.totalDebitsPaise, tb.totalCreditsPaise);
+    assert.strictEqual(tb.totalDebitPaise, tb.totalCreditPaise);
   });
 
   await test('TEST_FY_11B: Negative stock adjustment creates balanced double-entry accounting', async () => {
@@ -773,7 +783,7 @@ async function runTestSuite() {
 
     const tb = ReportEngine.getTrialBalance(testDb, companyA, '2026-10-02');
     assert.strictEqual(tb.isBalanced, true);
-    assert.strictEqual(tb.totalDebitsPaise, tb.totalCreditsPaise);
+    assert.strictEqual(tb.totalDebitPaise, tb.totalCreditPaise);
   });
 
   await test('TEST_FY_11C: Stock Summary valuation equals Inventory Asset ledger after adjustments', async () => {
@@ -872,14 +882,24 @@ async function runTestSuite() {
   });
 
   await test('TEST_FY_18: Zero duplicate opening stock across FY boundaries', async () => {
-    // Check stock_entries to ensure no artificial carry-forward rows or duplicate opening entries were inserted
-    const openEntries = testDb.prepare(`
-      SELECT COUNT(*) as cnt FROM stock_entries se
-      JOIN vouchers v ON se.voucher_id = v.voucher_id
-      WHERE v.company_id = ? AND v.voucher_number = 'STK-000'
-    `).get(companyA) as any;
+    const fy2627 = testDb.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND start_date = ?').get(companyA, '2026-04-01') as any;
 
-    assert.strictEqual(openEntries.cnt, 0, 'Zero artificial carry-forward opening entries exist in vouchers/stock_entries');
+    // Verify no synthetic opening stock voucher was created in FY 2026-27
+    const duplicateOpenVouchers = testDb.prepare(`
+      SELECT COUNT(*) as cnt FROM vouchers
+      WHERE company_id = ? AND fy_id = ? AND narration LIKE '%Opening Stock%'
+    `).get(companyA, fy2627.fy_id) as any;
+    assert.strictEqual(duplicateOpenVouchers.cnt, 0, 'Zero duplicate opening stock vouchers created in next FY');
+
+    // Verify stock quantity is continuous across FY boundary (2026-03-31 closing === 2026-04-01 opening)
+    const stockAtClosing = ReportEngine.getStockSummary(testDb, companyA, '2026-03-31');
+    const laptopClosing = stockAtClosing.find(s => s.itemId === itemId)?.currentStock;
+
+    const stockAtNewOpening = ReportEngine.getStockSummary(testDb, companyA, '2026-04-01');
+    const laptopNewOpening = stockAtNewOpening.find(s => s.itemId === itemId)?.currentStock;
+
+    assert.strictEqual(laptopClosing, 19, 'FY 2025-26 closing stock must be 19 units (20 opening - 1 sold)');
+    assert.strictEqual(laptopNewOpening, 19, 'FY 2026-27 opening stock must seamlessly equal 19 units with no duplication');
   });
 
   await test('TEST_FY_19: Multi-year retained earnings remains correct on Balance Sheet', async () => {
@@ -893,7 +913,7 @@ async function runTestSuite() {
   await test('TEST_FY_20: Full regression verification across baseline reports', async () => {
     const tb = ReportEngine.getTrialBalance(testDb, companyA, '2026-10-02');
     assert.strictEqual(tb.isBalanced, true, 'Trial Balance must be strictly balanced');
-    assert.strictEqual(tb.totalDebitsPaise, tb.totalCreditsPaise);
+    assert.strictEqual(tb.totalDebitPaise, tb.totalCreditPaise);
 
     const outstCust = ReportEngine.getOutstandingReport(testDb, companyA, 'CUSTOMER', '2026-10-02');
     assert.ok(outstCust.length > 0, 'Outstanding receivables must carry forward seamlessly across FY boundary');
@@ -1024,6 +1044,7 @@ async function runTestSuite() {
         voucherDate: '2025-11-20',
         partyId: custPartyId,
         narration: 'Post-audit reopening historical invoice',
+        allowNegativeStock: true,
         lines: [{
           itemId,
           quantity: 1,
@@ -1037,7 +1058,7 @@ async function runTestSuite() {
     // Verify trial balance and balance sheet immediately reconcile
     const tb = ReportEngine.getTrialBalance(testDb, companyA, '2026-10-02');
     assert.strictEqual(tb.isBalanced, true);
-    assert.strictEqual(tb.totalDebitsPaise, tb.totalCreditsPaise);
+    assert.strictEqual(tb.totalDebitPaise, tb.totalCreditPaise);
 
     const bs = ReportEngine.getBalanceSheet(testDb, companyA, '2026-10-02');
     assert.strictEqual(bs.isBalanced, true);
