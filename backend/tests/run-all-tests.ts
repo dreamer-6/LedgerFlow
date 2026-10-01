@@ -157,7 +157,7 @@ assert.strictEqual(postSaleStock.totalQuantity, 9, 'Stock must decrease by 1 to 
 console.log('✓ Inventory mass balance invariant verified: 10 - 1 = 9 units.');
 
 // 2. Customer ledger statement has DR ₹59,000
-const custLedger = ReportEngine.getLedgerStatement(testDb, 'led_cust_sample_01', '2026-04-01', '2026-05-31');
+const custLedger = ReportEngine.getLedgerStatement(testDb, companyId, 'led_cust_sample_01', '2026-04-01', '2026-05-31');
 assert.strictEqual(custLedger.closingBalancePaise, 5900000, 'Customer balance must be ₹59,000');
 assert.strictEqual(custLedger.closingBalanceType, 'DR', 'Customer balance must be Debit');
 console.log('✓ Customer ledger updated with DR ₹59,000.');
@@ -188,7 +188,7 @@ const receiptVoucher = PostingEngine.postVoucher(testDb, {
 });
 
 // Verify Customer balance is now 0
-const settledCustLedger = ReportEngine.getLedgerStatement(testDb, 'led_cust_sample_01', '2026-04-01', '2026-05-31');
+const settledCustLedger = ReportEngine.getLedgerStatement(testDb, companyId, 'led_cust_sample_01', '2026-04-01', '2026-05-31');
 assert.strictEqual(settledCustLedger.closingBalancePaise, 0, 'Customer closing balance must be 0 after full settlement');
 
 // Verify Customer Outstanding is now 0

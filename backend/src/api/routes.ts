@@ -26,6 +26,7 @@
  *   - getUserFromToken and resolveCompanyId (old helpers) are NOT exported
  */
 
+import crypto from 'node:crypto';
 import { Router, Response } from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import { PostingEngine } from '../domain/posting/posting-engine.js';
@@ -105,14 +106,41 @@ export function createApiRouter(db: DatabaseSync): Router {
   router.post('/masters/ledgers', ...withAccountant, (req: SecureRequest, res: Response) => {
     try {
       const { groupId, ledgerName, code, openingBalancePaise, openingBalanceType } = req.body;
-      const ledgerId = 'led_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+      const companyId = req.companyId!;
+
+      if (!ledgerName || typeof ledgerName !== 'string' || !ledgerName.trim()) {
+        return res.status(400).json({ error: 'Ledger name is required and must be a non-empty string.' });
+      }
+
+      if (!groupId || typeof groupId !== 'string' || !groupId.trim()) {
+        return res.status(400).json({ error: 'Ledger group is required.' });
+      }
+
+      const validGroup = db.prepare(`
+        SELECT 1 FROM ledger_groups
+        WHERE group_id = ? AND (company_id = ? OR company_id IS NULL)
+      `).get(groupId.trim(), companyId);
+
+      if (!validGroup) {
+        return res.status(400).json({ error: `Ledger group '${groupId}' not found or belongs to another company.` });
+      }
+
+      const balType = openingBalanceType !== undefined && openingBalanceType !== null && String(openingBalanceType).trim() !== ''
+        ? String(openingBalanceType).trim()
+        : 'DR';
+
+      if (balType !== 'DR' && balType !== 'CR') {
+        return res.status(400).json({ error: `Invalid opening balance type '${openingBalanceType}'. Must be DR or CR.` });
+      }
+
+      const ledgerId = 'led_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
 
       db.prepare(`
         INSERT INTO ledgers (ledger_id, company_id, group_id, ledger_name, code, opening_balance_paise, opening_balance_type)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(ledgerId, req.companyId!, groupId, ledgerName, code || null, openingBalancePaise || 0, openingBalanceType || 'DR');
+      `).run(ledgerId, companyId, groupId.trim(), ledgerName.trim(), code ? String(code).trim() : null, Math.round(Number(openingBalancePaise) || 0), balType);
 
-      res.status(201).json({ ledgerId, ledgerName });
+      res.status(201).json({ ledgerId, ledgerName: ledgerName.trim() });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -319,23 +347,37 @@ export function createApiRouter(db: DatabaseSync): Router {
       if (!party || !assertResourceOwnership(res, party.company_id, req.companyId!)) return;
 
       const voucherCount = (db.prepare('SELECT COUNT(*) as cnt FROM vouchers WHERE party_id = ?').get(partyId) as any)?.cnt || 0;
-      if (voucherCount > 0) {
-        return res.status(400).json({ error: `Cannot delete party '${party.party_name}' because they have ${voucherCount} recorded voucher(s).` });
+
+      let openingBal = 0;
+      let allocCount = 0;
+      let leCount = 0;
+      if (party.ledger_id) {
+        const ledgerRow = db.prepare('SELECT opening_balance_paise FROM ledgers WHERE ledger_id = ?').get(party.ledger_id) as any;
+        openingBal = ledgerRow?.opening_balance_paise || 0;
+        allocCount = (db.prepare('SELECT COUNT(*) as cnt FROM bill_allocations WHERE ledger_id = ?').get(party.ledger_id) as any)?.cnt || 0;
+        leCount = (db.prepare('SELECT COUNT(*) as cnt FROM ledger_entries WHERE ledger_id = ?').get(party.ledger_id) as any)?.cnt || 0;
+      }
+
+      if (voucherCount > 0 || Math.abs(openingBal) > 0 || allocCount > 0 || leCount > 0) {
+        return res.status(400).json({
+          error: `Cannot delete party '${party.party_name}' with existing transactions or opening balance.`
+        });
       }
 
       db.exec('BEGIN TRANSACTION;');
-      db.prepare('DELETE FROM party_addresses WHERE party_id = ?').run(partyId);
-      db.prepare('DELETE FROM parties WHERE party_id = ?').run(partyId);
-      if (party.ledger_id) {
-        const leCount = (db.prepare('SELECT COUNT(*) as cnt FROM ledger_entries WHERE ledger_id = ?').get(party.ledger_id) as any)?.cnt || 0;
-        if (leCount === 0) {
+      try {
+        db.prepare('DELETE FROM party_addresses WHERE party_id = ?').run(partyId);
+        db.prepare('DELETE FROM parties WHERE party_id = ?').run(partyId);
+        if (party.ledger_id) {
           db.prepare('DELETE FROM ledgers WHERE ledger_id = ?').run(party.ledger_id);
         }
+        db.exec('COMMIT;');
+        res.json({ success: true, message: 'Party deleted successfully.' });
+      } catch (delErr: any) {
+        try { db.exec('ROLLBACK;'); } catch (_) {}
+        res.status(500).json({ error: delErr.message });
       }
-      db.exec('COMMIT;');
-      res.json({ success: true, message: 'Party deleted successfully.' });
     } catch (err: any) {
-      db.exec('ROLLBACK;');
       res.status(500).json({ error: err.message });
     }
   });
@@ -360,14 +402,24 @@ export function createApiRouter(db: DatabaseSync): Router {
   });
 
   router.post('/masters/items', ...withAccountant, (req: SecureRequest, res: Response) => {
-    try {
-      const b = req.body;
-      const companyId = req.companyId!;
+    const b = req.body;
+    const companyId = req.companyId!;
 
-      if (!b.itemName || !b.itemName.trim()) {
-        return res.status(400).json({ error: 'Item name is required.' });
+    if (!b.itemName || !b.itemName.trim()) {
+      return res.status(400).json({ error: 'Item name is required.' });
+    }
+
+    if (b.unitId !== undefined && b.unitId !== null && String(b.unitId).trim() !== '') {
+      const validUnit = db.prepare(`
+        SELECT 1 FROM units WHERE unit_id = ? AND (company_id = ? OR company_id IS NULL)
+      `).get(String(b.unitId).trim(), companyId);
+      if (!validUnit) {
+        return res.status(400).json({ error: `Unit '${b.unitId}' not found or belongs to another company.` });
       }
+    }
 
+    db.exec('BEGIN TRANSACTION;');
+    try {
       const existing = db.prepare(`
         SELECT item_id, item_name, serial_numbers, purchase_rate_paise, selling_rate_paise
         FROM stock_items
@@ -424,13 +476,26 @@ export function createApiRouter(db: DatabaseSync): Router {
 
         if (qty > 0) {
           const valPaise = Math.round(qty * rate);
-          const entryId = 'se_upd_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
+          // C-3 / Amendment 1: Real STOCK_JOURNAL voucher with crypto.randomUUID() and safe voucher numbering
+          const activeFy = db.prepare("SELECT fy_id FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(companyId) as any;
+          const fyId = activeFy?.fy_id || 'fy_default';
+          const voucherId = 'vch_' + crypto.randomUUID().replace(/-/g, '');
+          const voucherNumber = PostingEngine.getNextVoucherNumber(db, companyId, fyId, 'STOCK_JOURNAL');
+          const today = new Date().toISOString().split('T')[0];
+
+          db.prepare(`
+            INSERT INTO vouchers (voucher_id, company_id, fy_id, voucher_type, voucher_number, voucher_date, narration, status, total_amount_paise, created_by)
+            VALUES (?, ?, ?, 'STOCK_JOURNAL', ?, ?, ?, 'POSTED', ?, ?)
+          `).run(voucherId, companyId, fyId, voucherNumber, `Stock update adjustment for '${existing.item_name}'`, valPaise, (req as any).user?.username || 'system');
+
+          const entryId = 'se_upd_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
           db.prepare(`
             INSERT INTO stock_entries (stock_entry_id, voucher_id, item_id, godown_id, entry_date, movement_type, quantity, rate_paise, value_paise)
-            VALUES (?, 'vch_stock_upd', ?, ?, ?, 'IN', ?, ?, ?)
-          `).run(entryId, existing.item_id, godownId, new Date().toISOString().split('T')[0], qty, rate, valPaise);
+            VALUES (?, ?, ?, ?, ?, 'IN', ?, ?, ?)
+          `).run(entryId, voucherId, existing.item_id, godownId, today, qty, rate, valPaise);
         }
 
+        db.exec('COMMIT;');
         return res.status(200).json({
           itemId: existing.item_id,
           itemName: existing.item_name,
@@ -439,13 +504,13 @@ export function createApiRouter(db: DatabaseSync): Router {
         });
       }
 
-      let unitId = b.unitId;
+      let unitId = b.unitId ? String(b.unitId).trim() : null;
       if (!unitId || unitId === 'unit_nos') {
         const defUnit = db.prepare('SELECT unit_id FROM units WHERE company_id = ? LIMIT 1').get(companyId) as any;
-        unitId = defUnit?.unit_id || b.unitId || 'unit_nos';
+        unitId = defUnit?.unit_id || unitId || 'unit_nos';
       }
 
-      const itemId = 'item_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+      const itemId = 'item_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
       db.prepare(`
         INSERT INTO stock_items (
           item_id, company_id, item_name, item_code, sku, hsn_sac,
@@ -453,19 +518,23 @@ export function createApiRouter(db: DatabaseSync): Router {
           opening_qty, opening_rate_paise, reorder_level, serial_numbers, has_serial_no
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        itemId, companyId, b.itemName.trim(), b.itemCode || null, b.sku || null, b.hsnSac || null,
-        unitId, b.gstRate ?? null, b.cessRate || 0,
+        itemId, companyId, b.itemName.trim(), b.itemCode || null, b.sku || null, b.hsnSac || '84713010',
+        unitId, b.gstRate !== undefined && b.gstRate !== null ? Number(b.gstRate) : 18.00, b.cessRate || 0,
         rate, sellRate,
         qty, rate, b.reorderLevel || 0,
         b.serialNumbers || null, b.hasSerialNo ? 1 : 0
       );
 
       if (qty > 0) {
-        const openingVal = Math.round(qty * rate);
-        db.prepare(`
-          INSERT INTO stock_entries (stock_entry_id, voucher_id, item_id, godown_id, entry_date, movement_type, quantity, rate_paise, value_paise)
-          VALUES (?, 'vch_opening', ?, ?, ?, 'IN', ?, ?, ?)
-        `).run('se_opn_' + itemId, itemId, godownId, new Date().toISOString().split('T')[0], qty, rate, openingVal);
+        PostingEngine.recordOpeningStock(db, {
+          companyId,
+          itemId,
+          itemName: b.itemName.trim(),
+          godownId,
+          quantity: qty,
+          ratePaise: rate,
+          userId: (req as any).user?.username || 'system'
+        });
       }
 
       if (b.serialNumbers && b.serialNumbers.trim()) {
@@ -476,9 +545,13 @@ export function createApiRouter(db: DatabaseSync): Router {
         }
       }
 
-      res.status(201).json({ itemId, itemName: b.itemName, updated: false, message: `Created stock item '${b.itemName}'.` });
+      db.exec('COMMIT;');
+      return res.status(201).json({ itemId, itemName: b.itemName, updated: false, message: `Created stock item '${b.itemName}'.` });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      try {
+        db.exec('ROLLBACK;');
+      } catch { /* ignore rollback error */ }
+      return res.status(500).json({ error: err.message });
     }
   });
 
@@ -515,9 +588,31 @@ export function createApiRouter(db: DatabaseSync): Router {
   router.put('/masters/items/:id', ...withAccountant, (req: SecureRequest, res: Response) => {
     try {
       const b = req.body;
+      const companyId = req.companyId!;
       // Resource ownership check
-      const item = db.prepare('SELECT item_id, company_id FROM stock_items WHERE item_id = ?').get(req.params.id) as any;
-      if (!item || !assertResourceOwnership(res, item.company_id, req.companyId!)) return;
+      const item = db.prepare('SELECT * FROM stock_items WHERE item_id = ?').get(req.params.id) as any;
+      if (!item || !assertResourceOwnership(res, item.company_id, companyId)) return;
+
+      let unitId = item.unit_id || 'unit_nos';
+      if (b.unitId !== undefined && b.unitId !== null && String(b.unitId).trim() !== '') {
+        const validUnit = db.prepare(`
+          SELECT 1 FROM units WHERE unit_id = ? AND (company_id = ? OR company_id IS NULL)
+        `).get(String(b.unitId).trim(), companyId);
+        if (!validUnit) {
+          return res.status(400).json({ error: `Unit '${b.unitId}' not found or belongs to another company.` });
+        }
+        unitId = String(b.unitId).trim();
+      }
+
+      const itemName = b.itemName !== undefined ? (String(b.itemName).trim() || item.item_name) : item.item_name;
+      const itemCode = b.itemCode !== undefined ? (b.itemCode || null) : item.item_code;
+      const sku = b.sku !== undefined ? (b.sku || null) : item.sku;
+      const hsnSac = b.hsnSac !== undefined ? (b.hsnSac || null) : (item.hsn_sac || '84713010');
+      const gstRate = b.gstRate !== undefined && b.gstRate !== null ? Number(b.gstRate) : (item.gst_rate ?? 18.00);
+      const cessRate = b.cessRate !== undefined && b.cessRate !== null ? Number(b.cessRate) : (item.cess_rate ?? 0);
+      const purchaseRatePaise = b.purchaseRatePaise !== undefined && b.purchaseRatePaise !== null ? Number(b.purchaseRatePaise) : (item.purchase_rate_paise ?? 0);
+      const sellingRatePaise = b.sellingRatePaise !== undefined && b.sellingRatePaise !== null ? Number(b.sellingRatePaise) : (item.selling_rate_paise ?? 0);
+      const reorderLevel = b.reorderLevel !== undefined && b.reorderLevel !== null ? Number(b.reorderLevel) : (item.reorder_level ?? 0);
 
       db.prepare(`
         UPDATE stock_items SET
@@ -527,10 +622,10 @@ export function createApiRouter(db: DatabaseSync): Router {
           reorder_level = ?
         WHERE item_id = ?
       `).run(
-        b.itemName, b.itemCode || null, b.sku || null, b.hsnSac || null,
-        b.unitId || 'unit_nos', b.gstRate ?? null, b.cessRate || 0,
-        b.purchaseRatePaise || 0, b.sellingRatePaise || 0,
-        b.reorderLevel || 0,
+        itemName, itemCode, sku, hsnSac,
+        unitId, gstRate, cessRate,
+        purchaseRatePaise, sellingRatePaise,
+        reorderLevel,
         req.params.id
       );
       res.json({ success: true, message: 'Stock item updated successfully.' });
@@ -546,13 +641,23 @@ export function createApiRouter(db: DatabaseSync): Router {
       if (!item || !assertResourceOwnership(res, item.company_id, req.companyId!)) return;
 
       const lineCount = (db.prepare('SELECT COUNT(*) as cnt FROM voucher_lines WHERE item_id = ?').get(itemId) as any)?.cnt || 0;
-      if (lineCount > 0) {
+      const stockEntryCount = (db.prepare('SELECT COUNT(*) as cnt FROM stock_entries WHERE item_id = ?').get(itemId) as any)?.cnt || 0;
+
+      if (lineCount > 0 || stockEntryCount > 0) {
         db.prepare('UPDATE stock_items SET is_active = 0 WHERE item_id = ?').run(itemId);
-      } else {
-        db.prepare('DELETE FROM stock_entries WHERE item_id = ?').run(itemId);
-        db.prepare('DELETE FROM stock_items WHERE item_id = ?').run(itemId);
+        return res.json({ success: true, message: 'Stock item deactivated successfully (historical transactions preserved).' });
       }
-      res.json({ success: true, message: 'Stock item removed successfully.' });
+
+      db.exec('BEGIN TRANSACTION;');
+      try {
+        db.prepare('DELETE FROM stock_item_serials WHERE item_id = ?').run(itemId);
+        db.prepare('DELETE FROM stock_items WHERE item_id = ?').run(itemId);
+        db.exec('COMMIT;');
+        res.json({ success: true, message: 'Stock item removed successfully.' });
+      } catch (delErr: any) {
+        try { db.exec('ROLLBACK;'); } catch (_) {}
+        res.status(500).json({ error: delErr.message });
+      }
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -742,22 +847,23 @@ export function createApiRouter(db: DatabaseSync): Router {
       const fy = db.prepare('SELECT fy_id FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, companyId) as any;
       if (!fy) return res.status(400).json({ error: 'Invalid financial year for this company.' });
 
-      // Cancel original (creates reversal entries, marks as CANCELLED)
-      try {
-        PostingEngine.cancelVoucher(db, voucherId, req.user!.userId, 'Edited — replaced by amended voucher');
-      } catch { /* may already be cancelled */ }
-
-      // Build replacement payload — use server-resolved context
+      // 006-A: Atomic voucher amendment inside single transaction
       const payload = {
         ...req.body,
         companyId,
         fyId,
         createdBy: req.user!.userId,
-        referenceNumber: `AMEND-${vch.voucher_number}`  // Link to original
+        referenceNumber: req.body.referenceNumber || `AMEND-${vch.voucher_number}`
       };
 
-      const result = PostingEngine.postVoucher(db, payload);
-      res.status(200).json({ ...result, amendedVoucherId: voucherId });
+      const result = PostingEngine.amendVoucher(db, voucherId, payload);
+      res.status(200).json({
+        voucherId: result.replacementVoucherId,
+        voucherNumber: result.replacementVoucherNumber,
+        totalAmountPaise: result.totalAmountPaise,
+        status: result.status,
+        amendedVoucherId: voucherId
+      });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -773,8 +879,24 @@ export function createApiRouter(db: DatabaseSync): Router {
       if (!vch || !assertResourceOwnership(res, vch.company_id, req.companyId!)) return;
 
       const { reason } = req.body;
-      PostingEngine.cancelVoucher(db, req.params.id, req.user!.userId, reason || 'Cancelled by user');
+      PostingEngine.cancelVoucher(db, req.companyId!, req.params.id, req.user!.userId, reason || 'Cancelled by user');
       res.json({ success: true, message: 'Voucher cancelled and accounting effects reversed.' });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  /**
+   * POST /vouchers/:id/post — Promote a DRAFT voucher to POSTED
+   * Requires ACCOUNTANT, ADMIN, or OWNER role.
+   */
+  router.post('/vouchers/:id/post', ...withAccountant, (req: SecureRequest, res: Response) => {
+    try {
+      const vch = db.prepare('SELECT voucher_id, company_id FROM vouchers WHERE voucher_id = ?').get(req.params.id) as any;
+      if (!vch || !assertResourceOwnership(res, vch.company_id, req.companyId!)) return;
+
+      const result = PostingEngine.postDraftVoucher(db, req.companyId!, req.params.id, req.user!.userId);
+      res.status(200).json({ success: true, ...result });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -818,27 +940,55 @@ export function createApiRouter(db: DatabaseSync): Router {
         WHERE company_id = ? AND voucher_type = 'PURCHASE' AND voucher_date = ? AND status = 'POSTED'
       `).get(companyId, today) as { total: number };
 
+      // DEF-REP-10: Include opening balances in receivables, payables, and cash/bank, and expose bank overdraft accurately
       const receivables = db.prepare(`
-        SELECT COALESCE(SUM(le.debit_paise - le.credit_paise), 0) as balance
-        FROM ledger_entries le
-        JOIN ledgers l ON le.ledger_id = l.ledger_id
+        SELECT COALESCE(SUM(
+          COALESCE(l.opening_balance_paise * (CASE WHEN l.opening_balance_type = 'DR' THEN 1 ELSE -1 END), 0) +
+          COALESCE(le.net_dr, 0)
+        ), 0) as balance
+        FROM ledgers l
         JOIN ledger_groups g ON l.group_id = g.group_id
+        LEFT JOIN (
+          SELECT le.ledger_id, SUM(le.debit_paise - le.credit_paise) as net_dr
+          FROM ledger_entries le
+          JOIN vouchers v ON le.voucher_id = v.voucher_id
+          WHERE v.status = 'POSTED'
+          GROUP BY le.ledger_id
+        ) le ON l.ledger_id = le.ledger_id
         WHERE l.company_id = ? AND (l.group_id LIKE '%debtor%' OR g.group_name LIKE '%Debtor%')
       `).get(companyId) as { balance: number };
 
       const payables = db.prepare(`
-        SELECT COALESCE(SUM(le.credit_paise - le.debit_paise), 0) as balance
-        FROM ledger_entries le
-        JOIN ledgers l ON le.ledger_id = l.ledger_id
+        SELECT COALESCE(SUM(
+          COALESCE(l.opening_balance_paise * (CASE WHEN l.opening_balance_type = 'CR' THEN 1 ELSE -1 END), 0) +
+          COALESCE(le.net_cr, 0)
+        ), 0) as balance
+        FROM ledgers l
         JOIN ledger_groups g ON l.group_id = g.group_id
+        LEFT JOIN (
+          SELECT le.ledger_id, SUM(le.credit_paise - le.debit_paise) as net_cr
+          FROM ledger_entries le
+          JOIN vouchers v ON le.voucher_id = v.voucher_id
+          WHERE v.status = 'POSTED'
+          GROUP BY le.ledger_id
+        ) le ON l.ledger_id = le.ledger_id
         WHERE l.company_id = ? AND (l.group_id LIKE '%creditor%' OR g.group_name LIKE '%Creditor%')
       `).get(companyId) as { balance: number };
 
       const cashBank = db.prepare(`
-        SELECT COALESCE(SUM(le.debit_paise - le.credit_paise), 0) as balance
-        FROM ledger_entries le
-        JOIN ledgers l ON le.ledger_id = l.ledger_id
+        SELECT COALESCE(SUM(
+          COALESCE(l.opening_balance_paise * (CASE WHEN l.opening_balance_type = 'DR' THEN 1 ELSE -1 END), 0) +
+          COALESCE(le.net_dr, 0)
+        ), 0) as balance
+        FROM ledgers l
         JOIN ledger_groups g ON l.group_id = g.group_id
+        LEFT JOIN (
+          SELECT le.ledger_id, SUM(le.debit_paise - le.credit_paise) as net_dr
+          FROM ledger_entries le
+          JOIN vouchers v ON le.voucher_id = v.voucher_id
+          WHERE v.status = 'POSTED'
+          GROUP BY le.ledger_id
+        ) le ON l.ledger_id = le.ledger_id
         WHERE l.company_id = ? AND (l.group_id LIKE '%cash%' OR l.group_id LIKE '%bank%' OR g.group_name LIKE '%Cash%' OR g.group_name LIKE '%Bank%')
       `).get(companyId) as { balance: number };
 
@@ -853,13 +1003,14 @@ export function createApiRouter(db: DatabaseSync): Router {
         ORDER BY v.voucher_date DESC, v.created_at DESC LIMIT 5
       `).all(companyId);
 
+      // DEF-REP-09: Stock alerts use actual stock quantity compared against actual reorder level
       const stockAlerts = stockSummary
-        .filter((item: any) => item.currentStock <= (item.reorderLevel ?? 5))
+        .filter(item => (item.reorderLevel > 0 && item.quantity <= item.reorderLevel) || item.quantity <= 0)
         .slice(0, 5)
-        .map((item: any) => ({
+        .map(item => ({
           name: item.itemName,
-          qty: `${item.currentStock} Units`,
-          status: item.currentStock === 0 ? 'critical' : 'warning'
+          qty: `${item.quantity} Units`,
+          status: item.quantity <= 0 ? 'critical' : 'warning'
         }));
 
       const trendData = db.prepare(`
@@ -878,7 +1029,7 @@ export function createApiRouter(db: DatabaseSync): Router {
         todayPurchasesPaise: todayPurchases.total,
         receivablesPaise: Math.max(0, receivables.balance),
         payablesPaise: Math.max(0, payables.balance),
-        cashBankPaise: Math.max(0, cashBank.balance),
+        cashBankPaise: cashBank.balance, // DEF-REP-10: Expose overdraft / negative balance accurately
         stockValuePaise: totalStockValPaise,
         stockAlerts,
         trendData,
@@ -908,7 +1059,7 @@ export function createApiRouter(db: DatabaseSync): Router {
 
       const { fromDate, toDate } = req.query as any;
       const today = new Date().toISOString().split('T')[0];
-      const data = ReportEngine.getLedgerStatement(db, req.params.id, fromDate || '2000-01-01', toDate || today);
+      const data = ReportEngine.getLedgerStatement(db, req.companyId!, req.params.id, fromDate || '2000-01-01', toDate || today);
       res.json(data);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -948,7 +1099,8 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/reports/stock-summary', ...withCompany, (req: SecureRequest, res: Response) => {
     try {
-      const data = ReportEngine.getStockSummary(db, req.companyId!);
+      const { asOfDate } = req.query as any;
+      const data = ReportEngine.getStockSummary(db, req.companyId!, asOfDate);
       res.json(data);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -957,8 +1109,8 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/reports/outstanding', ...withCompany, (req: SecureRequest, res: Response) => {
     try {
-      const { type } = req.query as any;
-      const data = ReportEngine.getOutstandingReport(db, req.companyId!, type || 'CUSTOMER');
+      const { type, asOnDate } = req.query as any;
+      const data = ReportEngine.getOutstandingReport(db, req.companyId!, type || 'CUSTOMER', asOnDate);
       res.json(data);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -968,7 +1120,8 @@ export function createApiRouter(db: DatabaseSync): Router {
   router.get('/reports/gst-summary', ...withCompany, (req: SecureRequest, res: Response) => {
     try {
       const { fromDate, toDate } = req.query as any;
-      const data = ReportEngine.getGstSummary(db, req.companyId!, fromDate, toDate);
+      const today = new Date().toISOString().split('T')[0];
+      const data = ReportEngine.getGstSummary(db, req.companyId!, fromDate || '2000-01-01', toDate || today);
       res.json(data);
     } catch (err: any) {
       res.status(500).json({ error: err.message });

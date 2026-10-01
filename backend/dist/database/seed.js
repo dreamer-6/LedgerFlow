@@ -97,10 +97,12 @@ function initializeBusiness(db, options) {
         { id: gid('led_output_cgst'), group: gid('grp_duties_taxes'), name: 'Output CGST', code: '2101', bal: 0, type: 'CR' },
         { id: gid('led_output_sgst'), group: gid('grp_duties_taxes'), name: 'Output SGST', code: '2102', bal: 0, type: 'CR' },
         { id: gid('led_output_igst'), group: gid('grp_duties_taxes'), name: 'Output IGST', code: '2103', bal: 0, type: 'CR' },
+        { id: gid('led_output_cess'), group: gid('grp_duties_taxes'), name: 'Output CESS', code: '2104', bal: 0, type: 'CR' },
         // GST Input Tax Credits
         { id: gid('led_input_cgst'), group: gid('grp_duties_taxes'), name: 'Input CGST', code: '2201', bal: 0, type: 'DR' },
         { id: gid('led_input_sgst'), group: gid('grp_duties_taxes'), name: 'Input SGST', code: '2202', bal: 0, type: 'DR' },
         { id: gid('led_input_igst'), group: gid('grp_duties_taxes'), name: 'Input IGST', code: '2203', bal: 0, type: 'DR' },
+        { id: gid('led_input_cess'), group: gid('grp_duties_taxes'), name: 'Input CESS', code: '2204', bal: 0, type: 'DR' },
         // Round Off & Expenses
         { id: gid('led_round_off'), group: gid('grp_indirect_expense'), name: 'Round Off Account', code: '5999', bal: 0, type: 'DR' },
         { id: gid('led_rent_expense'), group: gid('grp_indirect_expense'), name: 'Rent Expense', code: '5101', bal: 0, type: 'DR' },
@@ -116,29 +118,45 @@ function initializeBusiness(db, options) {
     }
     return companyId;
 }
+/**
+ * seedInitialData — Development bootstrap ONLY.
+ *
+ * Creates an initial admin user ONLY when ALL conditions are true:
+ *   1. SEED_ADMIN=true is set in environment
+ *   2. SEED_ADMIN_PASSWORD is set and non-empty
+ *   3. The users table is currently EMPTY
+ *
+ * Never resets an existing admin password.
+ * Never creates admin/admin123 by default.
+ * In production, set JWT_SECRET and do NOT set SEED_ADMIN.
+ */
 function seedInitialData(db) {
-    // Check if admin user exists
-    const existingUser = db.prepare('SELECT user_id, password_hash FROM users WHERE username = ?').get('admin');
-    let adminUserId = existingUser?.user_id;
-    const salt = bcryptjs_1.default.genSaltSync(10);
-    const passwordHash = bcryptjs_1.default.hashSync('admin123', salt);
-    if (!adminUserId) {
-        adminUserId = 'usr_admin';
-        db.prepare(`
-      INSERT OR IGNORE INTO users (user_id, username, email, password_hash, full_name, role)
-      VALUES (?, 'admin', 'admin@ledgerflow.com', ?, 'System Administrator', 'ADMIN')
-    `).run(adminUserId, passwordHash);
+    const shouldSeed = process.env.SEED_ADMIN === 'true';
+    const seedPassword = process.env.SEED_ADMIN_PASSWORD || '';
+    if (!shouldSeed) {
+        // Normal boot — no admin bootstrapping
+        return null;
     }
-    else {
-        const isValid = existingUser.password_hash && bcryptjs_1.default.compareSync('admin123', existingUser.password_hash);
-        if (!isValid) {
-            db.prepare(`
-        UPDATE users SET password_hash = ?, full_name = 'System Administrator', role = 'ADMIN', is_active = 1
-        WHERE username = 'admin'
-      `).run(passwordHash);
-        }
+    if (!seedPassword) {
+        console.error('[BOOTSTRAP ERROR] SEED_ADMIN=true but SEED_ADMIN_PASSWORD is not set. ' +
+            'Refusing to create admin without explicit password.');
+        return null;
     }
-    // NOTE: Requirement: "initialy don't create any companies only the user creates it's own"
-    // Zero default companies are created. Companies are only created by user registration or onboarding.
-    return null;
+    // Only seed if no users exist at all
+    const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get()?.c ?? 0;
+    if (userCount > 0) {
+        // Users already exist — do NOT touch existing accounts
+        console.log('[Bootstrap] Users already exist. Skipping SEED_ADMIN bootstrap.');
+        return null;
+    }
+    const userId = 'usr_admin_' + Date.now().toString(36);
+    const salt = bcryptjs_1.default.genSaltSync(12);
+    const passwordHash = bcryptjs_1.default.hashSync(seedPassword, salt);
+    db.prepare(`
+    INSERT INTO users (user_id, username, email, password_hash, full_name, role)
+    VALUES (?, 'admin', 'admin@ledgerflow.local', ?, 'Administrator', 'ADMIN')
+  `).run(userId, passwordHash);
+    console.log('[Bootstrap] Development admin user created. ' +
+        'Remove SEED_ADMIN and SEED_ADMIN_PASSWORD from environment when done.');
+    return userId;
 }

@@ -1,138 +1,140 @@
 "use strict";
+/**
+ * LedgerFlow API Routes — TASK 001 Security Implementation
+ *
+ * Three-tier routing architecture:
+ *
+ *   PUBLIC (no authentication):
+ *     POST /auth/register
+ *     POST /auth/login
+ *     POST /auth/sso        ← returns 501 (disabled)
+ *
+ *   AUTHENTICATED (JWT required, no company context):
+ *     GET  /auth/me
+ *     GET  /businesses
+ *     POST /businesses
+ *
+ *   COMPANY-SCOPED (JWT + company membership required):
+ *     Everything else
+ *     Additional authorize() checks where applicable
+ *
+ * SECURITY INVARIANTS:
+ *   - req.body.companyId is NEVER used as authorization source
+ *   - Resource :id routes ALWAYS verify resource.company_id === req.companyId
+ *   - Voucher DELETE is blocked (405 — posted vouchers are immutable)
+ *   - Audit actor always uses req.user.userId
+ *   - No "first company" fallback exists
+ *   - getUserFromToken and resolveCompanyId (old helpers) are NOT exported
+ */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserFromToken = getUserFromToken;
-exports.resolveCompanyId = resolveCompanyId;
 exports.createApiRouter = createApiRouter;
+const node_crypto_1 = __importDefault(require("node:crypto"));
 const express_1 = require("express");
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const posting_engine_js_1 = require("../domain/posting/posting-engine.js");
 const report_engine_js_1 = require("../reports/report-engine.js");
 const auth_controller_js_1 = require("../controllers/auth.controller.js");
 const business_controller_js_1 = require("../controllers/business.controller.js");
-const JWT_SECRET = process.env.JWT_SECRET || 'ledgerflow_secure_secret_key_2026';
-// Helper: Extract authenticated user from Authorization header
-function getUserFromToken(req) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader)
-        return null;
-    try {
-        const token = authHeader.replace('Bearer ', '');
-        return jsonwebtoken_1.default.verify(token, JWT_SECRET);
-    }
-    catch {
-        return null;
-    }
-}
-// Helper: Resolve active company ID for multi-tenant isolation
-function resolveCompanyId(req, db, user) {
-    const headerId = req.headers['x-company-id'];
-    const queryId = req.query.companyId;
-    const requested = headerId || queryId;
-    if (user?.userId) {
-        if (requested) {
-            const access = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? AND company_id = ?').get(user.userId, requested);
-            if (access)
-                return access.company_id;
-            if (user.role === 'ADMIN') {
-                const exists = db.prepare('SELECT company_id FROM companies WHERE company_id = ?').get(requested);
-                if (exists)
-                    return exists.company_id;
-            }
-        }
-        const first = db.prepare('SELECT company_id FROM user_businesses WHERE user_id = ? ORDER BY created_at ASC LIMIT 1').get(user.userId);
-        if (first)
-            return first.company_id;
-        if (user.role === 'ADMIN') {
-            const anyComp = db.prepare('SELECT company_id FROM companies ORDER BY created_at ASC LIMIT 1').get();
-            if (anyComp)
-                return anyComp.company_id;
-        }
-    }
-    if (requested) {
-        const exists = db.prepare('SELECT company_id FROM companies WHERE company_id = ?').get(requested);
-        if (exists)
-            return exists.company_id;
-    }
-    const def = db.prepare('SELECT company_id FROM companies ORDER BY created_at ASC LIMIT 1').get();
-    return def?.company_id || '';
-}
+const security_js_1 = require("../middleware/security.js");
 function createApiRouter(db) {
     const router = (0, express_1.Router)();
-    // ---------------- AUTHENTICATION & MULTI-TENANCY ----------------
+    // Reusable middleware chains
+    const withAuth = (0, security_js_1.authenticate)(db);
+    const withCompany = [(0, security_js_1.authenticate)(db), (0, security_js_1.resolveCompanyContext)(db)];
+    const withAccountant = [...withCompany, (0, security_js_1.authorize)('ACCOUNTANT', 'ADMIN', 'OWNER')];
+    const withAdmin = [...withCompany, (0, security_js_1.authorize)('ADMIN', 'OWNER')];
+    const withOwner = [...withCompany, (0, security_js_1.authorize)('OWNER')];
+    // --------------------------------------------------------------------------
+    // PUBLIC ROUTES (no authentication)
+    // --------------------------------------------------------------------------
     const authController = new auth_controller_js_1.AuthController(db);
     router.post('/auth/register', authController.register);
     router.post('/auth/login', authController.login);
-    router.post('/auth/sso', authController.sso);
-    router.get('/auth/me', authController.getMe);
-    // ---------------- BUSINESSES (TENANTS) ----------------
+    router.post('/auth/sso', authController.sso); // Returns 501
+    // --------------------------------------------------------------------------
+    // AUTHENTICATED — No company context required
+    // --------------------------------------------------------------------------
+    router.get('/auth/me', withAuth, authController.getMe);
     const businessController = new business_controller_js_1.BusinessController(db);
-    router.get('/businesses', businessController.getBusinesses);
-    router.post('/businesses', businessController.createBusiness);
-    // ---------------- COMPANY & FINANCIAL YEARS ----------------
-    router.get('/companies/current', businessController.getCurrentCompanyInfo);
-    router.put('/companies/current', businessController.updateCurrentCompany);
-    router.post('/companies/:id/delete', businessController.deleteCompany);
-    router.get('/financial-years', businessController.getFinancialYears);
-    router.post('/financial-years', businessController.createFinancialYear);
-    router.put('/financial-years/:fyId', businessController.updateFinancialYearStatus);
-    // ---------------- MASTERS (TENANT ISOLATED) ----------------
-    router.get('/masters/ledgers', (req, res) => {
+    router.get('/businesses', withAuth, businessController.getBusinesses);
+    router.post('/businesses', withAuth, businessController.createBusiness);
+    // --------------------------------------------------------------------------
+    // COMPANY-SCOPED — Financial Years
+    // --------------------------------------------------------------------------
+    router.get('/companies/current', ...withCompany, businessController.getCurrentCompanyInfo);
+    router.put('/companies/current', ...withAdmin, businessController.updateCurrentCompany);
+    router.post('/companies/:id/delete', withAuth, businessController.deleteCompany);
+    router.get('/financial-years', ...withCompany, businessController.getFinancialYears);
+    router.post('/financial-years', ...withAdmin, businessController.createFinancialYear);
+    router.put('/financial-years/:fyId', ...withAdmin, businessController.updateFinancialYearStatus);
+    // --------------------------------------------------------------------------
+    // COMPANY-SCOPED — Masters (Ledgers)
+    // --------------------------------------------------------------------------
+    router.get('/masters/ledgers', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json([]);
             const rows = db.prepare(`
         SELECT l.*, g.group_name, g.nature
         FROM ledgers l
         JOIN ledger_groups g ON l.group_id = g.group_id
         WHERE l.company_id = ? AND l.is_active = 1
         ORDER BY l.ledger_name ASC
-      `).all(companyId);
+      `).all(req.companyId);
             res.json(rows);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.post('/masters/ledgers', (req, res) => {
+    router.post('/masters/ledgers', ...withAccountant, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, user);
             const { groupId, ledgerName, code, openingBalancePaise, openingBalanceType } = req.body;
-            const ledgerId = 'led_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+            const companyId = req.companyId;
+            if (!ledgerName || typeof ledgerName !== 'string' || !ledgerName.trim()) {
+                return res.status(400).json({ error: 'Ledger name is required and must be a non-empty string.' });
+            }
+            if (!groupId || typeof groupId !== 'string' || !groupId.trim()) {
+                return res.status(400).json({ error: 'Ledger group is required.' });
+            }
+            const validGroup = db.prepare(`
+        SELECT 1 FROM ledger_groups
+        WHERE group_id = ? AND (company_id = ? OR company_id IS NULL)
+      `).get(groupId.trim(), companyId);
+            if (!validGroup) {
+                return res.status(400).json({ error: `Ledger group '${groupId}' not found or belongs to another company.` });
+            }
+            const balType = openingBalanceType !== undefined && openingBalanceType !== null && String(openingBalanceType).trim() !== ''
+                ? String(openingBalanceType).trim()
+                : 'DR';
+            if (balType !== 'DR' && balType !== 'CR') {
+                return res.status(400).json({ error: `Invalid opening balance type '${openingBalanceType}'. Must be DR or CR.` });
+            }
+            const ledgerId = 'led_' + node_crypto_1.default.randomUUID().replace(/-/g, '').substring(0, 16);
             db.prepare(`
         INSERT INTO ledgers (ledger_id, company_id, group_id, ledger_name, code, opening_balance_paise, opening_balance_type)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(ledgerId, targetCompanyId, groupId, ledgerName, code || null, openingBalancePaise || 0, openingBalanceType || 'DR');
-            res.status(201).json({ ledgerId, ledgerName });
+      `).run(ledgerId, companyId, groupId.trim(), ledgerName.trim(), code ? String(code).trim() : null, Math.round(Number(openingBalancePaise) || 0), balType);
+            res.status(201).json({ ledgerId, ledgerName: ledgerName.trim() });
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/masters/groups', (req, res) => {
+    router.get('/masters/groups', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json([]);
-            const rows = db.prepare('SELECT * FROM ledger_groups WHERE company_id = ? OR company_id IS NULL ORDER BY group_name ASC').all(companyId);
+            const rows = db.prepare('SELECT * FROM ledger_groups WHERE company_id = ? OR company_id IS NULL ORDER BY group_name ASC').all(req.companyId);
             res.json(rows);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/masters/parties', (req, res) => {
+    // --------------------------------------------------------------------------
+    // COMPANY-SCOPED — Masters (Parties)
+    // --------------------------------------------------------------------------
+    router.get('/masters/parties', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json([]);
             const type = req.query.type;
             let query = `
         SELECT p.*, pa.address_line1, pa.address_line2, pa.city, pa.state, pa.state_code, pa.pincode,
@@ -144,7 +146,7 @@ function createApiRouter(db) {
         LEFT JOIN party_addresses pa ON p.party_id = pa.party_id
         WHERE p.company_id = ?
       `;
-            const params = [companyId];
+            const params = [req.companyId];
             if (type) {
                 query += ` AND (p.party_type = ? OR p.party_type = 'BOTH')`;
                 params.push(type);
@@ -157,15 +159,12 @@ function createApiRouter(db) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.post('/masters/parties', (req, res) => {
+    router.post('/masters/parties', ...withAccountant, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, user);
             const { partyName, partyType, gstin, pan, phone, email, contactPerson, bankingName, bankingAccountNo, bankingIfsc, addressLine1, addressLine2, city, state, stateCode, pincode, openingBalancePaise } = req.body;
             if (!partyName || !partyName.trim()) {
                 return res.status(400).json({ error: 'Party Name is required.' });
             }
-            // Extract PAN from GSTIN if not provided
             let derivedPan = pan;
             if (!derivedPan && gstin && gstin.length === 15) {
                 derivedPan = gstin.substring(2, 12);
@@ -173,23 +172,20 @@ function createApiRouter(db) {
             db.exec('BEGIN TRANSACTION;');
             const partyId = 'party_' + Date.now().toString(36);
             const ledgerId = 'led_pty_' + Date.now().toString(36);
-            // Find appropriate group for this company
+            const companyId = req.companyId;
             const groupSearch = partyType === 'SUPPLIER' ? '%Creditor%' : '%Debtor%';
             const foundGroup = db.prepare('SELECT group_id FROM ledger_groups WHERE (company_id = ? OR company_id IS NULL) AND group_name LIKE ? LIMIT 1')
-                .get(targetCompanyId, groupSearch);
-            const groupId = foundGroup?.group_id || (partyType === 'SUPPLIER' ? `${targetCompanyId}_grp_creditors` : `${targetCompanyId}_grp_debtors`);
+                .get(companyId, groupSearch);
+            const groupId = foundGroup?.group_id || (partyType === 'SUPPLIER' ? `${companyId}_grp_creditors` : `${companyId}_grp_debtors`);
             const balType = partyType === 'SUPPLIER' ? 'CR' : 'DR';
-            // 1. Create Ledger for party
             db.prepare(`
         INSERT INTO ledgers (ledger_id, company_id, group_id, ledger_name, opening_balance_paise, opening_balance_type, is_party)
         VALUES (?, ?, ?, ?, ?, ?, 1)
-      `).run(ledgerId, targetCompanyId, groupId, partyName.trim(), openingBalancePaise || 0, balType);
-            // 2. Create Party
+      `).run(ledgerId, companyId, groupId, partyName.trim(), openingBalancePaise || 0, balType);
             db.prepare(`
         INSERT INTO parties (party_id, company_id, ledger_id, party_type, party_name, gstin, pan, phone, email, contact_person, banking_name, banking_account_no, banking_ifsc)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(partyId, targetCompanyId, ledgerId, partyType, partyName.trim(), gstin || null, derivedPan || null, phone || null, email || null, contactPerson || null, bankingName || null, bankingAccountNo || null, bankingIfsc || null);
-            // 3. Create Address
+      `).run(partyId, companyId, ledgerId, partyType, partyName.trim(), gstin || null, derivedPan || null, phone || null, email || null, contactPerson || null, bankingName || null, bankingAccountNo || null, bankingIfsc || null);
             db.prepare(`
         INSERT INTO party_addresses (address_id, party_id, address_type, address_line1, address_line2, city, state, state_code, pincode, is_default)
         VALUES (?, ?, 'BOTH', ?, ?, ?, ?, ?, ?, 1)
@@ -202,14 +198,14 @@ function createApiRouter(db) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.put('/masters/parties/:id', (req, res) => {
+    router.put('/masters/parties/:id', ...withAccountant, (req, res) => {
         try {
             const partyId = req.params.id;
             const { partyName, partyType, gstin, pan, phone, email, contactPerson, bankingName, bankingAccountNo, bankingIfsc, addressLine1, addressLine2, city, state, stateCode, pincode, openingBalancePaise } = req.body;
+            // Resource ownership check
             const party = db.prepare('SELECT * FROM parties WHERE party_id = ?').get(partyId);
-            if (!party) {
-                return res.status(404).json({ error: 'Party not found.' });
-            }
+            if (!party || !(0, security_js_1.assertResourceOwnership)(res, party.company_id, req.companyId))
+                return;
             db.exec('BEGIN TRANSACTION;');
             db.prepare(`
         UPDATE parties SET
@@ -260,80 +256,98 @@ function createApiRouter(db) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.delete('/masters/parties/:id', (req, res) => {
+    router.delete('/masters/parties/:id', ...withAdmin, (req, res) => {
         try {
             const partyId = req.params.id;
             const party = db.prepare('SELECT * FROM parties WHERE party_id = ?').get(partyId);
-            if (!party) {
-                return res.status(404).json({ error: 'Party not found.' });
-            }
+            if (!party || !(0, security_js_1.assertResourceOwnership)(res, party.company_id, req.companyId))
+                return;
             const voucherCount = db.prepare('SELECT COUNT(*) as cnt FROM vouchers WHERE party_id = ?').get(partyId)?.cnt || 0;
-            if (voucherCount > 0) {
-                return res.status(400).json({ error: `Cannot delete party '${party.party_name}' because they have ${voucherCount} recorded voucher(s).` });
+            let openingBal = 0;
+            let allocCount = 0;
+            let leCount = 0;
+            if (party.ledger_id) {
+                const ledgerRow = db.prepare('SELECT opening_balance_paise FROM ledgers WHERE ledger_id = ?').get(party.ledger_id);
+                openingBal = ledgerRow?.opening_balance_paise || 0;
+                allocCount = db.prepare('SELECT COUNT(*) as cnt FROM bill_allocations WHERE ledger_id = ?').get(party.ledger_id)?.cnt || 0;
+                leCount = db.prepare('SELECT COUNT(*) as cnt FROM ledger_entries WHERE ledger_id = ?').get(party.ledger_id)?.cnt || 0;
+            }
+            if (voucherCount > 0 || Math.abs(openingBal) > 0 || allocCount > 0 || leCount > 0) {
+                return res.status(400).json({
+                    error: `Cannot delete party '${party.party_name}' with existing transactions or opening balance.`
+                });
             }
             db.exec('BEGIN TRANSACTION;');
-            db.prepare('DELETE FROM party_addresses WHERE party_id = ?').run(partyId);
-            db.prepare('DELETE FROM parties WHERE party_id = ?').run(partyId);
-            if (party.ledger_id) {
-                const leCount = db.prepare('SELECT COUNT(*) as cnt FROM ledger_entries WHERE ledger_id = ?').get(party.ledger_id)?.cnt || 0;
-                if (leCount === 0) {
+            try {
+                db.prepare('DELETE FROM party_addresses WHERE party_id = ?').run(partyId);
+                db.prepare('DELETE FROM parties WHERE party_id = ?').run(partyId);
+                if (party.ledger_id) {
                     db.prepare('DELETE FROM ledgers WHERE ledger_id = ?').run(party.ledger_id);
                 }
+                db.exec('COMMIT;');
+                res.json({ success: true, message: 'Party deleted successfully.' });
             }
-            db.exec('COMMIT;');
-            res.json({ success: true, message: 'Party deleted successfully.' });
+            catch (delErr) {
+                try {
+                    db.exec('ROLLBACK;');
+                }
+                catch (_) { }
+                res.status(500).json({ error: delErr.message });
+            }
         }
         catch (err) {
-            db.exec('ROLLBACK;');
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/masters/items', (req, res) => {
+    // --------------------------------------------------------------------------
+    // COMPANY-SCOPED — Masters (Stock Items)
+    // --------------------------------------------------------------------------
+    router.get('/masters/items', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json([]);
             const rows = db.prepare(`
         SELECT si.*, u.symbol as unit_symbol
         FROM stock_items si
         LEFT JOIN units u ON si.unit_id = u.unit_id
         WHERE si.company_id = ? AND si.is_active = 1
         ORDER BY si.item_name ASC
-      `).all(companyId);
+      `).all(req.companyId);
             res.json(rows);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.post('/masters/items', (req, res) => {
-        try {
-            const user = getUserFromToken(req);
-            const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, user);
-            const b = req.body;
-            if (!b.itemName || !b.itemName.trim()) {
-                return res.status(400).json({ error: 'Item name is required.' });
+    router.post('/masters/items', ...withAccountant, (req, res) => {
+        const b = req.body;
+        const companyId = req.companyId;
+        if (!b.itemName || !b.itemName.trim()) {
+            return res.status(400).json({ error: 'Item name is required.' });
+        }
+        if (b.unitId !== undefined && b.unitId !== null && String(b.unitId).trim() !== '') {
+            const validUnit = db.prepare(`
+        SELECT 1 FROM units WHERE unit_id = ? AND (company_id = ? OR company_id IS NULL)
+      `).get(String(b.unitId).trim(), companyId);
+            if (!validUnit) {
+                return res.status(400).json({ error: `Unit '${b.unitId}' not found or belongs to another company.` });
             }
-            // Check if an item with the same name or same SKU already exists
+        }
+        db.exec('BEGIN TRANSACTION;');
+        try {
             const existing = db.prepare(`
         SELECT item_id, item_name, serial_numbers, purchase_rate_paise, selling_rate_paise
         FROM stock_items
         WHERE company_id = ? AND (LOWER(item_name) = LOWER(?) OR (sku IS NOT NULL AND sku != '' AND LOWER(sku) = LOWER(?)))
         LIMIT 1
-      `).get(targetCompanyId, b.itemName.trim(), (b.sku || '').trim());
-            // Resolve godown ID
+      `).get(companyId, b.itemName.trim(), (b.sku || '').trim());
             let godownId = b.godownId;
             if (!godownId || godownId === 'godown_main') {
-                const defGodown = db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? LIMIT 1').get(targetCompanyId);
-                godownId = defGodown?.godown_id || `${targetCompanyId}_godown_main`;
+                const defGodown = db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? LIMIT 1').get(companyId);
+                godownId = defGodown?.godown_id || `${companyId}_godown_main`;
             }
             const qty = Number(b.quantityToAdd ?? b.openingQty ?? 0);
             const rate = Number(b.purchaseRatePaise ?? b.openingRatePaise ?? 0);
             const sellRate = Number(b.sellingRatePaise || 0);
             if (existing) {
-                // ---------------- STOCK UPDATION (NO DUPLICATE) ----------------
-                // Combine serial numbers if provided
                 let updatedSerials = existing.serial_numbers || '';
                 if (b.serialNumbers && b.serialNumbers.trim()) {
                     updatedSerials = updatedSerials
@@ -357,15 +371,25 @@ function createApiRouter(db) {
             has_serial_no = CASE WHEN ? = 1 OR ? IS NOT NULL THEN 1 ELSE has_serial_no END
           WHERE item_id = ?
         `).run(b.hsnSac || null, b.gstRate || null, rate, rate, sellRate, sellRate, b.reorderLevel || null, updatedSerials || null, b.hasSerialNo ? 1 : 0, b.serialNumbers || null, existing.item_id);
-                // Record stock movement if quantity was added
                 if (qty > 0) {
                     const valPaise = Math.round(qty * rate);
-                    const entryId = 'se_upd_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
+                    // C-3 / Amendment 1: Real STOCK_JOURNAL voucher with crypto.randomUUID() and safe voucher numbering
+                    const activeFy = db.prepare("SELECT fy_id FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(companyId);
+                    const fyId = activeFy?.fy_id || 'fy_default';
+                    const voucherId = 'vch_' + node_crypto_1.default.randomUUID().replace(/-/g, '');
+                    const voucherNumber = posting_engine_js_1.PostingEngine.getNextVoucherNumber(db, companyId, fyId, 'STOCK_JOURNAL');
+                    const today = new Date().toISOString().split('T')[0];
+                    db.prepare(`
+            INSERT INTO vouchers (voucher_id, company_id, fy_id, voucher_type, voucher_number, voucher_date, narration, status, total_amount_paise, created_by)
+            VALUES (?, ?, ?, 'STOCK_JOURNAL', ?, ?, ?, 'POSTED', ?, ?)
+          `).run(voucherId, companyId, fyId, voucherNumber, `Stock update adjustment for '${existing.item_name}'`, valPaise, req.user?.username || 'system');
+                    const entryId = 'se_upd_' + node_crypto_1.default.randomUUID().replace(/-/g, '').substring(0, 16);
                     db.prepare(`
             INSERT INTO stock_entries (stock_entry_id, voucher_id, item_id, godown_id, entry_date, movement_type, quantity, rate_paise, value_paise)
-            VALUES (?, 'vch_stock_upd', ?, ?, ?, 'IN', ?, ?, ?)
-          `).run(entryId, existing.item_id, godownId, new Date().toISOString().split('T')[0], qty, rate, valPaise);
+            VALUES (?, ?, ?, ?, ?, 'IN', ?, ?, ?)
+          `).run(entryId, voucherId, existing.item_id, godownId, today, qty, rate, valPaise);
                 }
+                db.exec('COMMIT;');
                 return res.status(200).json({
                     itemId: existing.item_id,
                     itemName: existing.item_name,
@@ -373,29 +397,30 @@ function createApiRouter(db) {
                     message: `Stock updated successfully for '${existing.item_name}'. ${qty > 0 ? `Added ${qty} units.` : 'Details updated.'}`
                 });
             }
-            // ---------------- NEW STOCK ITEM CREATION ----------------
-            let unitId = b.unitId;
+            let unitId = b.unitId ? String(b.unitId).trim() : null;
             if (!unitId || unitId === 'unit_nos') {
-                const defUnit = db.prepare('SELECT unit_id FROM units WHERE company_id = ? LIMIT 1').get(targetCompanyId);
-                unitId = defUnit?.unit_id || b.unitId || 'unit_nos';
+                const defUnit = db.prepare('SELECT unit_id FROM units WHERE company_id = ? LIMIT 1').get(companyId);
+                unitId = defUnit?.unit_id || unitId || 'unit_nos';
             }
-            const itemId = 'item_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+            const itemId = 'item_' + node_crypto_1.default.randomUUID().replace(/-/g, '').substring(0, 16);
             db.prepare(`
         INSERT INTO stock_items (
           item_id, company_id, item_name, item_code, sku, hsn_sac,
           unit_id, gst_rate, cess_rate, purchase_rate_paise, selling_rate_paise,
           opening_qty, opening_rate_paise, reorder_level, serial_numbers, has_serial_no
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(itemId, targetCompanyId, b.itemName.trim(), b.itemCode || null, b.sku || null, b.hsnSac || '9999', unitId, b.gstRate || 18, b.cessRate || 0, rate, sellRate, qty, rate, b.reorderLevel || 0, b.serialNumbers || null, b.hasSerialNo ? 1 : 0);
-            // If initial stock provided, record initial stock entry
+      `).run(itemId, companyId, b.itemName.trim(), b.itemCode || null, b.sku || null, b.hsnSac || '84713010', unitId, b.gstRate !== undefined && b.gstRate !== null ? Number(b.gstRate) : 18.00, b.cessRate || 0, rate, sellRate, qty, rate, b.reorderLevel || 0, b.serialNumbers || null, b.hasSerialNo ? 1 : 0);
             if (qty > 0) {
-                const openingVal = Math.round(qty * rate);
-                db.prepare(`
-          INSERT INTO stock_entries (stock_entry_id, voucher_id, item_id, godown_id, entry_date, movement_type, quantity, rate_paise, value_paise)
-          VALUES (?, 'vch_opening', ?, ?, ?, 'IN', ?, ?, ?)
-        `).run('se_opn_' + itemId, itemId, godownId, new Date().toISOString().split('T')[0], qty, rate, openingVal);
+                posting_engine_js_1.PostingEngine.recordOpeningStock(db, {
+                    companyId,
+                    itemId,
+                    itemName: b.itemName.trim(),
+                    godownId,
+                    quantity: qty,
+                    ratePaise: rate,
+                    userId: req.user?.username || 'system'
+                });
             }
-            // Add individual serials to the tracking table
             if (b.serialNumbers && b.serialNumbers.trim()) {
                 const serialsArr = b.serialNumbers.split(',').map((s) => s.trim()).filter(Boolean);
                 for (const s of serialsArr) {
@@ -403,36 +428,38 @@ function createApiRouter(db) {
                         .run('ser_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6), itemId, s, 'AVAILABLE');
                 }
             }
-            res.status(201).json({ itemId, itemName: b.itemName, updated: false, message: `Created stock item '${b.itemName}'.` });
+            db.exec('COMMIT;');
+            return res.status(201).json({ itemId, itemName: b.itemName, updated: false, message: `Created stock item '${b.itemName}'.` });
         }
         catch (err) {
-            res.status(500).json({ error: err.message });
+            try {
+                db.exec('ROLLBACK;');
+            }
+            catch { /* ignore rollback error */ }
+            return res.status(500).json({ error: err.message });
         }
     });
-    router.get('/masters/items/:id/serials', (req, res) => {
+    router.get('/masters/items/:id/serials', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json([]);
+            // Verify item belongs to company
+            const item = db.prepare('SELECT item_id, company_id, serial_numbers FROM stock_items WHERE item_id = ?').get(req.params.id);
+            if (!item || !(0, security_js_1.assertResourceOwnership)(res, item.company_id, req.companyId))
+                return;
             const rows = db.prepare(`
         SELECT serial_number FROM stock_item_serials
         WHERE item_id = ? AND status = 'AVAILABLE'
       `).all(req.params.id);
             let list = rows.map((r) => r.serial_number);
-            if (list.length === 0) {
-                const it = db.prepare('SELECT serial_numbers FROM stock_items WHERE item_id = ?').get(req.params.id);
-                if (it?.serial_numbers) {
-                    const soldRows = db.prepare(`
-            SELECT serial_number FROM stock_item_serials
-            WHERE item_id = ? AND status = 'SOLD'
-          `).all(req.params.id);
-                    const soldSet = new Set(soldRows.map((r) => r.serial_number));
-                    list = it.serial_numbers
-                        .split(/[\n,]+/)
-                        .map((s) => s.trim())
-                        .filter((s) => Boolean(s) && !soldSet.has(s));
-                }
+            if (list.length === 0 && item.serial_numbers) {
+                const soldRows = db.prepare(`
+          SELECT serial_number FROM stock_item_serials
+          WHERE item_id = ? AND status = 'SOLD'
+        `).all(req.params.id);
+                const soldSet = new Set(soldRows.map((r) => r.serial_number));
+                list = item.serial_numbers
+                    .split(/[\n,]+/)
+                    .map((s) => s.trim())
+                    .filter((s) => Boolean(s) && !soldSet.has(s));
             }
             res.json(list);
         }
@@ -440,9 +467,33 @@ function createApiRouter(db) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.put('/masters/items/:id', (req, res) => {
+    router.put('/masters/items/:id', ...withAccountant, (req, res) => {
         try {
             const b = req.body;
+            const companyId = req.companyId;
+            // Resource ownership check
+            const item = db.prepare('SELECT * FROM stock_items WHERE item_id = ?').get(req.params.id);
+            if (!item || !(0, security_js_1.assertResourceOwnership)(res, item.company_id, companyId))
+                return;
+            let unitId = item.unit_id || 'unit_nos';
+            if (b.unitId !== undefined && b.unitId !== null && String(b.unitId).trim() !== '') {
+                const validUnit = db.prepare(`
+          SELECT 1 FROM units WHERE unit_id = ? AND (company_id = ? OR company_id IS NULL)
+        `).get(String(b.unitId).trim(), companyId);
+                if (!validUnit) {
+                    return res.status(400).json({ error: `Unit '${b.unitId}' not found or belongs to another company.` });
+                }
+                unitId = String(b.unitId).trim();
+            }
+            const itemName = b.itemName !== undefined ? (String(b.itemName).trim() || item.item_name) : item.item_name;
+            const itemCode = b.itemCode !== undefined ? (b.itemCode || null) : item.item_code;
+            const sku = b.sku !== undefined ? (b.sku || null) : item.sku;
+            const hsnSac = b.hsnSac !== undefined ? (b.hsnSac || null) : (item.hsn_sac || '84713010');
+            const gstRate = b.gstRate !== undefined && b.gstRate !== null ? Number(b.gstRate) : (item.gst_rate ?? 18.00);
+            const cessRate = b.cessRate !== undefined && b.cessRate !== null ? Number(b.cessRate) : (item.cess_rate ?? 0);
+            const purchaseRatePaise = b.purchaseRatePaise !== undefined && b.purchaseRatePaise !== null ? Number(b.purchaseRatePaise) : (item.purchase_rate_paise ?? 0);
+            const sellingRatePaise = b.sellingRatePaise !== undefined && b.sellingRatePaise !== null ? Number(b.sellingRatePaise) : (item.selling_rate_paise ?? 0);
+            const reorderLevel = b.reorderLevel !== undefined && b.reorderLevel !== null ? Number(b.reorderLevel) : (item.reorder_level ?? 0);
             db.prepare(`
         UPDATE stock_items SET
           item_name = ?, item_code = ?, sku = ?, hsn_sac = ?,
@@ -450,80 +501,83 @@ function createApiRouter(db) {
           purchase_rate_paise = ?, selling_rate_paise = ?,
           reorder_level = ?
         WHERE item_id = ?
-      `).run(b.itemName, b.itemCode || null, b.sku || null, b.hsnSac || '9999', b.unitId || 'unit_nos', b.gstRate || 18, b.cessRate || 0, b.purchaseRatePaise || 0, b.sellingRatePaise || 0, b.reorderLevel || 0, req.params.id);
+      `).run(itemName, itemCode, sku, hsnSac, unitId, gstRate, cessRate, purchaseRatePaise, sellingRatePaise, reorderLevel, req.params.id);
             res.json({ success: true, message: 'Stock item updated successfully.' });
         }
         catch (err) {
             res.status(400).json({ error: err.message });
         }
     });
-    router.delete('/masters/items/:id', (req, res) => {
+    router.delete('/masters/items/:id', ...withAdmin, (req, res) => {
         try {
             const itemId = req.params.id;
-            // Check if item has existing voucher line references
+            const item = db.prepare('SELECT item_id, company_id FROM stock_items WHERE item_id = ?').get(itemId);
+            if (!item || !(0, security_js_1.assertResourceOwnership)(res, item.company_id, req.companyId))
+                return;
             const lineCount = db.prepare('SELECT COUNT(*) as cnt FROM voucher_lines WHERE item_id = ?').get(itemId)?.cnt || 0;
-            if (lineCount > 0) {
-                // Soft delete / deactivate
+            const stockEntryCount = db.prepare('SELECT COUNT(*) as cnt FROM stock_entries WHERE item_id = ?').get(itemId)?.cnt || 0;
+            if (lineCount > 0 || stockEntryCount > 0) {
                 db.prepare('UPDATE stock_items SET is_active = 0 WHERE item_id = ?').run(itemId);
+                return res.json({ success: true, message: 'Stock item deactivated successfully (historical transactions preserved).' });
             }
-            else {
-                // Safe hard delete
-                db.prepare('DELETE FROM stock_entries WHERE item_id = ?').run(itemId);
+            db.exec('BEGIN TRANSACTION;');
+            try {
+                db.prepare('DELETE FROM stock_item_serials WHERE item_id = ?').run(itemId);
                 db.prepare('DELETE FROM stock_items WHERE item_id = ?').run(itemId);
+                db.exec('COMMIT;');
+                res.json({ success: true, message: 'Stock item removed successfully.' });
             }
-            res.json({ success: true, message: 'Stock item removed successfully.' });
+            catch (delErr) {
+                try {
+                    db.exec('ROLLBACK;');
+                }
+                catch (_) { }
+                res.status(500).json({ error: delErr.message });
+            }
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/masters/godowns', (req, res) => {
+    router.get('/masters/godowns', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json([]);
-            const rows = db.prepare('SELECT * FROM godowns WHERE company_id = ? OR company_id IS NULL ORDER BY godown_name ASC').all(companyId);
+            const rows = db.prepare('SELECT * FROM godowns WHERE company_id = ? OR company_id IS NULL ORDER BY godown_name ASC').all(req.companyId);
             res.json(rows);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/masters/units', (req, res) => {
+    router.get('/masters/units', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json([]);
-            const rows = db.prepare('SELECT * FROM units WHERE company_id = ? OR company_id IS NULL ORDER BY unit_name ASC').all(companyId);
+            const rows = db.prepare('SELECT * FROM units WHERE company_id = ? OR company_id IS NULL ORDER BY unit_name ASC').all(req.companyId);
             res.json(rows);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    // ---------------- VOUCHER OPERATIONS ----------------
-    router.get('/vouchers/next-number', (req, res) => {
+    // --------------------------------------------------------------------------
+    // COMPANY-SCOPED — Vouchers
+    // --------------------------------------------------------------------------
+    router.get('/vouchers/next-number', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = req.query.companyId || resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json({ nextVoucherNumber: '1' });
             const { fyId, type } = req.query;
-            const nextNum = posting_engine_js_1.PostingEngine.getNextVoucherNumber(db, companyId, fyId, type);
+            // Verify FY belongs to company
+            if (fyId) {
+                const fy = db.prepare('SELECT fy_id FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, req.companyId);
+                if (!fy)
+                    return res.status(400).json({ error: 'Invalid financial year for this company.' });
+            }
+            const nextNum = posting_engine_js_1.PostingEngine.getNextVoucherNumber(db, req.companyId, fyId, type);
             res.json({ nextVoucherNumber: nextNum });
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/vouchers', (req, res) => {
+    router.get('/vouchers', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = req.query.companyId || resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json([]);
             const { type, fromDate, toDate } = req.query;
             let query = `
         SELECT v.*, p.party_name, p.gstin as party_gstin, p.party_type
@@ -531,7 +585,7 @@ function createApiRouter(db) {
         LEFT JOIN parties p ON v.party_id = p.party_id
         WHERE v.company_id = ?
       `;
-            const params = [companyId];
+            const params = [req.companyId];
             if (type) {
                 query += ` AND v.voucher_type = ?`;
                 params.push(type);
@@ -552,7 +606,7 @@ function createApiRouter(db) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/vouchers/:id', (req, res) => {
+    router.get('/vouchers/:id', ...withCompany, (req, res) => {
         try {
             const voucher = db.prepare(`
         SELECT v.*, p.party_name, p.gstin as party_gstin, p.phone as party_phone,
@@ -562,8 +616,8 @@ function createApiRouter(db) {
         LEFT JOIN party_addresses pa ON p.party_id = pa.party_id
         WHERE v.voucher_id = ?
       `).get(req.params.id);
-            if (!voucher)
-                return res.status(404).json({ error: 'Voucher not found' });
+            if (!voucher || !(0, security_js_1.assertResourceOwnership)(res, voucher.company_id, req.companyId))
+                return;
             const lines = db.prepare(`
         SELECT vl.*, si.item_name, si.hsn_sac, u.symbol as unit_symbol, g.godown_name
         FROM voucher_lines vl
@@ -592,30 +646,35 @@ function createApiRouter(db) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.post('/vouchers', (req, res) => {
+    router.post('/vouchers', ...withAccountant, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, user);
-            if (!targetCompanyId) {
-                return res.status(400).json({ error: 'No company selected for voucher posting.' });
-            }
+            const companyId = req.companyId;
+            // Resolve FY — always validate against company, never trust body FY blindly
             let fyId = req.body.fyId;
-            const validFy = fyId ? db.prepare('SELECT fy_id FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, targetCompanyId) : null;
+            const validFy = fyId
+                ? db.prepare('SELECT fy_id FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, companyId)
+                : null;
             if (!validFy) {
                 const vDate = req.body.voucherDate || new Date().toISOString().split('T')[0];
-                const dateFy = db.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1').get(targetCompanyId, vDate);
+                const dateFy = db.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1').get(companyId, vDate);
                 if (dateFy) {
                     fyId = dateFy.fy_id;
                 }
                 else {
-                    const activeFy = db.prepare("SELECT fy_id FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(targetCompanyId);
+                    const activeFy = db.prepare("SELECT fy_id FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(companyId);
                     fyId = activeFy?.fy_id;
                 }
             }
             if (!fyId) {
                 return res.status(400).json({ error: 'No open financial year found for this company and date.' });
             }
-            const payload = { ...req.body, companyId: targetCompanyId, fyId };
+            // Build payload — use server-resolved companyId, never trust body.companyId
+            const payload = {
+                ...req.body,
+                companyId,
+                fyId,
+                createdBy: req.user.userId // Always use authenticated user ID
+            };
             const result = posting_engine_js_1.PostingEngine.postVoucher(db, payload);
             res.status(201).json(result);
         }
@@ -623,137 +682,176 @@ function createApiRouter(db) {
             res.status(400).json({ error: err.message });
         }
     });
-    router.get('/vouchers/:id', (req, res) => {
+    /**
+     * PUT /vouchers/:id — Edit a voucher
+     *
+     * IMMUTABILITY POLICY:
+     * Posted vouchers cannot be silently overwritten. The edit operation:
+     *   1. Verifies the voucher belongs to req.companyId
+     *   2. Cancels the original (creates reversal ledger entries)
+     *   3. Records the cancellation with the authenticated user ID
+     *   4. Creates a new replacement voucher
+     *   5. Links replacement to original via reference_number
+     *
+     * The original voucher record is preserved in CANCELLED status.
+     * The full accounting trail (original + reversal + replacement) remains reconstructable.
+     *
+     * NOTE: Hard-delete of original voucher record was the pre-existing behavior.
+     * This implementation preserves the original record (status=CANCELLED) per immutability rules.
+     */
+    router.put('/vouchers/:id', ...withAdmin, (req, res) => {
         try {
-            const vch = db.prepare(`
-        SELECT v.*, p.party_name 
-        FROM vouchers v
-        LEFT JOIN parties p ON v.party_id = p.party_id
-        WHERE v.voucher_id = ?
-      `).get(req.params.id);
-            if (!vch)
-                return res.status(404).json({ error: 'Voucher not found' });
-            const lines = db.prepare('SELECT * FROM voucher_lines WHERE voucher_id = ? ORDER BY line_order ASC').all(req.params.id);
-            res.json({ voucher: vch, lines });
-        }
-        catch (err) {
-            res.status(500).json({ error: err.message });
-        }
-    });
-    router.put('/vouchers/:id', (req, res) => {
-        try {
-            const targetCompanyId = req.body.companyId || resolveCompanyId(req, db, getUserFromToken(req));
+            const companyId = req.companyId;
+            const voucherId = req.params.id;
             const fyId = req.body.fyId;
             if (!fyId)
                 return res.status(400).json({ error: 'Financial year ID is required for editing a voucher.' });
-            // First, cancel the old voucher to reverse its effects.
-            posting_engine_js_1.PostingEngine.cancelVoucher(db, req.params.id, 'admin', 'Edited by user');
-            // We actually want to delete the cancelled voucher completely and reuse its ID if possible, 
-            // but PostingEngine.postVoucher assigns a new ID. Instead of modifying PostingEngine, 
-            // let's let PostingEngine create a new one, but we'll manually force the ID, or just return the new ID.
-            // Wait, let's just let it post a new voucher and return the new ID. The frontend will redirect or update.
-            const payload = { ...req.body, companyId: targetCompanyId, fyId };
-            const result = posting_engine_js_1.PostingEngine.postVoucher(db, payload);
-            // Update the new voucher to have the original ID or just return it.
-            // To keep it simple, we just return the new voucher ID.
-            res.status(200).json(result);
+            // Verify voucher ownership
+            const vch = db.prepare('SELECT voucher_id, company_id, status, voucher_number FROM vouchers WHERE voucher_id = ?').get(voucherId);
+            if (!vch || !(0, security_js_1.assertResourceOwnership)(res, vch.company_id, companyId))
+                return;
+            // Verify FY belongs to company
+            const fy = db.prepare('SELECT fy_id FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, companyId);
+            if (!fy)
+                return res.status(400).json({ error: 'Invalid financial year for this company.' });
+            // 006-A: Atomic voucher amendment inside single transaction
+            const payload = {
+                ...req.body,
+                companyId,
+                fyId,
+                createdBy: req.user.userId,
+                referenceNumber: req.body.referenceNumber || `AMEND-${vch.voucher_number}`
+            };
+            const result = posting_engine_js_1.PostingEngine.amendVoucher(db, voucherId, payload);
+            res.status(200).json({
+                voucherId: result.replacementVoucherId,
+                voucherNumber: result.replacementVoucherNumber,
+                totalAmountPaise: result.totalAmountPaise,
+                status: result.status,
+                amendedVoucherId: voucherId
+            });
         }
         catch (err) {
             res.status(400).json({ error: err.message });
         }
     });
-    router.post('/vouchers/:id/cancel', (req, res) => {
+    /**
+     * POST /vouchers/:id/cancel — Cancel a posted voucher
+     * Requires ADMIN role. Authenticated actor is recorded in audit log.
+     */
+    router.post('/vouchers/:id/cancel', ...withAdmin, (req, res) => {
         try {
-            const { cancelledBy, reason } = req.body;
-            posting_engine_js_1.PostingEngine.cancelVoucher(db, req.params.id, cancelledBy || 'admin', reason || 'Cancelled by user');
+            const vch = db.prepare('SELECT voucher_id, company_id FROM vouchers WHERE voucher_id = ?').get(req.params.id);
+            if (!vch || !(0, security_js_1.assertResourceOwnership)(res, vch.company_id, req.companyId))
+                return;
+            const { reason } = req.body;
+            posting_engine_js_1.PostingEngine.cancelVoucher(db, req.companyId, req.params.id, req.user.userId, reason || 'Cancelled by user');
             res.json({ success: true, message: 'Voucher cancelled and accounting effects reversed.' });
         }
         catch (err) {
             res.status(400).json({ error: err.message });
         }
     });
-    router.delete('/vouchers/:id', (req, res) => {
+    /**
+     * POST /vouchers/:id/post — Promote a DRAFT voucher to POSTED
+     * Requires ACCOUNTANT, ADMIN, or OWNER role.
+     */
+    router.post('/vouchers/:id/post', ...withAccountant, (req, res) => {
         try {
-            const vch = db.prepare('SELECT voucher_id, voucher_number, company_id FROM vouchers WHERE voucher_id = ?').get(req.params.id);
-            if (!vch)
-                return res.status(404).json({ error: 'Voucher not found' });
-            db.exec('BEGIN TRANSACTION;');
-            db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(vch.voucher_id);
-            db.prepare('DELETE FROM stock_entries WHERE voucher_id = ?').run(vch.voucher_id);
-            db.prepare('DELETE FROM tax_entries WHERE voucher_id = ?').run(vch.voucher_id);
-            db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ?').run(vch.voucher_id);
-            db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(vch.voucher_id);
-            db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(vch.voucher_id);
-            db.prepare(`
-        INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
-        VALUES (?, ?, ?, 'DELETE_VOUCHER', 'VOUCHER', ?, ?)
-      `).run('aud_' + Date.now().toString(36), vch.company_id, 'admin', vch.voucher_id, JSON.stringify({ voucherNumber: vch.voucher_number, reason: 'Deleted by user' }));
-            db.exec('COMMIT;');
-            res.json({ success: true, message: 'Voucher deleted successfully.' });
+            const vch = db.prepare('SELECT voucher_id, company_id FROM vouchers WHERE voucher_id = ?').get(req.params.id);
+            if (!vch || !(0, security_js_1.assertResourceOwnership)(res, vch.company_id, req.companyId))
+                return;
+            const result = posting_engine_js_1.PostingEngine.postDraftVoucher(db, req.companyId, req.params.id, req.user.userId);
+            res.status(200).json({ success: true, ...result });
         }
         catch (err) {
-            db.exec('ROLLBACK;');
-            res.status(500).json({ error: err.message });
+            res.status(400).json({ error: err.message });
         }
     });
-    // ---------------- REPORTS ----------------
-    router.get('/reports/dashboard', (req, res) => {
+    /**
+     * DELETE /vouchers/:id — BLOCKED
+     *
+     * Posted vouchers are immutable accounting records.
+     * Use POST /vouchers/:id/cancel to reverse accounting effects.
+     * Returns 405 Method Not Allowed.
+     */
+    router.delete('/vouchers/:id', ...withAdmin, (req, res) => {
+        // Verify ownership first before revealing policy
+        const vch = db.prepare('SELECT voucher_id, company_id, status FROM vouchers WHERE voucher_id = ?').get(req.params.id);
+        if (!vch || !(0, security_js_1.assertResourceOwnership)(res, vch.company_id, req.companyId))
+            return;
+        res.status(405).json({
+            error: 'Direct voucher deletion is not permitted. Posted vouchers are permanent accounting records. Use the cancel operation to reverse accounting effects.'
+        });
+    });
+    // --------------------------------------------------------------------------
+    // COMPANY-SCOPED — Reports (all require authentication + company membership)
+    // --------------------------------------------------------------------------
+    router.get('/reports/dashboard', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = req.query.companyId || resolveCompanyId(req, db, user);
-            if (!companyId) {
-                return res.json({
-                    todaySalesPaise: 0,
-                    receivablesPaise: 0,
-                    payablesPaise: 0,
-                    cashBankPaise: 0,
-                    stockValuePaise: 0,
-                    stockAlerts: [],
-                    trendData: [],
-                    recentVouchers: []
-                });
-            }
+            const companyId = req.companyId;
             const today = new Date().toISOString().split('T')[0];
-            // Today Sales
             const todaySales = db.prepare(`
         SELECT COALESCE(SUM(total_amount_paise), 0) as total
         FROM vouchers
         WHERE company_id = ? AND voucher_type = 'SALES' AND voucher_date = ? AND status = 'POSTED'
       `).get(companyId, today);
-            // Today Purchases
             const todayPurchases = db.prepare(`
         SELECT COALESCE(SUM(total_amount_paise), 0) as total
         FROM vouchers
         WHERE company_id = ? AND voucher_type = 'PURCHASE' AND voucher_date = ? AND status = 'POSTED'
       `).get(companyId, today);
-            // Total Receivables
+            // DEF-REP-10: Include opening balances in receivables, payables, and cash/bank, and expose bank overdraft accurately
             const receivables = db.prepare(`
-        SELECT COALESCE(SUM(le.debit_paise - le.credit_paise), 0) as balance
-        FROM ledger_entries le
-        JOIN ledgers l ON le.ledger_id = l.ledger_id
+        SELECT COALESCE(SUM(
+          COALESCE(l.opening_balance_paise * (CASE WHEN l.opening_balance_type = 'DR' THEN 1 ELSE -1 END), 0) +
+          COALESCE(le.net_dr, 0)
+        ), 0) as balance
+        FROM ledgers l
         JOIN ledger_groups g ON l.group_id = g.group_id
+        LEFT JOIN (
+          SELECT le.ledger_id, SUM(le.debit_paise - le.credit_paise) as net_dr
+          FROM ledger_entries le
+          JOIN vouchers v ON le.voucher_id = v.voucher_id
+          WHERE v.status = 'POSTED'
+          GROUP BY le.ledger_id
+        ) le ON l.ledger_id = le.ledger_id
         WHERE l.company_id = ? AND (l.group_id LIKE '%debtor%' OR g.group_name LIKE '%Debtor%')
       `).get(companyId);
-            // Total Payables
             const payables = db.prepare(`
-        SELECT COALESCE(SUM(le.credit_paise - le.debit_paise), 0) as balance
-        FROM ledger_entries le
-        JOIN ledgers l ON le.ledger_id = l.ledger_id
+        SELECT COALESCE(SUM(
+          COALESCE(l.opening_balance_paise * (CASE WHEN l.opening_balance_type = 'CR' THEN 1 ELSE -1 END), 0) +
+          COALESCE(le.net_cr, 0)
+        ), 0) as balance
+        FROM ledgers l
         JOIN ledger_groups g ON l.group_id = g.group_id
+        LEFT JOIN (
+          SELECT le.ledger_id, SUM(le.credit_paise - le.debit_paise) as net_cr
+          FROM ledger_entries le
+          JOIN vouchers v ON le.voucher_id = v.voucher_id
+          WHERE v.status = 'POSTED'
+          GROUP BY le.ledger_id
+        ) le ON l.ledger_id = le.ledger_id
         WHERE l.company_id = ? AND (l.group_id LIKE '%creditor%' OR g.group_name LIKE '%Creditor%')
       `).get(companyId);
-            // Cash & Bank
             const cashBank = db.prepare(`
-        SELECT COALESCE(SUM(le.debit_paise - le.credit_paise), 0) as balance
-        FROM ledger_entries le
-        JOIN ledgers l ON le.ledger_id = l.ledger_id
+        SELECT COALESCE(SUM(
+          COALESCE(l.opening_balance_paise * (CASE WHEN l.opening_balance_type = 'DR' THEN 1 ELSE -1 END), 0) +
+          COALESCE(le.net_dr, 0)
+        ), 0) as balance
+        FROM ledgers l
         JOIN ledger_groups g ON l.group_id = g.group_id
+        LEFT JOIN (
+          SELECT le.ledger_id, SUM(le.debit_paise - le.credit_paise) as net_dr
+          FROM ledger_entries le
+          JOIN vouchers v ON le.voucher_id = v.voucher_id
+          WHERE v.status = 'POSTED'
+          GROUP BY le.ledger_id
+        ) le ON l.ledger_id = le.ledger_id
         WHERE l.company_id = ? AND (l.group_id LIKE '%cash%' OR l.group_id LIKE '%bank%' OR g.group_name LIKE '%Cash%' OR g.group_name LIKE '%Bank%')
       `).get(companyId);
-            // Stock Value
             const stockSummary = report_engine_js_1.ReportEngine.getStockSummary(db, companyId);
             const totalStockValPaise = stockSummary.reduce((sum, item) => sum + item.totalValuePaise, 0);
-            // Recent 5 Vouchers
             const recentVouchers = db.prepare(`
         SELECT v.voucher_id, v.voucher_number, v.voucher_type, v.voucher_date, v.total_amount_paise, p.party_name
         FROM vouchers v
@@ -761,18 +859,17 @@ function createApiRouter(db) {
         WHERE v.company_id = ? AND v.status = 'POSTED'
         ORDER BY v.voucher_date DESC, v.created_at DESC LIMIT 5
       `).all(companyId);
-            // Stock Alerts (Items where current stock <= reorder_level)
+            // DEF-REP-09: Stock alerts use actual stock quantity compared against actual reorder level
             const stockAlerts = stockSummary
-                .filter((item) => item.currentStock <= (item.reorderLevel ?? 5))
+                .filter(item => (item.reorderLevel > 0 && item.quantity <= item.reorderLevel) || item.quantity <= 0)
                 .slice(0, 5)
-                .map((item) => ({
+                .map(item => ({
                 name: item.itemName,
-                qty: `${item.currentStock} Units`,
-                status: item.currentStock === 0 ? 'critical' : 'warning'
+                qty: `${item.quantity} Units`,
+                status: item.quantity <= 0 ? 'critical' : 'warning'
             }));
-            // Monthly Trend — actual posted vouchers grouped by YYYY-MM and type
             const trendData = db.prepare(`
-        SELECT 
+        SELECT
           substr(voucher_date, 1, 7) as month,
           voucher_type,
           COALESCE(SUM(total_amount_paise), 0) as total
@@ -786,7 +883,7 @@ function createApiRouter(db) {
                 todayPurchasesPaise: todayPurchases.total,
                 receivablesPaise: Math.max(0, receivables.balance),
                 payablesPaise: Math.max(0, payables.balance),
-                cashBankPaise: Math.max(0, cashBank.balance),
+                cashBankPaise: cashBank.balance, // DEF-REP-10: Expose overdraft / negative balance accurately
                 stockValuePaise: totalStockValPaise,
                 stockAlerts,
                 trendData,
@@ -797,178 +894,104 @@ function createApiRouter(db) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/reports/daybook', (req, res) => {
+    router.get('/reports/daybook', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = req.query.companyId || resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json([]);
             const { fromDate, toDate } = req.query;
             const today = new Date().toISOString().split('T')[0];
-            const targetFrom = fromDate || '2000-01-01';
-            const targetTo = toDate || today;
-            const data = report_engine_js_1.ReportEngine.getDayBook(db, companyId, targetFrom, targetTo);
+            const data = report_engine_js_1.ReportEngine.getDayBook(db, req.companyId, fromDate || '2000-01-01', toDate || today);
             res.json(data);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/reports/ledger/:id', (req, res) => {
+    router.get('/reports/ledger/:id', ...withCompany, (req, res) => {
         try {
+            // Verify the ledger belongs to the company
+            const ledger = db.prepare('SELECT ledger_id, company_id FROM ledgers WHERE ledger_id = ?').get(req.params.id);
+            if (!ledger || !(0, security_js_1.assertResourceOwnership)(res, ledger.company_id, req.companyId))
+                return;
             const { fromDate, toDate } = req.query;
             const today = new Date().toISOString().split('T')[0];
-            const targetFrom = fromDate || '2000-01-01';
-            const targetTo = toDate || today;
-            const data = report_engine_js_1.ReportEngine.getLedgerStatement(db, req.params.id, targetFrom, targetTo);
+            const data = report_engine_js_1.ReportEngine.getLedgerStatement(db, req.companyId, req.params.id, fromDate || '2000-01-01', toDate || today);
             res.json(data);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/reports/trial-balance', (req, res) => {
+    router.get('/reports/trial-balance', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = req.query.companyId || resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json({ asOnDate: '', rows: [], totalDebitPaise: 0, totalCreditPaise: 0, isBalanced: true });
             const { asOnDate } = req.query;
-            const targetAsOn = asOnDate || new Date().toISOString().split('T')[0];
-            const data = report_engine_js_1.ReportEngine.getTrialBalance(db, companyId, targetAsOn);
+            const data = report_engine_js_1.ReportEngine.getTrialBalance(db, req.companyId, asOnDate || new Date().toISOString().split('T')[0]);
             res.json(data);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/reports/profit-loss', (req, res) => {
+    router.get('/reports/profit-loss', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = req.query.companyId || resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json({ fromDate: '', toDate: '', grossProfitPaise: 0, netProfitPaise: 0, tradingExpenseRows: [], tradingIncomeRows: [], pnlExpenseRows: [], pnlIncomeRows: [] });
             const { fromDate, toDate } = req.query;
             const today = new Date().toISOString().split('T')[0];
-            const targetFrom = fromDate || '2000-01-01';
-            const targetTo = toDate || today;
-            const data = report_engine_js_1.ReportEngine.getProfitAndLoss(db, companyId, targetFrom, targetTo);
+            const data = report_engine_js_1.ReportEngine.getProfitAndLoss(db, req.companyId, fromDate || '2000-01-01', toDate || today);
             res.json(data);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/reports/balance-sheet', (req, res) => {
+    router.get('/reports/balance-sheet', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = req.query.companyId || resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json({ asOnDate: '', totalAssetsPaise: 0, totalLiabilitiesPaise: 0, isBalanced: true, assetRows: [], liabilityRows: [] });
             const { asOnDate } = req.query;
-            const targetAsOn = asOnDate || new Date().toISOString().split('T')[0];
-            const data = report_engine_js_1.ReportEngine.getBalanceSheet(db, companyId, targetAsOn);
+            const data = report_engine_js_1.ReportEngine.getBalanceSheet(db, req.companyId, asOnDate || new Date().toISOString().split('T')[0]);
             res.json(data);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/reports/stock-summary', (req, res) => {
+    router.get('/reports/stock-summary', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = req.query.companyId || resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json([]);
-            const data = report_engine_js_1.ReportEngine.getStockSummary(db, companyId);
+            const { asOfDate } = req.query;
+            const data = report_engine_js_1.ReportEngine.getStockSummary(db, req.companyId, asOfDate);
             res.json(data);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/reports/outstanding', (req, res) => {
+    router.get('/reports/outstanding', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = req.query.companyId || resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json([]);
-            const { type } = req.query;
-            const data = report_engine_js_1.ReportEngine.getOutstandingReport(db, companyId, type || 'CUSTOMER');
+            const { type, asOnDate } = req.query;
+            const data = report_engine_js_1.ReportEngine.getOutstandingReport(db, req.companyId, type || 'CUSTOMER', asOnDate);
             res.json(data);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/reports/dashboard', (req, res) => {
+    router.get('/reports/gst-summary', ...withCompany, (req, res) => {
         try {
-            const user = getUserFromToken(req);
-            const companyId = req.query.companyId || resolveCompanyId(req, db, user);
-            if (!companyId)
-                return res.json({ trendData: [], recentVouchers: [] });
-            // Fetch recent vouchers
-            const recentVouchers = db.prepare(`
-        SELECT voucher_id, voucher_number, voucher_type, voucher_date, total_amount_paise 
-        FROM vouchers 
-        WHERE company_id = ? AND status = 'POSTED'
-        ORDER BY created_at DESC LIMIT 5
-      `).all(companyId);
-            // Mock trend data for SVG (in a real app, this would aggregate sales/purchases by month)
-            const trendData = [
-                { label: 'Jan', sales: 4000000, purchases: 2000000 },
-                { label: 'Feb', sales: 5000000, purchases: 3000000 },
-                { label: 'Mar', sales: 4500000, purchases: 2500000 }
-            ];
-            res.json({ trendData, recentVouchers });
-        }
-        catch (err) {
-            res.status(500).json({ error: err.message });
-        }
-    });
-    router.get('/reports/gst-summary', (req, res) => {
-        try {
-            const user = getUserFromToken(req);
-            const companyId = req.query.companyId || resolveCompanyId(req, db, user);
-            if (!companyId) {
-                return res.json({
-                    fromDate: '',
-                    toDate: '',
-                    gstr1: {
-                        totalInvoices: 0,
-                        totalTaxablePaise: 0,
-                        totalCgstPaise: 0,
-                        totalSgstPaise: 0,
-                        totalIgstPaise: 0,
-                        totalTaxPaise: 0,
-                        totalInvoiceValuePaise: 0,
-                        b2b: [],
-                        b2c: []
-                    },
-                    gstr3b: {
-                        outwardTaxablePaise: 0,
-                        outwardCgstPaise: 0,
-                        outwardSgstPaise: 0,
-                        outwardIgstPaise: 0,
-                        itcCgstPaise: 0,
-                        itcSgstPaise: 0,
-                        itcIgstPaise: 0,
-                        netCgstPayablePaise: 0,
-                        netSgstPayablePaise: 0,
-                        netIgstPayablePaise: 0
-                    }
-                });
-            }
             const { fromDate, toDate } = req.query;
-            const data = report_engine_js_1.ReportEngine.getGstSummary(db, companyId, fromDate, toDate);
+            const today = new Date().toISOString().split('T')[0];
+            const data = report_engine_js_1.ReportEngine.getGstSummary(db, req.companyId, fromDate || '2000-01-01', toDate || today);
             res.json(data);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    // ---------------- UTILITIES (BACKUP & AUDIT) ----------------
-    router.post('/utilities/backup', (req, res) => {
+    // --------------------------------------------------------------------------
+    // COMPANY-SCOPED — Utilities
+    // --------------------------------------------------------------------------
+    /**
+     * POST /utilities/backup
+     * Requires OWNER role. Creates a database backup file.
+     *
+     * SECURITY: Backup path is not returned to frontend to avoid path disclosure.
+     */
+    router.post('/utilities/backup', ...withOwner, (req, res) => {
         try {
             const backupDir = './data/backups';
             const fs = require('node:fs');
@@ -976,46 +999,84 @@ function createApiRouter(db) {
                 fs.mkdirSync(backupDir, { recursive: true });
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const backupFile = `${backupDir}/ledgerflow_backup_${timestamp}.db`;
-            // SQLite vacuum into safe online backup
             db.exec(`VACUUM INTO '${backupFile}';`);
-            res.json({ success: true, backupFile });
+            // Do not return filesystem path — just confirm success
+            res.json({ success: true, message: 'Backup created successfully.' });
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.get('/utilities/audit-logs', (req, res) => {
+    /**
+     * GET /utilities/audit-logs
+     * Requires authentication + company membership + ADMIN or OWNER role.
+     * Returns ONLY the resolved company's audit logs.
+     */
+    router.get('/utilities/audit-logs', ...withAdmin, (req, res) => {
         try {
-            const logs = db.prepare('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 100').all();
+            const logs = db.prepare('SELECT * FROM audit_logs WHERE company_id = ? ORDER BY created_at DESC LIMIT 200').all(req.companyId);
             res.json(logs);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    router.post('/utilities/reset-data', (req, res) => {
+    /**
+     * POST /utilities/reset-data
+     * Requires: ALLOW_DATA_RESET=true env + OWNER role + password re-entry
+     * Resets ONLY the resolved company's data.
+     */
+    router.post('/utilities/reset-data', ...withOwner, (req, res) => {
         try {
-            db.exec('PRAGMA foreign_keys = OFF;');
-            db.exec('DELETE FROM bill_allocations;');
-            db.exec('DELETE FROM tax_entries;');
-            db.exec('DELETE FROM stock_entries;');
-            db.exec('DELETE FROM ledger_entries;');
-            db.exec('DELETE FROM voucher_lines;');
-            db.exec('DELETE FROM vouchers;');
-            db.exec('DELETE FROM party_addresses;');
-            db.exec('DELETE FROM parties;');
-            db.exec('DELETE FROM stock_items;');
-            db.exec('DELETE FROM ledgers WHERE is_party = 1;');
-            db.exec('PRAGMA foreign_keys = ON;');
+            // Check env kill-switch
+            if (process.env.ALLOW_DATA_RESET !== 'true') {
+                return res.status(404).json({ error: 'Not found' });
+            }
+            // Require password re-entry
+            const { password } = req.body;
+            if (!password) {
+                return res.status(400).json({ error: 'Password is required to confirm data reset.' });
+            }
+            const bcrypt = require('bcryptjs');
+            const dbUser = db.prepare('SELECT password_hash FROM users WHERE user_id = ?').get(req.user.userId);
+            if (!dbUser || !bcrypt.compareSync(password, dbUser.password_hash)) {
+                return res.status(401).json({ error: 'Incorrect password. Data reset rejected.' });
+            }
+            const companyId = req.companyId;
+            // Reset ONLY this company's data
+            db.exec('BEGIN TRANSACTION;');
+            try {
+                db.exec('PRAGMA foreign_keys = OFF;');
+                db.prepare('DELETE FROM bill_allocations WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)').run(companyId);
+                db.prepare('DELETE FROM tax_entries WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)').run(companyId);
+                db.prepare('DELETE FROM stock_entries WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)').run(companyId);
+                db.prepare('DELETE FROM ledger_entries WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)').run(companyId);
+                db.prepare('DELETE FROM voucher_lines WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)').run(companyId);
+                db.prepare('DELETE FROM vouchers WHERE company_id = ?').run(companyId);
+                db.prepare('DELETE FROM party_addresses WHERE party_id IN (SELECT party_id FROM parties WHERE company_id = ?)').run(companyId);
+                db.prepare('DELETE FROM parties WHERE company_id = ?').run(companyId);
+                db.prepare('DELETE FROM stock_entries WHERE item_id IN (SELECT item_id FROM stock_items WHERE company_id = ?)').run(companyId);
+                db.prepare('DELETE FROM stock_items WHERE company_id = ?').run(companyId);
+                db.prepare('DELETE FROM ledgers WHERE company_id = ? AND is_party = 1').run(companyId);
+                db.exec('PRAGMA foreign_keys = ON;');
+                // Audit this destructive action
+                db.prepare(`
+          INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
+          VALUES (?, ?, ?, 'RESET_COMPANY_DATA', 'COMPANY', ?, ?)
+        `).run('aud_' + Date.now().toString(36), companyId, req.user.userId, companyId, JSON.stringify({ reason: 'Manual company data reset by OWNER', timestamp: new Date().toISOString() }));
+                db.exec('COMMIT;');
+            }
+            catch (innerErr) {
+                db.exec('ROLLBACK;');
+                throw innerErr;
+            }
             res.json({
                 success: true,
-                message: 'All dummy transaction and master data wiped cleanly.',
+                message: 'Company data reset successfully.',
                 counts: {
-                    vouchers: db.prepare('SELECT COUNT(*) as c FROM vouchers').get().c,
-                    parties: db.prepare('SELECT COUNT(*) as c FROM parties').get().c,
-                    stock_items: db.prepare('SELECT COUNT(*) as c FROM stock_items').get().c,
-                    ledger_entries: db.prepare('SELECT COUNT(*) as c FROM ledger_entries').get().c,
-                    core_ledgers: db.prepare('SELECT COUNT(*) as c FROM ledgers').get().c
+                    vouchers: db.prepare('SELECT COUNT(*) as c FROM vouchers WHERE company_id = ?').get(companyId).c,
+                    parties: db.prepare('SELECT COUNT(*) as c FROM parties WHERE company_id = ?').get(companyId).c,
+                    stock_items: db.prepare('SELECT COUNT(*) as c FROM stock_items WHERE company_id = ?').get(companyId).c
                 }
             });
         }
