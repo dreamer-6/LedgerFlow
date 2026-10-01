@@ -151,17 +151,12 @@ class BusinessController {
             res.status(201).json(fy);
         }
         catch (err) {
-            if (err.message.includes('required')) {
-                res.status(400).json({ error: err.message });
-            }
-            else {
-                res.status(500).json({ error: err.message });
-            }
+            res.status(400).json({ error: err.message });
         }
     };
     /**
      * PUT /financial-years/:fyId
-     * Requires: authenticate + resolveCompanyContext + ADMIN
+     * Requires: authenticate + resolveCompanyContext + ADMIN (or OWNER for reopening closed years)
      */
     updateFinancialYearStatus = (req, res) => {
         try {
@@ -169,17 +164,20 @@ class BusinessController {
                 return res.status(400).json({ error: 'No company context.' });
             }
             const { fyId } = req.params;
-            const { status } = req.body;
+            const { status, reason } = req.body;
             // Verify the financial year belongs to this company
             const fy = this.db.prepare('SELECT fy_id FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, req.companyId);
             if (!fy) {
                 return res.status(404).json({ error: 'Financial year not found for this company.' });
             }
-            const updated = business_service_js_1.BusinessService.updateFinancialYearStatus(this.db, req.companyId, fyId, status);
+            const updated = business_service_js_1.BusinessService.updateFinancialYearStatus(this.db, req.companyId, fyId, status, req.membershipRole || req.user?.role, reason, req.user?.userId);
             res.json(updated);
         }
         catch (err) {
-            res.status(500).json({ error: err.message });
+            if (err.message && err.message.includes('Only the company OWNER')) {
+                return res.status(403).json({ error: err.message });
+            }
+            res.status(400).json({ error: err.message });
         }
     };
 }
