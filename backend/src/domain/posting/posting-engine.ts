@@ -110,6 +110,8 @@ export class PostingEngine {
         }
       }
       prefix = `${compAcronym}-${fyCode}`;
+    } else if (voucherType === 'STOCK_JOURNAL') {
+      prefix = 'STK';
     } else {
       prefix = `${prefix}-${fyCode}`;
     }
@@ -1363,7 +1365,15 @@ export class PostingEngine {
             WHERE item_id = ? AND godown_id = ?
           `).get(pair.item_id, pair.godown_id) as { balance_qty: number } | undefined;
 
-          const finalBal = Number(balRow?.balance_qty || 0);
+          let finalBal = Number(balRow?.balance_qty || 0);
+          const hasIn = db.prepare("SELECT 1 FROM stock_entries WHERE item_id = ? AND movement_type = 'IN' LIMIT 1").get(pair.item_id);
+          if (!hasIn) {
+            const itemRow = db.prepare('SELECT opening_qty FROM stock_items WHERE item_id = ?').get(pair.item_id) as any;
+            if (itemRow && Number(itemRow.opening_qty) > 0) {
+              finalBal += Number(itemRow.opening_qty);
+            }
+          }
+
           if (finalBal < 0) {
             throw new Error(`Amendment resulted in negative stock balance (${finalBal}) for item '${pair.item_id}' in godown '${pair.godown_id}'. Dependent transactions have consumed this stock.`);
           }
@@ -1544,7 +1554,8 @@ export class PostingEngine {
       ratePaise: number;
       date?: string;
       userId?: string;
-    }
+    },
+    options?: { skipTransaction?: boolean }
   ): { voucherId: string; stockEntryId: string; openingValPaise: number } {
     const qty = Number(params.quantity);
     const rate = Math.round(Number(params.ratePaise));
@@ -1578,52 +1589,71 @@ export class PostingEngine {
       fyId = dateFy.fy_id;
     }
 
-    const voucherId = 'vch_' + crypto.randomUUID().replace(/-/g, '');
-    const voucherNumber = PostingEngine.getNextVoucherNumber(db, params.companyId, fyId, 'STOCK_JOURNAL');
-
-    const itemName = params.itemName || (db.prepare('SELECT item_name FROM stock_items WHERE item_id = ?').get(params.itemId) as any)?.item_name || 'Item';
-
-    // 1. Create STOCK_JOURNAL voucher
-    db.prepare(`
-      INSERT INTO vouchers (voucher_id, company_id, fy_id, voucher_type, voucher_number, voucher_date, narration, status, total_amount_paise, created_by)
-      VALUES (?, ?, ?, 'STOCK_JOURNAL', ?, ?, ?, 'POSTED', ?, ?)
-    `).run(voucherId, params.companyId, fyId, voucherNumber, entryDate, `Opening Stock for '${itemName}'`, openingVal, params.userId || 'system');
-
-    // 2. Create stock_entries record
-    const entryId = 'se_opn_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-    const defGodown = db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? LIMIT 1').get(params.companyId) as any;
-    const godownId = params.godownId || defGodown?.godown_id || `${params.companyId}_godown_main`;
-
-    db.prepare(`
-      INSERT INTO stock_entries (stock_entry_id, voucher_id, item_id, godown_id, entry_date, movement_type, quantity, rate_paise, value_paise)
-      VALUES (?, ?, ?, ?, ?, 'IN', ?, ?, ?)
-    `).run(entryId, voucherId, params.itemId, godownId, entryDate, qty, rate, openingVal);
-
-    // 3. Update stock_items opening_qty and opening_rate_paise if not already set
-    const itemRow = db.prepare('SELECT opening_qty FROM stock_items WHERE item_id = ?').get(params.itemId) as any;
-    if (!itemRow || Number(itemRow.opening_qty) === 0) {
-      db.prepare('UPDATE stock_items SET opening_qty = ?, opening_rate_paise = ? WHERE item_id = ?').run(qty, rate, params.itemId);
+    const inOuterTx = options?.skipTransaction === true;
+    if (!inOuterTx) {
+      db.exec('SAVEPOINT sp_record_opening_stock;');
     }
 
-    // 4. DEF-REP-07: Synchronize Inventory Asset ledger opening balance
-    const invLedger = db.prepare(`
-      SELECT ledger_id, opening_balance_paise, opening_balance_type FROM ledgers
-      WHERE company_id = ? AND (ledger_id = ? OR ledger_name LIKE '%Inventory%')
-      LIMIT 1
-    `).get(params.companyId, `${params.companyId}_led_inventory`) as any;
-    if (invLedger) {
-      const currentBal = invLedger.opening_balance_type === 'DR'
-        ? Number(invLedger.opening_balance_paise || 0)
-        : -Number(invLedger.opening_balance_paise || 0);
-      const newBal = currentBal + openingVal;
+    try {
+      const voucherId = 'vch_' + crypto.randomUUID().replace(/-/g, '');
+      const voucherNumber = PostingEngine.getNextVoucherNumber(db, params.companyId, fyId, 'STOCK_JOURNAL');
+
+      const itemName = params.itemName || (db.prepare('SELECT item_name FROM stock_items WHERE item_id = ?').get(params.itemId) as any)?.item_name || 'Item';
+
+      // 1. Create STOCK_JOURNAL voucher
       db.prepare(`
-        UPDATE ledgers
-        SET opening_balance_paise = ?,
-            opening_balance_type = ?
-        WHERE ledger_id = ?
-      `).run(Math.abs(newBal), newBal >= 0 ? 'DR' : 'CR', invLedger.ledger_id);
-    }
+        INSERT INTO vouchers (voucher_id, company_id, fy_id, voucher_type, voucher_number, voucher_date, narration, status, total_amount_paise, created_by)
+        VALUES (?, ?, ?, 'STOCK_JOURNAL', ?, ?, ?, 'POSTED', ?, ?)
+      `).run(voucherId, params.companyId, fyId, voucherNumber, entryDate, `Opening Stock for '${itemName}'`, openingVal, params.userId || 'system');
 
-    return { voucherId, stockEntryId: entryId, openingValPaise: openingVal };
+      // 2. Create stock_entries record
+      const entryId = 'se_opn_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      const defGodown = db.prepare('SELECT godown_id FROM godowns WHERE company_id = ? LIMIT 1').get(params.companyId) as any;
+      const godownId = params.godownId || defGodown?.godown_id || `${params.companyId}_godown_main`;
+
+      db.prepare(`
+        INSERT INTO stock_entries (stock_entry_id, voucher_id, item_id, godown_id, entry_date, movement_type, quantity, rate_paise, value_paise)
+        VALUES (?, ?, ?, ?, ?, 'IN', ?, ?, ?)
+      `).run(entryId, voucherId, params.itemId, godownId, entryDate, qty, rate, openingVal);
+
+      // 3. Update stock_items opening_qty and opening_rate_paise if not already set
+      const itemRow = db.prepare('SELECT opening_qty FROM stock_items WHERE item_id = ?').get(params.itemId) as any;
+      if (!itemRow || Number(itemRow.opening_qty) === 0) {
+        db.prepare('UPDATE stock_items SET opening_qty = ?, opening_rate_paise = ? WHERE item_id = ?').run(qty, rate, params.itemId);
+      }
+
+      // 4. DEF-REP-07: Synchronize Inventory Asset ledger opening balance
+      const invLedger = db.prepare(`
+        SELECT ledger_id, opening_balance_paise, opening_balance_type FROM ledgers
+        WHERE company_id = ? AND (ledger_id = ? OR ledger_name LIKE '%Inventory%')
+        LIMIT 1
+      `).get(params.companyId, `${params.companyId}_led_inventory`) as any;
+      if (invLedger) {
+        const currentBal = invLedger.opening_balance_type === 'DR'
+          ? Number(invLedger.opening_balance_paise || 0)
+          : -Number(invLedger.opening_balance_paise || 0);
+        const newBal = currentBal + openingVal;
+        db.prepare(`
+          UPDATE ledgers
+          SET opening_balance_paise = ?,
+              opening_balance_type = ?
+          WHERE ledger_id = ?
+        `).run(Math.abs(newBal), newBal >= 0 ? 'DR' : 'CR', invLedger.ledger_id);
+      }
+
+      if (!inOuterTx) {
+        db.exec('RELEASE SAVEPOINT sp_record_opening_stock;');
+      }
+
+      return { voucherId, stockEntryId: entryId, openingValPaise: openingVal };
+    } catch (err: any) {
+      if (!inOuterTx) {
+        try {
+          db.exec('ROLLBACK TO SAVEPOINT sp_record_opening_stock;');
+          db.exec('RELEASE SAVEPOINT sp_record_opening_stock;');
+        } catch (_) {}
+      }
+      throw err;
+    }
   }
 }

@@ -66,8 +66,9 @@ export class InventoryEngine {
     let currentQty = 0;
     let currentAvgRatePaise = 0;
 
-    // Compatibility: If no stock_entries exist, fall back to stock_items.opening_qty (Amendment 2 non-destructive compatibility)
-    if (movements.length === 0 && Number(item.opening_qty) > 0) {
+    // Compatibility: If no inward stock_entries exist, fall back to stock_items.opening_qty (Amendment 2 non-destructive compatibility)
+    const hasInMovements = movements.some(m => m.movement_type === 'IN');
+    if (!hasInMovements && Number(item.opening_qty) > 0) {
       currentQty = Number(item.opening_qty);
       currentAvgRatePaise = Math.round(Number(item.opening_rate_paise)) || 0;
     }
@@ -134,14 +135,12 @@ export class InventoryEngine {
 
     let currentQty = Number(row?.balance_qty || 0);
 
-    // Compatibility: If balance in stock_entries is 0, check if initial opening_qty exists without stock_entries (Amendment 2)
-    if (currentQty === 0) {
-      const anyMovement = db.prepare('SELECT 1 FROM stock_entries WHERE item_id = ? LIMIT 1').get(itemId);
-      if (!anyMovement) {
-        const itemRow = db.prepare('SELECT opening_qty FROM stock_items WHERE item_id = ?').get(itemId) as any;
-        if (itemRow && Number(itemRow.opening_qty) > 0) {
-          currentQty = Number(itemRow.opening_qty);
-        }
+    // Compatibility: If no inward stock_entries exist, include initial opening_qty from stock_items (Amendment 2)
+    const hasIn = db.prepare("SELECT 1 FROM stock_entries WHERE item_id = ? AND movement_type = 'IN' LIMIT 1").get(itemId);
+    if (!hasIn) {
+      const itemRow = db.prepare('SELECT opening_qty FROM stock_items WHERE item_id = ?').get(itemId) as any;
+      if (itemRow && Number(itemRow.opening_qty) > 0) {
+        currentQty += Number(itemRow.opening_qty);
       }
     }
 
