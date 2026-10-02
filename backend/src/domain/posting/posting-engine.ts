@@ -149,13 +149,17 @@ export class PostingEngine {
    * Atomic Posting Function
    * Guarantees rollback on any error and enforces accounting invariants
    */
-  public static postVoucher(db: DatabaseSync, input: CreateVoucherInput): {
+  public static postVoucher(
+    db: DatabaseSync,
+    input: CreateVoucherInput,
+    options?: { skipTransaction?: boolean; voucherId?: string }
+  ): {
     voucherId: string;
     voucherNumber: string;
     totalAmountPaise: number;
     status: 'DRAFT' | 'POSTED';
   } {
-    return this._postVoucherInternal(db, input, { skipTransaction: false });
+    return this._postVoucherInternal(db, input, options || { skipTransaction: false });
   }
 
   /**
