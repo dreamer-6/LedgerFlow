@@ -953,44 +953,56 @@ export class PostingEngine {
         }
 
         // F. Bill-Wise Allocations
+        // DEF-008-06: Allocate exact party amount in compound vouchers instead of full voucher sum
         if (partyLedgerId && finalVoucherTotal > 0) {
-          const allocId = 'ba_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
-          const isSettlement = input.voucherType === 'RECEIPT' || input.voucherType === 'PAYMENT' ||
-                               input.voucherType === 'CREDIT_NOTE' || input.voucherType === 'DEBIT_NOTE' ||
-                               input.voucherType === 'SALES_RETURN' || input.voucherType === 'PURCHASE_RETURN';
+          const partyLines = ledgerLines.filter(l => l.ledgerId === partyLedgerId);
+          let partyAmountPaise = 0;
+          for (const pl of partyLines) {
+            partyAmountPaise += (pl.creditPaise || 0) + (pl.debitPaise || 0);
+          }
+          if (partyAmountPaise === 0) {
+            partyAmountPaise = finalVoucherTotal;
+          }
 
-          if (input.billAllocation?.referenceVoucherId) {
-            const allocType = input.billAllocation.allocationType || 'AGAINST_REF';
-            let refVoucher = input.billAllocation.referenceVoucherId;
-            db.prepare(`
-              INSERT INTO bill_allocations (
-                allocation_id, voucher_id, ledger_id, reference_voucher_id,
-                allocation_type, amount_paise, due_date
-              ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            `).run(
-              allocId, voucherId, partyLedgerId, refVoucher,
-              allocType, finalVoucherTotal, input.billAllocation?.dueDate || null
-            );
-          } else if (isSettlement) {
-            const allocType = input.billAllocation?.allocationType === 'ADVANCE' ? 'ADVANCE' : 'ON_ACCOUNT';
-            // E-1: Auto ON_ACCOUNT / ADVANCE allocation when billAllocation/referenceVoucherId is omitted for settlement
-            db.prepare(`
-              INSERT INTO bill_allocations (
-                allocation_id, voucher_id, ledger_id, reference_voucher_id,
-                allocation_type, amount_paise, due_date
-              ) VALUES (?, ?, ?, NULL, ?, ?, NULL)
-            `).run(allocId, voucherId, partyLedgerId, allocType, finalVoucherTotal);
-          } else {
-            // Standard invoice new reference
-            db.prepare(`
-              INSERT INTO bill_allocations (
-                allocation_id, voucher_id, ledger_id, reference_voucher_id,
-                allocation_type, amount_paise, due_date
-              ) VALUES (?, ?, ?, ?, 'NEW_REF', ?, ?)
-            `).run(
-              allocId, voucherId, partyLedgerId, voucherId,
-              finalVoucherTotal, input.billAllocation?.dueDate || null
-            );
+          if (partyAmountPaise > 0) {
+            const allocId = 'ba_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+            const isSettlement = input.voucherType === 'RECEIPT' || input.voucherType === 'PAYMENT' ||
+                                 input.voucherType === 'CREDIT_NOTE' || input.voucherType === 'DEBIT_NOTE' ||
+                                 input.voucherType === 'SALES_RETURN' || input.voucherType === 'PURCHASE_RETURN';
+
+            if (input.billAllocation?.referenceVoucherId) {
+              const allocType = input.billAllocation.allocationType || 'AGAINST_REF';
+              let refVoucher = input.billAllocation.referenceVoucherId;
+              db.prepare(`
+                INSERT INTO bill_allocations (
+                  allocation_id, voucher_id, ledger_id, reference_voucher_id,
+                  allocation_type, amount_paise, due_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+              `).run(
+                allocId, voucherId, partyLedgerId, refVoucher,
+                allocType, partyAmountPaise, input.billAllocation?.dueDate || null
+              );
+            } else if (isSettlement) {
+              const allocType = input.billAllocation?.allocationType === 'ADVANCE' ? 'ADVANCE' : 'ON_ACCOUNT';
+              // E-1: Auto ON_ACCOUNT / ADVANCE allocation when billAllocation/referenceVoucherId is omitted for settlement
+              db.prepare(`
+                INSERT INTO bill_allocations (
+                  allocation_id, voucher_id, ledger_id, reference_voucher_id,
+                  allocation_type, amount_paise, due_date
+                ) VALUES (?, ?, ?, NULL, ?, ?, NULL)
+              `).run(allocId, voucherId, partyLedgerId, allocType, partyAmountPaise);
+            } else {
+              // Standard invoice new reference
+              db.prepare(`
+                INSERT INTO bill_allocations (
+                  allocation_id, voucher_id, ledger_id, reference_voucher_id,
+                  allocation_type, amount_paise, due_date
+                ) VALUES (?, ?, ?, ?, 'NEW_REF', ?, ?)
+              `).run(
+                allocId, voucherId, partyLedgerId, voucherId,
+                partyAmountPaise, input.billAllocation?.dueDate || null
+              );
+            }
           }
         }
       }
