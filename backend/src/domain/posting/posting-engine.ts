@@ -704,6 +704,34 @@ export class PostingEngine {
         }
       }
 
+      // DEF-008-03 / DEF-008-13: Store canonical draft metadata in terms_conditions for 100% round-trip fidelity
+      let storedTermsConditions = termsConditions;
+      if (voucherStatus === 'DRAFT') {
+        const draftMeta = {
+          _draftMeta: {
+            customLedgerLines: input.customLedgerLines || undefined,
+            billAllocation: input.billAllocation || undefined,
+            originalTerms: termsConditions || undefined,
+            lines: input.lines?.map(l => ({
+              itemId: l.itemId,
+              ledgerId: l.ledgerId,
+              godownId: l.godownId,
+              description: l.description,
+              quantity: l.quantity,
+              ratePaise: l.ratePaise,
+              discountPercent: l.discountPercent,
+              discountAmountPaise: l.discountAmountPaise,
+              gstRate: l.gstRate,
+              cessRate: l.cessRate,
+              isTaxInclusive: l.isTaxInclusive,
+              serialNumber: l.serialNumber,
+              movementType: l.movementType
+            }))
+          }
+        };
+        storedTermsConditions = JSON.stringify(draftMeta);
+      }
+
       // A. Insert Voucher Header
       db.prepare(`
         INSERT INTO vouchers (
@@ -721,7 +749,7 @@ export class PostingEngine {
         )
       `).run(
         voucherId, input.companyId, fyId, input.voucherType, postedVoucherNumber,
-        input.voucherDate, referenceNumber, referenceDate, paymentMode, termsConditions,
+        input.voucherDate, referenceNumber, referenceDate, paymentMode, storedTermsConditions,
         input.partyId || null, input.narration || null, voucherStatus,
         voucherTotals.taxableAmountPaise, voucherTotals.cgstAmountPaise, voucherTotals.sgstAmountPaise, voucherTotals.igstAmountPaise,
         voucherTotals.roundOffPaise, finalVoucherTotal, input.createdBy || 'system'
@@ -732,6 +760,7 @@ export class PostingEngine {
       for (const pl of processedLines) {
         const lineId = 'ln_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
         const lineGodownId = pl.lineInput.itemId ? resolveValidGodownId(pl.lineInput.godownId) : null;
+        const lineSerial = pl.lineInput.serialNumber || (input.voucherType === 'STOCK_JOURNAL' ? pl.lineInput.movementType : null);
         db.prepare(`
           INSERT INTO voucher_lines (
             line_id, voucher_id, line_number, item_id, ledger_id, godown_id, description,
@@ -749,7 +778,7 @@ export class PostingEngine {
           pl.lineInput.quantity || 0, pl.lineInput.ratePaise, pl.lineInput.discountPercent || 0, pl.taxResult.discountAmountPaise,
           pl.taxResult.taxableAmountPaise, pl.taxResult.cgstRate + pl.taxResult.sgstRate + pl.taxResult.igstRate,
           pl.taxResult.cgstAmountPaise, pl.taxResult.sgstAmountPaise, pl.taxResult.igstAmountPaise, pl.taxResult.totalAmountPaise,
-          pl.lineInput.serialNumber || null
+          lineSerial
         );
 
         // DEF-VCH-06: Accurate serial lifecycle tracking
@@ -767,6 +796,31 @@ export class PostingEngine {
               db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE' WHERE item_id = ? AND serial_number = ?`).run(pl.lineInput.itemId, s);
             }
           }
+        }
+      }
+
+      // DEF-008-03: Secondary fallback representation in voucher_lines for financial draft vouchers
+      if (voucherStatus === 'DRAFT' && input.customLedgerLines && input.customLedgerLines.length > 0 && processedLines.length === 0) {
+        for (const cl of input.customLedgerLines) {
+          const lineId = 'ln_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+          const amount = (cl.debitPaise || 0) > 0 ? (cl.debitPaise || 0) : (cl.creditPaise || 0);
+          const drCr = (cl.debitPaise || 0) > 0 ? 'DR' : 'CR';
+          db.prepare(`
+            INSERT INTO voucher_lines (
+              line_id, voucher_id, line_number, item_id, ledger_id, godown_id, description,
+              quantity, rate_paise, discount_percent, discount_amount_paise,
+              taxable_amount_paise, gst_rate, cgst_amount_paise, sgst_amount_paise,
+              igst_amount_paise, total_amount_paise, serial_number
+            ) VALUES (
+              ?, ?, ?, NULL, ?, NULL, ?,
+              1, ?, 0, 0,
+              ?, 0, 0, 0,
+              0, ?, ?
+            )
+          `).run(
+            lineId, voucherId, lineNum++, cl.ledgerId, cl.particulars || null,
+            amount, amount, amount, drCr
+          );
         }
       }
 
@@ -1276,23 +1330,63 @@ export class PostingEngine {
         throw new Error(`Cannot post draft voucher: Financial Year status is ${vch.fy_status}. Posting prohibited.`);
       }
 
-      // Read lines
-      const dbLines = db.prepare(`
-        SELECT * FROM voucher_lines WHERE voucher_id = ? ORDER BY line_number ASC
-      `).all(voucherId) as any[];
+      // DEF-008-03 / DEF-008-13: Restore canonical draft intent from terms_conditions JSON metadata
+      let customLedgerLines: LedgerPostingLine[] | undefined;
+      let billAllocation: any | undefined;
+      let termsConditions: string | undefined = vch.terms_conditions || undefined;
+      let lines: CreateVoucherLineInput[] = [];
 
-      const lines: CreateVoucherLineInput[] = dbLines.map(l => ({
-        itemId: l.item_id || undefined,
-        ledgerId: l.ledger_id || undefined,
-        godownId: l.godown_id || undefined,
-        description: l.description || undefined,
-        quantity: l.quantity !== null ? Number(l.quantity) : undefined,
-        ratePaise: Number(l.rate_paise || 0),
-        discountPercent: Number(l.discount_percent || 0),
-        discountAmountPaise: Number(l.discount_amount_paise || 0),
-        gstRate: Number(l.gst_rate || 0),
-        serialNumber: l.serial_number || undefined
-      }));
+      let parsedMeta: any = null;
+      if (vch.terms_conditions) {
+        try {
+          const parsed = JSON.parse(vch.terms_conditions);
+          if (parsed && parsed._draftMeta) {
+            parsedMeta = parsed._draftMeta;
+          }
+        } catch (_) {}
+      }
+
+      if (parsedMeta) {
+        // Canonical draft representation
+        customLedgerLines = parsedMeta.customLedgerLines;
+        billAllocation = parsedMeta.billAllocation;
+        termsConditions = parsedMeta.originalTerms || undefined;
+        if (Array.isArray(parsedMeta.lines)) {
+          lines = parsedMeta.lines;
+        }
+      }
+
+      // If lines was not populated from canonical metadata, use voucher_lines as recovery fallback
+      if (lines.length === 0) {
+        const dbLines = db.prepare(`
+          SELECT * FROM voucher_lines WHERE voucher_id = ? ORDER BY line_number ASC
+        `).all(voucherId) as any[];
+
+        lines = dbLines.map(l => ({
+          itemId: l.item_id || undefined,
+          ledgerId: l.ledger_id || undefined,
+          godownId: l.godown_id || undefined,
+          description: l.description || undefined,
+          quantity: l.quantity !== null ? Number(l.quantity) : undefined,
+          ratePaise: Number(l.rate_paise || 0),
+          discountPercent: Number(l.discount_percent || 0),
+          discountAmountPaise: Number(l.discount_amount_paise || 0),
+          gstRate: Number(l.gst_rate || 0),
+          serialNumber: (l.serial_number && l.serial_number !== 'IN' && l.serial_number !== 'OUT' && l.serial_number !== 'DR' && l.serial_number !== 'CR') ? l.serial_number : undefined,
+          movementType: (l.serial_number === 'IN' || l.serial_number === 'OUT') ? l.serial_number : undefined
+        }));
+
+        // If financial voucher without customLedgerLines in metadata, fallback from voucher_lines
+        if (!customLedgerLines && lines.length > 0 && lines.some(l => l.ledgerId && !l.itemId)) {
+          customLedgerLines = dbLines.filter(l => l.ledger_id && !l.item_id).map(l => ({
+            ledgerId: l.ledger_id,
+            debitPaise: l.serial_number === 'DR' ? Number(l.total_amount_paise || 0) : 0,
+            creditPaise: l.serial_number === 'CR' ? Number(l.total_amount_paise || 0) : 0,
+            particulars: l.description || undefined
+          }));
+          lines = [];
+        }
+      }
 
       // Reconstruct payload
       const payload: CreateVoucherInput = {
@@ -1303,10 +1397,12 @@ export class PostingEngine {
         referenceNumber: vch.reference_number || undefined,
         referenceDate: vch.reference_date || undefined,
         paymentMode: vch.payment_mode || undefined,
-        termsConditions: vch.terms_conditions || undefined,
+        termsConditions,
         partyId: vch.party_id || undefined,
         narration: vch.narration || undefined,
         lines,
+        customLedgerLines,
+        billAllocation,
         status: 'POSTED',
         createdBy: userId
       };
