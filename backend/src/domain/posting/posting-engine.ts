@@ -785,19 +785,41 @@ export class PostingEngine {
           lineSerial
         );
 
-        // DEF-VCH-06: Accurate serial lifecycle tracking
+        // DEF-VCH-06 & DEF-008-07: Accurate serial lifecycle tracking and validation
         if (isPosted && pl.lineInput.itemId && pl.lineInput.serialNumber) {
           const s = pl.lineInput.serialNumber.trim();
           if (input.voucherType === 'SALES' || input.voucherType === 'PURCHASE_RETURN') {
+            const serialRecord = db.prepare(`
+              SELECT serial_id, item_id, status FROM stock_item_serials
+              WHERE item_id = ? AND serial_number = ?
+            `).get(pl.lineInput.itemId, s) as { serial_id: string; item_id: string; status: string } | undefined;
+
+            if (!serialRecord) {
+              const foreign = db.prepare(`
+                SELECT item_id FROM stock_item_serials WHERE serial_number = ?
+              `).get(s) as { item_id: string } | undefined;
+              if (foreign) {
+                throw new Error(`Serial '${s}' belongs to another item ('${foreign.item_id}'), not '${pl.lineInput.itemId}'.`);
+              }
+              throw new Error(`Serial '${s}' does not exist for item '${pl.lineInput.itemId}'.`);
+            }
+            if (serialRecord.status !== 'AVAILABLE') {
+              throw new Error(`Serial '${s}' for item '${pl.lineInput.itemId}' is not AVAILABLE (current status: ${serialRecord.status}).`);
+            }
+
             db.prepare(`UPDATE stock_item_serials SET status = 'SOLD' WHERE item_id = ? AND serial_number = ?`).run(pl.lineInput.itemId, s);
           } else if (input.voucherType === 'PURCHASE' || input.voucherType === 'SALES_RETURN') {
-            const existingSerial = db.prepare('SELECT serial_id FROM stock_item_serials WHERE item_id = ? AND serial_number = ?').get(pl.lineInput.itemId, s);
+            const existingSerial = db.prepare('SELECT serial_id, status FROM stock_item_serials WHERE item_id = ? AND serial_number = ?')
+              .get(pl.lineInput.itemId, s) as { serial_id: string; status: string } | undefined;
             if (!existingSerial) {
               db.prepare(`INSERT INTO stock_item_serials (serial_id, item_id, serial_number, status) VALUES (?, ?, ?, 'AVAILABLE')`)
                 .run('ser_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16), pl.lineInput.itemId, s);
               introducedSerials.push({ itemId: pl.lineInput.itemId, serialNumber: s });
             } else {
-              db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE' WHERE item_id = ? AND serial_number = ?`).run(pl.lineInput.itemId, s);
+              // DEF-008-07: If serial is already SOLD to a customer, NEVER revert it to AVAILABLE on amendment
+              if (existingSerial.status !== 'SOLD') {
+                db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE' WHERE item_id = ? AND serial_number = ?`).run(pl.lineInput.itemId, s);
+              }
             }
           }
         }
@@ -1304,12 +1326,14 @@ export class PostingEngine {
       }
 
       // 3. Cancel original internally (within this immediate transaction)
+      // DEF-008-07: Allow transient negative stock inside the atomic amendment transaction
       this._cancelVoucherInternal(
         db,
         replacementInput.companyId,
         originalVoucherId,
         replacementInput.createdBy || 'system',
-        'Edited — replaced by amended voucher'
+        'Edited — replaced by amended voucher',
+        { allowNegativeStock: true }
       );
 
       // 4. Post replacement internally (within this immediate transaction)
@@ -1320,6 +1344,29 @@ export class PostingEngine {
       };
 
       const result = this._postVoucherInternal(db, replacementPayload, { skipTransaction: true });
+
+      // 5. Invariant check: Assert net post-amendment balance >= 0 for all affected items/godowns
+      if (replacementInput.allowNegativeStock !== true) {
+        const affectedPairs = db.prepare(`
+          SELECT DISTINCT item_id, godown_id FROM stock_entries
+          WHERE voucher_id = ? OR voucher_id = ?
+        `).all(originalVoucherId, result.voucherId) as Array<{ item_id: string; godown_id: string }>;
+
+        for (const pair of affectedPairs) {
+          const balRow = db.prepare(`
+            SELECT 
+              COALESCE(SUM(CASE WHEN movement_type = 'IN' THEN quantity ELSE 0 END), 0) -
+              COALESCE(SUM(CASE WHEN movement_type = 'OUT' THEN quantity ELSE 0 END), 0) AS balance_qty
+            FROM stock_entries
+            WHERE item_id = ? AND godown_id = ?
+          `).get(pair.item_id, pair.godown_id) as { balance_qty: number } | undefined;
+
+          const finalBal = Number(balRow?.balance_qty || 0);
+          if (finalBal < 0) {
+            throw new Error(`Amendment resulted in negative stock balance (${finalBal}) for item '${pair.item_id}' in godown '${pair.godown_id}'. Dependent transactions have consumed this stock.`);
+          }
+        }
+      }
 
       db.exec('COMMIT;');
 
