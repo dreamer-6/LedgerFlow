@@ -858,60 +858,98 @@ export class PostingEngine {
         }
 
         // E. Insert Statutory Tax Entries
+        // DEF-008-05: Group line taxes by exact statutory rate slab instead of hardcoding 9%/18%
         const teId = () => 'te_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
         const isReturn = input.voucherType === 'SALES_RETURN' || input.voucherType === 'CREDIT_NOTE' ||
                          input.voucherType === 'PURCHASE_RETURN' || input.voucherType === 'DEBIT_NOTE';
         const isPurchaseType = input.voucherType === 'PURCHASE' || input.voucherType === 'PURCHASE_RETURN' || input.voucherType === 'DEBIT_NOTE';
 
-        if (voucherTotals.cgstAmountPaise > 0) {
-          const taxType = isPurchaseType ? 'INPUT_CGST' : 'OUTPUT_CGST';
-          const taxAmount = isReturn ? -voucherTotals.cgstAmountPaise : voucherTotals.cgstAmountPaise;
-          db.prepare(`
-            INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).run(
-            teId(), voucherId, taxType, 9.00,
-            isReturn ? -voucherTotals.taxableAmountPaise : voucherTotals.taxableAmountPaise,
-            taxAmount, placeOfSupplyStateCode
-          );
+        const cgstSlabs = new Map<number, { taxablePaise: number; taxPaise: number }>();
+        const sgstSlabs = new Map<number, { taxablePaise: number; taxPaise: number }>();
+        const igstSlabs = new Map<number, { taxablePaise: number; taxPaise: number }>();
+        const cessSlabs = new Map<number, { taxablePaise: number; taxPaise: number }>();
+
+        for (const pl of processedLines) {
+          const tr = pl.taxResult;
+          if (tr.cgstAmountPaise > 0) {
+            const current = cgstSlabs.get(tr.cgstRate) || { taxablePaise: 0, taxPaise: 0 };
+            current.taxablePaise += tr.taxableAmountPaise;
+            current.taxPaise += tr.cgstAmountPaise;
+            cgstSlabs.set(tr.cgstRate, current);
+          }
+          if (tr.sgstAmountPaise > 0) {
+            const current = sgstSlabs.get(tr.sgstRate) || { taxablePaise: 0, taxPaise: 0 };
+            current.taxablePaise += tr.taxableAmountPaise;
+            current.taxPaise += tr.sgstAmountPaise;
+            sgstSlabs.set(tr.sgstRate, current);
+          }
+          if (tr.igstAmountPaise > 0) {
+            const current = igstSlabs.get(tr.igstRate) || { taxablePaise: 0, taxPaise: 0 };
+            current.taxablePaise += tr.taxableAmountPaise;
+            current.taxPaise += tr.igstAmountPaise;
+            igstSlabs.set(tr.igstRate, current);
+          }
+          if (tr.cessAmountPaise > 0) {
+            const current = cessSlabs.get(tr.cessRate) || { taxablePaise: 0, taxPaise: 0 };
+            current.taxablePaise += tr.taxableAmountPaise;
+            current.taxPaise += tr.cessAmountPaise;
+            cessSlabs.set(tr.cessRate, current);
+          }
         }
 
-        if (voucherTotals.sgstAmountPaise > 0) {
-          const taxType = isPurchaseType ? 'INPUT_SGST' : 'OUTPUT_SGST';
-          const taxAmount = isReturn ? -voucherTotals.sgstAmountPaise : voucherTotals.sgstAmountPaise;
-          db.prepare(`
-            INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).run(
-            teId(), voucherId, taxType, 9.00,
-            isReturn ? -voucherTotals.taxableAmountPaise : voucherTotals.taxableAmountPaise,
-            taxAmount, placeOfSupplyStateCode
-          );
-        }
+        const insertTaxStmt = db.prepare(`
+          INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
 
-        if (voucherTotals.igstAmountPaise > 0) {
-          const taxType = isPurchaseType ? 'INPUT_IGST' : 'OUTPUT_IGST';
-          const taxAmount = isReturn ? -voucherTotals.igstAmountPaise : voucherTotals.igstAmountPaise;
-          db.prepare(`
-            INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).run(
-            teId(), voucherId, taxType, 18.00,
-            isReturn ? -voucherTotals.taxableAmountPaise : voucherTotals.taxableAmountPaise,
-            taxAmount, placeOfSupplyStateCode
-          );
-        }
+        if (cgstSlabs.size > 0 || sgstSlabs.size > 0 || igstSlabs.size > 0 || cessSlabs.size > 0) {
+          for (const [rate, slab] of cgstSlabs.entries()) {
+            const taxType = isPurchaseType ? 'INPUT_CGST' : 'OUTPUT_CGST';
+            const taxable = isReturn ? -slab.taxablePaise : slab.taxablePaise;
+            const tax = isReturn ? -slab.taxPaise : slab.taxPaise;
+            insertTaxStmt.run(teId(), voucherId, taxType, rate, taxable, tax, placeOfSupplyStateCode);
+          }
 
-        if (voucherTotals.cessAmountPaise > 0) {
-          const cessTaxAmount = isReturn ? -voucherTotals.cessAmountPaise : voucherTotals.cessAmountPaise;
-          db.prepare(`
-            INSERT INTO tax_entries (tax_entry_id, voucher_id, tax_type, rate, taxable_amount_paise, tax_amount_paise, place_of_supply)
-            VALUES (?, ?, 'CESS', ?, ?, ?, ?)
-          `).run(
-            teId(), voucherId, 0,
-            isReturn ? -voucherTotals.taxableAmountPaise : voucherTotals.taxableAmountPaise,
-            cessTaxAmount, placeOfSupplyStateCode
-          );
+          for (const [rate, slab] of sgstSlabs.entries()) {
+            const taxType = isPurchaseType ? 'INPUT_SGST' : 'OUTPUT_SGST';
+            const taxable = isReturn ? -slab.taxablePaise : slab.taxablePaise;
+            const tax = isReturn ? -slab.taxPaise : slab.taxPaise;
+            insertTaxStmt.run(teId(), voucherId, taxType, rate, taxable, tax, placeOfSupplyStateCode);
+          }
+
+          for (const [rate, slab] of igstSlabs.entries()) {
+            const taxType = isPurchaseType ? 'INPUT_IGST' : 'OUTPUT_IGST';
+            const taxable = isReturn ? -slab.taxablePaise : slab.taxablePaise;
+            const tax = isReturn ? -slab.taxPaise : slab.taxPaise;
+            insertTaxStmt.run(teId(), voucherId, taxType, rate, taxable, tax, placeOfSupplyStateCode);
+          }
+
+          for (const [rate, slab] of cessSlabs.entries()) {
+            const taxable = isReturn ? -slab.taxablePaise : slab.taxablePaise;
+            const tax = isReturn ? -slab.taxPaise : slab.taxPaise;
+            insertTaxStmt.run(teId(), voucherId, 'CESS', rate, taxable, tax, placeOfSupplyStateCode);
+          }
+        } else {
+          // Fallback for non-line vouchers with statutory totals
+          if (voucherTotals.cgstAmountPaise > 0) {
+            const taxType = isPurchaseType ? 'INPUT_CGST' : 'OUTPUT_CGST';
+            const taxAmount = isReturn ? -voucherTotals.cgstAmountPaise : voucherTotals.cgstAmountPaise;
+            insertTaxStmt.run(teId(), voucherId, taxType, 9.00, isReturn ? -voucherTotals.taxableAmountPaise : voucherTotals.taxableAmountPaise, taxAmount, placeOfSupplyStateCode);
+          }
+          if (voucherTotals.sgstAmountPaise > 0) {
+            const taxType = isPurchaseType ? 'INPUT_SGST' : 'OUTPUT_SGST';
+            const taxAmount = isReturn ? -voucherTotals.sgstAmountPaise : voucherTotals.sgstAmountPaise;
+            insertTaxStmt.run(teId(), voucherId, taxType, 9.00, isReturn ? -voucherTotals.taxableAmountPaise : voucherTotals.taxableAmountPaise, taxAmount, placeOfSupplyStateCode);
+          }
+          if (voucherTotals.igstAmountPaise > 0) {
+            const taxType = isPurchaseType ? 'INPUT_IGST' : 'OUTPUT_IGST';
+            const taxAmount = isReturn ? -voucherTotals.igstAmountPaise : voucherTotals.igstAmountPaise;
+            insertTaxStmt.run(teId(), voucherId, taxType, 18.00, isReturn ? -voucherTotals.taxableAmountPaise : voucherTotals.taxableAmountPaise, taxAmount, placeOfSupplyStateCode);
+          }
+          if (voucherTotals.cessAmountPaise > 0) {
+            const cessTaxAmount = isReturn ? -voucherTotals.cessAmountPaise : voucherTotals.cessAmountPaise;
+            insertTaxStmt.run(teId(), voucherId, 'CESS', 0, isReturn ? -voucherTotals.taxableAmountPaise : voucherTotals.taxableAmountPaise, cessTaxAmount, placeOfSupplyStateCode);
+          }
         }
 
         // F. Bill-Wise Allocations
