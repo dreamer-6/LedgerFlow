@@ -1042,6 +1042,13 @@ export function createApiRouter(db: DatabaseSync): Router {
     const vch = db.prepare('SELECT voucher_id, company_id, status FROM vouchers WHERE voucher_id = ?').get(req.params.id) as any;
     if (!vch || !assertResourceOwnership(res, vch.company_id, req.companyId!)) return;
 
+    // DEF-008-09: Unposted DRAFT vouchers have zero accounting or stock effects and may be deleted
+    if (vch.status === 'DRAFT') {
+      db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(vch.voucher_id);
+      db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(vch.voucher_id);
+      return res.status(200).json({ success: true, message: 'Draft voucher deleted successfully.' });
+    }
+
     res.status(405).json({
       error: 'Direct voucher deletion is not permitted. Posted vouchers are permanent accounting records. Use the cancel operation to reverse accounting effects.'
     });
