@@ -24,11 +24,12 @@ class AuthService {
         const userId = 'usr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
         const salt = bcryptjs_1.default.genSaltSync(12);
         const passwordHash = bcryptjs_1.default.hashSync(password, salt);
-        // New users receive ADMIN role on their own businesses only (user_businesses.role = OWNER)
+        // Public registration defaults strictly to ACCOUNTANT role per security policy
+        const userRole = 'ACCOUNTANT';
         db.prepare(`
       INSERT INTO users (user_id, username, email, password_hash, full_name, role)
-      VALUES (?, ?, ?, ?, ?, 'USER')
-    `).run(userId, cleanEmail, cleanEmail, passwordHash, fullName.trim());
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(userId, cleanEmail, cleanEmail, passwordHash, fullName.trim(), userRole);
         // Provision isolated business
         const companyId = 'comp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
         (0, seed_js_1.initializeBusiness)(db, {
@@ -40,7 +41,7 @@ class AuthService {
             stateCode: stateCode || '33',
             ownerUserId: userId
         });
-        const token = jsonwebtoken_1.default.sign({ userId, username: cleanEmail, role: 'USER', name: fullName.trim(), email: cleanEmail }, (0, security_js_1.jwtSecret)(), { expiresIn: '7d' });
+        const token = jsonwebtoken_1.default.sign({ userId, username: cleanEmail, role: userRole, name: fullName.trim(), email: cleanEmail }, (0, security_js_1.jwtSecret)(), { expiresIn: '7d' });
         const businesses = db.prepare(`
       SELECT c.*, ub.role
       FROM companies c
@@ -54,7 +55,7 @@ class AuthService {
                 userId,
                 email: cleanEmail,
                 fullName: fullName.trim(),
-                role: 'USER'
+                role: userRole
             },
             activeCompanyId: companyId,
             company: businesses[0] || null,

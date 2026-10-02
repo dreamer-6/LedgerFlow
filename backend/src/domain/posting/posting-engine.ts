@@ -768,7 +768,7 @@ export class PostingEngine {
       for (const pl of processedLines) {
         const lineId = 'ln_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
         const lineGodownId = pl.lineInput.itemId ? resolveValidGodownId(pl.lineInput.godownId) : null;
-        const lineSerial = pl.lineInput.serialNumber || (input.voucherType === 'STOCK_JOURNAL' ? pl.lineInput.movementType : null);
+        const lineSerial = pl.lineInput.serialNumber || (input.voucherType === 'STOCK_JOURNAL' ? pl.lineInput.movementType : null) || null;
         db.prepare(`
           INSERT INTO voucher_lines (
             line_id, voucher_id, line_number, item_id, ledger_id, godown_id, description,
@@ -791,38 +791,40 @@ export class PostingEngine {
 
         // DEF-VCH-06 & DEF-008-07: Accurate serial lifecycle tracking and validation
         if (isPosted && pl.lineInput.itemId && pl.lineInput.serialNumber) {
-          const s = pl.lineInput.serialNumber.trim();
-          if (input.voucherType === 'SALES' || input.voucherType === 'PURCHASE_RETURN') {
-            const serialRecord = db.prepare(`
-              SELECT serial_id, item_id, status FROM stock_item_serials
-              WHERE item_id = ? AND serial_number = ?
-            `).get(pl.lineInput.itemId, s) as { serial_id: string; item_id: string; status: string } | undefined;
+          const serialsArr = pl.lineInput.serialNumber.split(',').map((s: string) => s.trim()).filter(Boolean);
+          for (const s of serialsArr) {
+            if (input.voucherType === 'SALES' || input.voucherType === 'PURCHASE_RETURN') {
+              const serialRecord = db.prepare(`
+                SELECT serial_id, item_id, status FROM stock_item_serials
+                WHERE item_id = ? AND serial_number = ?
+              `).get(pl.lineInput.itemId, s) as { serial_id: string; item_id: string; status: string } | undefined;
 
-            if (!serialRecord) {
-              const foreign = db.prepare(`
-                SELECT item_id FROM stock_item_serials WHERE serial_number = ?
-              `).get(s) as { item_id: string } | undefined;
-              if (foreign) {
-                throw new Error(`Serial '${s}' belongs to another item ('${foreign.item_id}'), not '${pl.lineInput.itemId}'.`);
+              if (!serialRecord) {
+                const foreign = db.prepare(`
+                  SELECT item_id FROM stock_item_serials WHERE serial_number = ?
+                `).get(s) as { item_id: string } | undefined;
+                if (foreign) {
+                  throw new Error(`Serial '${s}' belongs to another item ('${foreign.item_id}'), not '${pl.lineInput.itemId}'.`);
+                }
+                throw new Error(`Serial '${s}' does not exist for item '${pl.lineInput.itemId}'.`);
               }
-              throw new Error(`Serial '${s}' does not exist for item '${pl.lineInput.itemId}'.`);
-            }
-            if (serialRecord.status !== 'AVAILABLE') {
-              throw new Error(`Serial '${s}' for item '${pl.lineInput.itemId}' is not AVAILABLE (current status: ${serialRecord.status}).`);
-            }
+              if (serialRecord.status !== 'AVAILABLE') {
+                throw new Error(`Serial '${s}' for item '${pl.lineInput.itemId}' is not AVAILABLE (current status: ${serialRecord.status}).`);
+              }
 
-            db.prepare(`UPDATE stock_item_serials SET status = 'SOLD' WHERE item_id = ? AND serial_number = ?`).run(pl.lineInput.itemId, s);
-          } else if (input.voucherType === 'PURCHASE' || input.voucherType === 'SALES_RETURN') {
-            const existingSerial = db.prepare('SELECT serial_id, status FROM stock_item_serials WHERE item_id = ? AND serial_number = ?')
-              .get(pl.lineInput.itemId, s) as { serial_id: string; status: string } | undefined;
-            if (!existingSerial) {
-              db.prepare(`INSERT INTO stock_item_serials (serial_id, item_id, serial_number, status) VALUES (?, ?, ?, 'AVAILABLE')`)
-                .run('ser_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16), pl.lineInput.itemId, s);
-              introducedSerials.push({ itemId: pl.lineInput.itemId, serialNumber: s });
-            } else {
-              // DEF-008-07: If serial is already SOLD to a customer, NEVER revert it to AVAILABLE on amendment
-              if (existingSerial.status !== 'SOLD') {
-                db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE' WHERE item_id = ? AND serial_number = ?`).run(pl.lineInput.itemId, s);
+              db.prepare(`UPDATE stock_item_serials SET status = 'SOLD' WHERE item_id = ? AND serial_number = ?`).run(pl.lineInput.itemId, s);
+            } else if (input.voucherType === 'PURCHASE' || input.voucherType === 'SALES_RETURN') {
+              const existingSerial = db.prepare('SELECT serial_id, status FROM stock_item_serials WHERE item_id = ? AND serial_number = ?')
+                .get(pl.lineInput.itemId, s) as { serial_id: string; status: string } | undefined;
+              if (!existingSerial) {
+                db.prepare(`INSERT INTO stock_item_serials (serial_id, item_id, serial_number, status) VALUES (?, ?, ?, 'AVAILABLE')`)
+                  .run('ser_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16), pl.lineInput.itemId, s);
+                introducedSerials.push({ itemId: pl.lineInput.itemId, serialNumber: s });
+              } else {
+                // DEF-008-07: If serial is already SOLD to a customer, NEVER revert it to AVAILABLE on amendment
+                if (existingSerial.status !== 'SOLD') {
+                  db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE' WHERE item_id = ? AND serial_number = ?`).run(pl.lineInput.itemId, s);
+                }
               }
             }
           }
@@ -1161,8 +1163,11 @@ export class PostingEngine {
       `).all(voucherId) as Array<{ item_id: string; serial_number: string }>;
 
       for (const s of soldSerials) {
-        db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE' WHERE item_id = ? AND serial_number = ? AND status = 'SOLD'`)
-          .run(s.item_id, s.serial_number.trim());
+        const serialsArr = s.serial_number.split(',').map((sn: string) => sn.trim()).filter(Boolean);
+        for (const sn of serialsArr) {
+          db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE' WHERE item_id = ? AND serial_number = ? AND status = 'SOLD'`)
+            .run(s.item_id, sn);
+        }
       }
     } else if (vch.voucher_type === 'PURCHASE' || vch.voucher_type === 'SALES_RETURN') {
       // Inward voucher cancelled: only remove serial records introduced by this voucher
@@ -1187,9 +1192,9 @@ export class PostingEngine {
         const otherRef = db.prepare(`
           SELECT 1 FROM voucher_lines vl
           JOIN vouchers v ON vl.voucher_id = v.voucher_id
-          WHERE vl.item_id = ? AND vl.serial_number = ? AND v.voucher_id != ? AND v.status = 'POSTED'
+          WHERE vl.item_id = ? AND (vl.serial_number = ? OR vl.serial_number LIKE ? OR vl.serial_number LIKE ? OR vl.serial_number LIKE ?) AND v.voucher_id != ? AND v.status = 'POSTED'
           LIMIT 1
-        `).get(is.itemId, is.serialNumber);
+        `).get(is.itemId, is.serialNumber, `%, ${is.serialNumber}%`, `${is.serialNumber}, %`, `%${is.serialNumber}%`);
 
         if (!otherRef) {
           db.prepare(`DELETE FROM stock_item_serials WHERE item_id = ? AND serial_number = ? AND status = 'AVAILABLE'`)

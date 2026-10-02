@@ -64,7 +64,7 @@ export class AuthService {
         userId,
         email: cleanEmail,
         fullName: fullName.trim(),
-        role: 'USER'
+        role: userRole
       },
       activeCompanyId: companyId,
       company: businesses[0] || null,

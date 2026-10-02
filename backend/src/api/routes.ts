@@ -287,10 +287,10 @@ export function createApiRouter(db: DatabaseSync): Router {
         }
 
         // Safe to synchronize ledger group when no posted transactions exist
-        let newGroupId = `${req.companyId!}_grp_sundry_debtors`;
-        if (partyType === 'SUPPLIER') {
-          newGroupId = `${req.companyId!}_grp_sundry_creditors`;
-        }
+        const groupSearch = partyType === 'SUPPLIER' ? '%Creditor%' : '%Debtor%';
+        const foundGroup = db.prepare('SELECT group_id FROM ledger_groups WHERE (company_id = ? OR company_id IS NULL) AND group_name LIKE ? LIMIT 1')
+          .get(req.companyId!, groupSearch) as { group_id: string } | undefined;
+        const newGroupId = foundGroup?.group_id || (partyType === 'SUPPLIER' ? `${req.companyId!}_grp_creditors` : `${req.companyId!}_grp_debtors`);
         db.prepare('UPDATE ledgers SET group_id = ? WHERE ledger_id = ? AND company_id = ?').run(newGroupId, party.ledger_id, req.companyId!);
       }
 
@@ -465,9 +465,6 @@ export function createApiRouter(db: DatabaseSync): Router {
 
     if (b.openingQty !== undefined && b.openingQty !== null && Number(b.openingQty) < 0) {
       return res.status(400).json({ error: 'Opening stock quantity cannot be negative.' });
-    }
-    if (b.quantityToAdd !== undefined && b.quantityToAdd !== null && Number(b.quantityToAdd) < 0) {
-      return res.status(400).json({ error: 'Quantity to add cannot be negative.' });
     }
     if (b.purchaseRatePaise !== undefined && b.purchaseRatePaise !== null && Number(b.purchaseRatePaise) < 0) {
       return res.status(400).json({ error: 'Purchase rate cannot be negative.' });

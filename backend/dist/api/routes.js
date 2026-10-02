@@ -95,6 +95,9 @@ function createApiRouter(db) {
             if (!ledgerName || typeof ledgerName !== 'string' || !ledgerName.trim()) {
                 return res.status(400).json({ error: 'Ledger name is required and must be a non-empty string.' });
             }
+            if (openingBalancePaise !== undefined && openingBalancePaise !== null && Number(openingBalancePaise) < 0) {
+                return res.status(400).json({ error: 'Opening balance cannot be negative. Use opening balance type (DR/CR) to indicate debit or credit balance.' });
+            }
             if (!groupId || typeof groupId !== 'string' || !groupId.trim()) {
                 return res.status(400).json({ error: 'Ledger group is required.' });
             }
@@ -119,6 +122,9 @@ function createApiRouter(db) {
             res.status(201).json({ ledgerId, ledgerName: ledgerName.trim() });
         }
         catch (err) {
+            if (err.message && err.message.includes('UNIQUE constraint failed')) {
+                return res.status(400).json({ error: 'A ledger with this name or code already exists in this company.' });
+            }
             res.status(500).json({ error: err.message });
         }
     });
@@ -166,6 +172,9 @@ function createApiRouter(db) {
             if (!partyName || !partyName.trim()) {
                 return res.status(400).json({ error: 'Party Name is required.' });
             }
+            if (openingBalancePaise !== undefined && openingBalancePaise !== null && Number(openingBalancePaise) < 0) {
+                return res.status(400).json({ error: 'Opening balance cannot be negative. Use opening balance type (DR/CR) to indicate debit or credit balance.' });
+            }
             let derivedPan = pan;
             if (!derivedPan && gstin && gstin.length === 15) {
                 derivedPan = gstin.substring(2, 12);
@@ -195,7 +204,13 @@ function createApiRouter(db) {
             res.status(201).json({ partyId, partyName: partyName.trim(), ledgerId });
         }
         catch (err) {
-            db.exec('ROLLBACK;');
+            try {
+                db.exec('ROLLBACK;');
+            }
+            catch (_) { }
+            if (err.message && err.message.includes('UNIQUE constraint failed')) {
+                return res.status(400).json({ error: 'A party or ledger with this name or unique identifier already exists in this company.' });
+            }
             res.status(500).json({ error: err.message });
         }
     });
@@ -207,6 +222,25 @@ function createApiRouter(db) {
             const party = db.prepare('SELECT * FROM parties WHERE party_id = ?').get(partyId);
             if (!party || !(0, security_js_1.assertResourceOwnership)(res, party.company_id, req.companyId))
                 return;
+            if (openingBalancePaise !== undefined && openingBalancePaise !== null && Number(openingBalancePaise) < 0) {
+                return res.status(400).json({ error: 'Opening balance cannot be negative. Use opening balance type (DR/CR) to indicate debit or credit balance.' });
+            }
+            // DEF-008-10: Protect party classification and synchronize ledger group safely
+            if (partyType && partyType !== party.party_type) {
+                const txCount = db.prepare('SELECT COUNT(*) as cnt FROM ledger_entries WHERE ledger_id = ?').get(party.ledger_id)?.cnt || 0;
+                const vchCount = db.prepare('SELECT COUNT(*) as cnt FROM vouchers WHERE party_id = ?').get(partyId)?.cnt || 0;
+                if (txCount > 0 || vchCount > 0) {
+                    return res.status(400).json({
+                        error: `Cannot change party type for '${party.party_name}' from ${party.party_type} to ${partyType}: posted financial activity exists for this party.`
+                    });
+                }
+                // Safe to synchronize ledger group when no posted transactions exist
+                const groupSearch = partyType === 'SUPPLIER' ? '%Creditor%' : '%Debtor%';
+                const foundGroup = db.prepare('SELECT group_id FROM ledger_groups WHERE (company_id = ? OR company_id IS NULL) AND group_name LIKE ? LIMIT 1')
+                    .get(req.companyId, groupSearch);
+                const newGroupId = foundGroup?.group_id || (partyType === 'SUPPLIER' ? `${req.companyId}_grp_creditors` : `${req.companyId}_grp_debtors`);
+                db.prepare('UPDATE ledgers SET group_id = ? WHERE ledger_id = ? AND company_id = ?').run(newGroupId, party.ledger_id, req.companyId);
+            }
             db.exec('BEGIN TRANSACTION;');
             db.prepare(`
         UPDATE parties SET
@@ -267,7 +301,13 @@ function createApiRouter(db) {
             res.json({ success: true, message: 'Party updated successfully.' });
         }
         catch (err) {
-            db.exec('ROLLBACK;');
+            try {
+                db.exec('ROLLBACK;');
+            }
+            catch (_) { }
+            if (err.message && err.message.includes('UNIQUE constraint failed')) {
+                return res.status(400).json({ error: 'A party or ledger with this name or unique identifier already exists in this company.' });
+            }
             res.status(500).json({ error: err.message });
         }
     });
@@ -338,6 +378,15 @@ function createApiRouter(db) {
         if (!b.itemName || !b.itemName.trim()) {
             return res.status(400).json({ error: 'Item name is required.' });
         }
+        if (b.openingQty !== undefined && b.openingQty !== null && Number(b.openingQty) < 0) {
+            return res.status(400).json({ error: 'Opening stock quantity cannot be negative.' });
+        }
+        if (b.purchaseRatePaise !== undefined && b.purchaseRatePaise !== null && Number(b.purchaseRatePaise) < 0) {
+            return res.status(400).json({ error: 'Purchase rate cannot be negative.' });
+        }
+        if (b.sellingRatePaise !== undefined && b.sellingRatePaise !== null && Number(b.sellingRatePaise) < 0) {
+            return res.status(400).json({ error: 'Selling rate cannot be negative.' });
+        }
         if (b.unitId !== undefined && b.unitId !== null && String(b.unitId).trim() !== '') {
             const validUnit = db.prepare(`
         SELECT 1 FROM units WHERE unit_id = ? AND (company_id = ? OR company_id IS NULL)
@@ -362,140 +411,145 @@ function createApiRouter(db) {
             const rate = Number(b.purchaseRatePaise ?? b.openingRatePaise ?? 0);
             const sellRate = Number(b.sellingRatePaise || 0);
             if (existing) {
-                let updatedSerials = existing.serial_numbers || '';
-                if (b.serialNumbers && b.serialNumbers.trim()) {
-                    updatedSerials = updatedSerials
-                        ? `${updatedSerials}, ${b.serialNumbers.trim()}`
-                        : b.serialNumbers.trim();
-                    const serialsArr = b.serialNumbers.split(',').map((s) => s.trim()).filter(Boolean);
-                    for (const s of serialsArr) {
-                        db.prepare('INSERT OR IGNORE INTO stock_item_serials (serial_id, item_id, serial_number, status) VALUES (?, ?, ?, ?)')
-                            .run('ser_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6), existing.item_id, s, 'AVAILABLE');
-                    }
-                }
-                db.prepare(`
-          UPDATE stock_items SET
-            is_active = 1,
-            hsn_sac = COALESCE(?, hsn_sac),
-            gst_rate = COALESCE(?, gst_rate),
-            purchase_rate_paise = CASE WHEN ? > 0 THEN ? ELSE purchase_rate_paise END,
-            selling_rate_paise = CASE WHEN ? > 0 THEN ? ELSE selling_rate_paise END,
-            reorder_level = COALESCE(?, reorder_level),
-            serial_numbers = ?,
-            has_serial_no = CASE WHEN ? = 1 OR ? IS NOT NULL THEN 1 ELSE has_serial_no END
-          WHERE item_id = ?
-        `).run(b.hsnSac || null, b.gstRate || null, rate, rate, sellRate, sellRate, b.reorderLevel || null, updatedSerials || null, b.hasSerialNo ? 1 : 0, b.serialNumbers || null, existing.item_id);
-                if (qty !== 0) {
-                    const today = new Date().toISOString().split('T')[0];
-                    const dateFy = db.prepare(`
-            SELECT fy_id, status, name FROM financial_years 
-            WHERE company_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1
-          `).get(companyId, today);
-                    if (!dateFy) {
-                        return res.status(400).json({
-                            error: `Cannot adjust stock: No financial year found covering date '${today}'. Please create the appropriate financial year first.`
-                        });
-                    }
-                    if (dateFy.status !== 'OPEN') {
-                        return res.status(400).json({
-                            error: `Cannot adjust stock: Financial Year '${dateFy.name}' is ${dateFy.status}. Stock adjustments are prohibited in closed or locked periods.`
-                        });
-                    }
-                    const invRow = db.prepare(`
-            SELECT ledger_id FROM ledgers 
-            WHERE company_id = ? AND (ledger_id = ? OR ledger_name LIKE '%Inventory%') 
-            LIMIT 1
-          `).get(companyId, `${companyId}_led_inventory`);
-                    const inventoryLedgerId = invRow?.ledger_id || `${companyId}_led_inventory`;
-                    const cogsRow = db.prepare(`
-            SELECT ledger_id FROM ledgers 
-            WHERE company_id = ? AND (ledger_id = ? OR ledger_name LIKE '%Cost of Goods%' OR ledger_name LIKE '%COGS%') 
-            LIMIT 1
-          `).get(companyId, `${companyId}_led_cogs`);
-                    const cogsLedgerId = cogsRow?.ledger_id || `${companyId}_led_cogs`;
-                    if (qty > 0) {
-                        const summary = valuation_js_1.InventoryEngine.getItemStockSummary(db, existing.item_id, today);
-                        const effectiveRate = rate > 0
-                            ? rate
-                            : (summary.weightedAverageRatePaise > 0
-                                ? summary.weightedAverageRatePaise
-                                : (Number(existing.purchase_rate_paise) || 0));
-                        const valPaise = Math.round(qty * effectiveRate);
-                        posting_engine_js_1.PostingEngine.postVoucher(db, {
-                            companyId,
-                            fyId: dateFy.fy_id,
-                            voucherType: 'STOCK_JOURNAL',
-                            voucherDate: today,
-                            narration: `Stock adjustment inflow for '${existing.item_name}'`,
-                            status: 'POSTED',
-                            lines: [{
-                                    itemId: existing.item_id,
-                                    godownId,
-                                    quantity: qty,
-                                    ratePaise: effectiveRate,
-                                    gstRate: 0,
-                                    movementType: 'IN'
-                                }],
-                            customLedgerLines: [
-                                {
-                                    ledgerId: inventoryLedgerId,
-                                    debitPaise: valPaise,
-                                    creditPaise: 0,
-                                    particulars: `Inventory Asset Inflow - ${existing.item_name}`
-                                },
-                                {
-                                    ledgerId: cogsLedgerId,
-                                    debitPaise: 0,
-                                    creditPaise: valPaise,
-                                    particulars: `Stock Adjustment Inflow - ${existing.item_name}`
-                                }
-                            ]
-                        });
-                    }
-                    else {
-                        const absQty = Math.abs(qty);
-                        const allowNegative = b.allowNegativeStock === true;
-                        const avail = valuation_js_1.InventoryEngine.validateStockAvailability(db, existing.item_id, godownId, absQty, allowNegative);
-                        if (!avail.isValid) {
-                            return res.status(400).json({
-                                error: `Insufficient stock for item '${existing.item_name}' in godown '${godownId}'. Available: ${avail.currentQty}, Requested reduction: ${absQty}.`
-                            });
+                db.exec('BEGIN IMMEDIATE;');
+                try {
+                    let updatedSerials = existing.serial_numbers || '';
+                    if (b.serialNumbers && b.serialNumbers.trim()) {
+                        updatedSerials = updatedSerials
+                            ? `${updatedSerials}, ${b.serialNumbers.trim()}`
+                            : b.serialNumbers.trim();
+                        const serialsArr = b.serialNumbers.split(',').map((s) => s.trim()).filter(Boolean);
+                        for (const s of serialsArr) {
+                            db.prepare('INSERT OR IGNORE INTO stock_item_serials (serial_id, item_id, serial_number, status) VALUES (?, ?, ?, ?)')
+                                .run('ser_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6), existing.item_id, s, 'AVAILABLE');
                         }
-                        const summary = valuation_js_1.InventoryEngine.getItemStockSummary(db, existing.item_id, today);
-                        const unitCost = summary.weightedAverageRatePaise > 0 ? summary.weightedAverageRatePaise : (rate > 0 ? rate : (Number(existing.purchase_rate_paise) || 0));
-                        const valPaise = Math.round(absQty * unitCost);
-                        posting_engine_js_1.PostingEngine.postVoucher(db, {
-                            companyId,
-                            fyId: dateFy.fy_id,
-                            voucherType: 'STOCK_JOURNAL',
-                            voucherDate: today,
-                            narration: `Stock adjustment reduction for '${existing.item_name}'`,
-                            status: 'POSTED',
-                            allowNegativeStock: allowNegative,
-                            lines: [{
-                                    itemId: existing.item_id,
-                                    godownId,
-                                    quantity: absQty,
-                                    ratePaise: unitCost,
-                                    gstRate: 0,
-                                    movementType: 'OUT'
-                                }],
-                            customLedgerLines: [
-                                {
-                                    ledgerId: cogsLedgerId,
-                                    debitPaise: valPaise,
-                                    creditPaise: 0,
-                                    particulars: `Stock Adjustment Reduction - ${existing.item_name}`
-                                },
-                                {
-                                    ledgerId: inventoryLedgerId,
-                                    debitPaise: 0,
-                                    creditPaise: valPaise,
-                                    particulars: `Inventory Asset Reduction - ${existing.item_name}`
-                                }
-                            ]
-                        });
                     }
+                    db.prepare(`
+            UPDATE stock_items SET
+              is_active = 1,
+              hsn_sac = COALESCE(?, hsn_sac),
+              gst_rate = COALESCE(?, gst_rate),
+              purchase_rate_paise = CASE WHEN ? > 0 THEN ? ELSE purchase_rate_paise END,
+              selling_rate_paise = CASE WHEN ? > 0 THEN ? ELSE selling_rate_paise END,
+              reorder_level = COALESCE(?, reorder_level),
+              serial_numbers = ?,
+              has_serial_no = CASE WHEN ? = 1 OR ? IS NOT NULL THEN 1 ELSE has_serial_no END
+            WHERE item_id = ?
+          `).run(b.hsnSac || null, b.gstRate || null, rate, rate, sellRate, sellRate, b.reorderLevel || null, updatedSerials || null, b.hasSerialNo ? 1 : 0, b.serialNumbers || null, existing.item_id);
+                    if (qty !== 0) {
+                        const today = new Date().toISOString().split('T')[0];
+                        const dateFy = db.prepare(`
+              SELECT fy_id, status, name FROM financial_years 
+              WHERE company_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1
+            `).get(companyId, today);
+                        if (!dateFy) {
+                            throw new Error(`Cannot adjust stock: No financial year found covering date '${today}'. Please create the appropriate financial year first.`);
+                        }
+                        if (dateFy.status !== 'OPEN') {
+                            throw new Error(`Cannot adjust stock: Financial Year '${dateFy.name}' is ${dateFy.status}. Stock adjustments are prohibited in closed or locked periods.`);
+                        }
+                        const invRow = db.prepare(`
+              SELECT ledger_id FROM ledgers 
+              WHERE company_id = ? AND (ledger_id = ? OR ledger_name LIKE '%Inventory%') 
+              LIMIT 1
+            `).get(companyId, `${companyId}_led_inventory`);
+                        const inventoryLedgerId = invRow?.ledger_id || `${companyId}_led_inventory`;
+                        const cogsRow = db.prepare(`
+              SELECT ledger_id FROM ledgers 
+              WHERE company_id = ? AND (ledger_id = ? OR ledger_name LIKE '%Cost of Goods%' OR ledger_name LIKE '%COGS%') 
+              LIMIT 1
+            `).get(companyId, `${companyId}_led_cogs`);
+                        const cogsLedgerId = cogsRow?.ledger_id || `${companyId}_led_cogs`;
+                        if (qty > 0) {
+                            const summary = valuation_js_1.InventoryEngine.getItemStockSummary(db, existing.item_id, today);
+                            const effectiveRate = rate > 0
+                                ? rate
+                                : (summary.weightedAverageRatePaise > 0
+                                    ? summary.weightedAverageRatePaise
+                                    : (Number(existing.purchase_rate_paise) || 0));
+                            const valPaise = Math.round(qty * effectiveRate);
+                            posting_engine_js_1.PostingEngine.postVoucher(db, {
+                                companyId,
+                                fyId: dateFy.fy_id,
+                                voucherType: 'STOCK_JOURNAL',
+                                voucherDate: today,
+                                narration: `Stock adjustment inflow for '${existing.item_name}'`,
+                                status: 'POSTED',
+                                lines: [{
+                                        itemId: existing.item_id,
+                                        godownId,
+                                        quantity: qty,
+                                        ratePaise: effectiveRate,
+                                        gstRate: 0,
+                                        movementType: 'IN'
+                                    }],
+                                customLedgerLines: [
+                                    {
+                                        ledgerId: inventoryLedgerId,
+                                        debitPaise: valPaise,
+                                        creditPaise: 0,
+                                        particulars: `Inventory Asset Inflow - ${existing.item_name}`
+                                    },
+                                    {
+                                        ledgerId: cogsLedgerId,
+                                        debitPaise: 0,
+                                        creditPaise: valPaise,
+                                        particulars: `Stock Adjustment Inflow - ${existing.item_name}`
+                                    }
+                                ]
+                            }, { skipTransaction: true });
+                        }
+                        else {
+                            const absQty = Math.abs(qty);
+                            const allowNegative = b.allowNegativeStock === true;
+                            const avail = valuation_js_1.InventoryEngine.validateStockAvailability(db, existing.item_id, godownId, absQty, allowNegative);
+                            if (!avail.isValid) {
+                                throw new Error(`Insufficient stock for item '${existing.item_name}' in godown '${godownId}'. Available: ${avail.currentQty}, Requested reduction: ${absQty}.`);
+                            }
+                            const summary = valuation_js_1.InventoryEngine.getItemStockSummary(db, existing.item_id, today);
+                            const unitCost = summary.weightedAverageRatePaise > 0 ? summary.weightedAverageRatePaise : (rate > 0 ? rate : (Number(existing.purchase_rate_paise) || 0));
+                            const valPaise = Math.round(absQty * unitCost);
+                            posting_engine_js_1.PostingEngine.postVoucher(db, {
+                                companyId,
+                                fyId: dateFy.fy_id,
+                                voucherType: 'STOCK_JOURNAL',
+                                voucherDate: today,
+                                narration: `Stock adjustment reduction for '${existing.item_name}'`,
+                                status: 'POSTED',
+                                allowNegativeStock: allowNegative,
+                                lines: [{
+                                        itemId: existing.item_id,
+                                        godownId,
+                                        quantity: absQty,
+                                        ratePaise: unitCost,
+                                        gstRate: 0,
+                                        movementType: 'OUT'
+                                    }],
+                                customLedgerLines: [
+                                    {
+                                        ledgerId: cogsLedgerId,
+                                        debitPaise: valPaise,
+                                        creditPaise: 0,
+                                        particulars: `Stock Adjustment Reduction - ${existing.item_name}`
+                                    },
+                                    {
+                                        ledgerId: inventoryLedgerId,
+                                        debitPaise: 0,
+                                        creditPaise: valPaise,
+                                        particulars: `Inventory Asset Reduction - ${existing.item_name}`
+                                    }
+                                ]
+                            }, { skipTransaction: true });
+                        }
+                    }
+                    db.exec('COMMIT;');
+                }
+                catch (updateErr) {
+                    try {
+                        db.exec('ROLLBACK;');
+                    }
+                    catch (_) { }
+                    return res.status(400).json({ error: updateErr.message });
                 }
                 return res.status(200).json({
                     itemId: existing.item_id,
@@ -544,6 +598,9 @@ function createApiRouter(db) {
                 db.exec('ROLLBACK;');
             }
             catch { /* ignore rollback error */ }
+            if (err.message && err.message.includes('UNIQUE constraint failed')) {
+                return res.status(400).json({ error: 'A stock item with this name, item code, or SKU already exists in this company.' });
+            }
             return res.status(400).json({ error: err.message });
         }
     });
@@ -602,6 +659,12 @@ function createApiRouter(db) {
             const purchaseRatePaise = b.purchaseRatePaise !== undefined && b.purchaseRatePaise !== null ? Number(b.purchaseRatePaise) : (item.purchase_rate_paise ?? 0);
             const sellingRatePaise = b.sellingRatePaise !== undefined && b.sellingRatePaise !== null ? Number(b.sellingRatePaise) : (item.selling_rate_paise ?? 0);
             const reorderLevel = b.reorderLevel !== undefined && b.reorderLevel !== null ? Number(b.reorderLevel) : (item.reorder_level ?? 0);
+            if (b.purchaseRatePaise !== undefined && b.purchaseRatePaise !== null && Number(b.purchaseRatePaise) < 0) {
+                return res.status(400).json({ error: 'Purchase rate cannot be negative.' });
+            }
+            if (b.sellingRatePaise !== undefined && b.sellingRatePaise !== null && Number(b.sellingRatePaise) < 0) {
+                return res.status(400).json({ error: 'Selling rate cannot be negative.' });
+            }
             db.prepare(`
         UPDATE stock_items SET
           item_name = ?, item_code = ?, sku = ?, hsn_sac = ?,
@@ -613,6 +676,9 @@ function createApiRouter(db) {
             res.json({ success: true, message: 'Stock item updated successfully.' });
         }
         catch (err) {
+            if (err.message && err.message.includes('UNIQUE constraint failed')) {
+                return res.status(400).json({ error: 'A stock item with this name, item code, or SKU already exists in this company.' });
+            }
             res.status(400).json({ error: err.message });
         }
     });
@@ -903,6 +969,12 @@ function createApiRouter(db) {
         const vch = db.prepare('SELECT voucher_id, company_id, status FROM vouchers WHERE voucher_id = ?').get(req.params.id);
         if (!vch || !(0, security_js_1.assertResourceOwnership)(res, vch.company_id, req.companyId))
             return;
+        // DEF-008-09: Unposted DRAFT vouchers have zero accounting or stock effects and may be deleted
+        if (vch.status === 'DRAFT') {
+            db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(vch.voucher_id);
+            db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(vch.voucher_id);
+            return res.status(200).json({ success: true, message: 'Draft voucher deleted successfully.' });
+        }
         res.status(405).json({
             error: 'Direct voucher deletion is not permitted. Posted vouchers are permanent accounting records. Use the cancel operation to reverse accounting effects.'
         });

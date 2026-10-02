@@ -30,40 +30,54 @@ class InventoryEngine {
         query += ` ORDER BY entry_date ASC, created_at ASC, rowid ASC`;
         const movements = db.prepare(query).all(...params);
         let currentQty = 0;
+        let currentTotalValuePaise = 0;
         let currentAvgRatePaise = 0;
-        // Compatibility: If no stock_entries exist, fall back to stock_items.opening_qty (Amendment 2 non-destructive compatibility)
-        if (movements.length === 0 && Number(item.opening_qty) > 0) {
+        // Compatibility: If no inward stock_entries exist, fall back to stock_items.opening_qty (Amendment 2 non-destructive compatibility)
+        const hasInMovements = movements.some(m => m.movement_type === 'IN');
+        if (!hasInMovements && Number(item.opening_qty) > 0) {
             currentQty = Number(item.opening_qty);
             currentAvgRatePaise = Math.round(Number(item.opening_rate_paise)) || 0;
+            currentTotalValuePaise = Math.round(currentQty * currentAvgRatePaise);
         }
         for (const m of movements) {
             const mQty = Number(m.quantity);
-            const mRate = Math.round(Number(m.rate_paise));
+            const mVal = Number(m.value_paise !== undefined && m.value_paise !== null ? m.value_paise : Math.round(mQty * Number(m.rate_paise)));
             if (m.movement_type === 'IN') {
-                if (currentQty <= 0) {
-                    // Recovering from negative/zero stock: incoming batch rate applies to remaining physical units
-                    currentAvgRatePaise = mRate;
-                    currentQty = currentQty + mQty;
+                if (currentQty < 0) {
+                    // Recovering from negative stock: incoming batch rate establishes new average for physical stock
+                    const incomingRate = Math.round(mVal / mQty);
+                    currentQty += mQty;
+                    currentAvgRatePaise = incomingRate;
+                    currentTotalValuePaise = currentQty > 0 ? Math.round(currentQty * currentAvgRatePaise) : 0;
+                }
+                else if (currentQty === 0) {
+                    currentQty += mQty;
+                    currentTotalValuePaise = mVal;
+                    currentAvgRatePaise = currentQty > 0 ? Math.round(currentTotalValuePaise / currentQty) : Math.round(Number(m.rate_paise));
                 }
                 else {
-                    const totalPreviousValue = currentQty * currentAvgRatePaise;
-                    const incomingValue = mQty * mRate;
-                    const newTotalQty = currentQty + mQty;
-                    if (newTotalQty > 0) {
-                        currentAvgRatePaise = Math.round((totalPreviousValue + incomingValue) / newTotalQty);
-                    }
-                    currentQty = newTotalQty;
+                    currentQty += mQty;
+                    currentTotalValuePaise += mVal;
+                    currentAvgRatePaise = currentQty > 0 ? Math.round(currentTotalValuePaise / currentQty) : 0;
                 }
             }
             else if (m.movement_type === 'OUT') {
                 currentQty -= mQty;
-                // In outward movement, unit rate remains the current weighted average rate
-                if (currentQty <= 0 && currentAvgRatePaise === 0) {
-                    currentAvgRatePaise = Math.round(Number(item.opening_rate_paise || 0));
+                // In outward movement, cost is calculated at current weighted average rate
+                const outwardCost = Math.round(mQty * currentAvgRatePaise);
+                currentTotalValuePaise = Math.max(0, currentTotalValuePaise - outwardCost);
+                if (currentQty <= 0) {
+                    currentTotalValuePaise = 0;
+                    if (currentAvgRatePaise === 0) {
+                        currentAvgRatePaise = Math.round(Number(item.opening_rate_paise || 0));
+                    }
                 }
             }
         }
-        const totalValuePaise = currentQty <= 0 ? 0 : Math.round(currentQty * currentAvgRatePaise);
+        const hasOutMovements = movements.some(m => m.movement_type === 'OUT');
+        const totalValuePaise = currentQty <= 0
+            ? 0
+            : (!hasOutMovements ? currentTotalValuePaise : Math.round(currentQty * currentAvgRatePaise));
         return {
             itemId: item.item_id,
             itemName: item.item_name,
@@ -87,14 +101,12 @@ class InventoryEngine {
       WHERE item_id = ? AND godown_id = ?
     `).get(itemId, godownId);
         let currentQty = Number(row?.balance_qty || 0);
-        // Compatibility: If balance in stock_entries is 0, check if initial opening_qty exists without stock_entries (Amendment 2)
-        if (currentQty === 0) {
-            const anyMovement = db.prepare('SELECT 1 FROM stock_entries WHERE item_id = ? LIMIT 1').get(itemId);
-            if (!anyMovement) {
-                const itemRow = db.prepare('SELECT opening_qty FROM stock_items WHERE item_id = ?').get(itemId);
-                if (itemRow && Number(itemRow.opening_qty) > 0) {
-                    currentQty = Number(itemRow.opening_qty);
-                }
+        // Compatibility: If no inward stock_entries exist, include initial opening_qty from stock_items (Amendment 2)
+        const hasIn = db.prepare("SELECT 1 FROM stock_entries WHERE item_id = ? AND movement_type = 'IN' LIMIT 1").get(itemId);
+        if (!hasIn) {
+            const itemRow = db.prepare('SELECT opening_qty FROM stock_items WHERE item_id = ?').get(itemId);
+            if (itemRow && Number(itemRow.opening_qty) > 0) {
+                currentQty += Number(itemRow.opening_qty);
             }
         }
         if (currentQty < requestedOutwardQty) {
