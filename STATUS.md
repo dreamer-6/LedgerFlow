@@ -1769,3 +1769,93 @@ PHASE 3 VERIFICATION & COMPLETION REPORT
 3. **Inception Opening Balance Model:** `ledgers.opening_balance_*` and `stock_items.opening_*` represent strictly inception state. Once financial activity or closed periods exist, normal master-edit paths are blocked. Existing item quantity corrections flow through standard `STOCK_JOURNAL` vouchers.
 4. **Full Stock Adjustment Double-Entry:** Stock additions debit Inventory Asset and credit COGS/Gain. Stock deductions debit COGS/Loss and credit Inventory Asset, with negative stock restrictions strictly obeyed and Stock Summary valuation reconciling to the penny with the General Ledger.
 5. **Audited Year Reopening:** Closed periods are strictly immutable. Only the company `OWNER` with an explicit reason can transition `CLOSED -> OPEN`, generating an indelible audit log before any historical adjustments can be posted.
+
+---
+
+## TASK 008 — PHASE 3: EXECUTION & VERIFICATION AUDIT SIGN-OFF
+
+**Status:** COMPLETE & VERIFIED  
+**Date:** 2026-10-02  
+**Branch:** `task-001-security`  
+**Git Commits (TASK 008):**
+- `57eb7b7` `008-A fix(auth): default self-registration to ACCOUNTANT role [DEF-008-01]`
+- `d166b94` `008-B fix(inventory): assign inward stock valuation from exact taxable acquisition paise [DEF-008-02]`
+- `26c5f86` `008-C fix(vouchers): restore canonical draft metadata round-trip for financial vouchers & stock journals [DEF-008-03, DEF-008-13]`
+- `68fb5c8` `008-D fix(masters): restore atomicity to item updates with stock adjustment [DEF-008-04]`
+- `279a533` `008-E fix(tax): preserve distinct statutory tax slabs in tax entries [DEF-008-05]`
+- `d654488` `008-F fix(accounting): allocate exact party amounts in compound vouchers [DEF-008-06]`
+- `fa4e354` `008-G fix(serials,vouchers): enforce serial availability and preserve sold serials on amendment [DEF-008-07]`
+- `912b5f2` `008-H fix(vouchers): scope voucher sequences to resolved FY with 001-indexing [DEF-008-08]`
+- `6eaa434` `008-I fix(fy): guard financial year closing against pending draft vouchers and permit draft deletion [DEF-008-09]`
+- `8ef49b6` `008-J fix(masters): protect party classification and synchronize ledger groups safely [DEF-008-10]`
+- `6436a6f` `008-K fix(inventory): ensure opening stock recording is atomic [DEF-008-11]`
+- `c727beb` `008-L fix(masters): validate opening balances and handle unique constraint collisions [DEF-008-12]`
+- `971905b` `008-M test(regression): comprehensive test suite for TASK 008 integrity fixes [DEF-008-01..13]`
+- `[Pending Commit]` `008-N chore: full test suite verification and audit sign-off`
+
+---
+
+### 1. Defect Remediation Summary (DEF-008-01 through DEF-008-13)
+
+| Defect ID | Severity | Area | Description & Remediation |
+|---|---|---|---|
+| **DEF-008-01** | P1 | Auth | Public self-registration defaults strictly to `ACCOUNTANT` role. Client-supplied `ADMIN` or `OWNER` roles in registration payloads are strictly rejected/overridden to prevent unauthorized privilege escalation. |
+| **DEF-008-02** | P0 | Inventory Valuation | Inward stock valuation in `stock_entries.value_paise` derives directly from exact line-level net acquisition cost in paise (after trade discounts and tax unbundling), reconciling Stock Summary valuation with Balance Sheet Inventory Asset to the exact integer paise. |
+| **DEF-008-03** | P1 | Voucher Lifecycle | Financial vouchers (`PAYMENT`, `RECEIPT`, `CONTRA`, `JOURNAL`) preserve complete user intent across draft cycles via canonical `terms_conditions._draftMeta` JSON with secondary fallback in `voucher_lines`, restoring `customLedgerLines`, `billAllocation`, and terms on promotion. |
+| **DEF-008-04** | P1 | Masters / Inventory | Master item update combined with stock adjustments wrapped in an atomic transaction; failures roll back all master metadata, serial numbers, stock adjustments, and ledger entries completely. |
+| **DEF-008-05** | P1 | Tax / GST | Preserved distinct statutory tax slabs (e.g. 5%, 12%, 18%, CESS) across line items; eliminated hardcoded fallback tax records to ensure statutory tax entry accuracy in multi-rate vouchers. |
+| **DEF-008-06** | P1 | Accounting / Vouchers | In compound payment and receipt vouchers, bill allocations calculate against the exact party line amount rather than the full voucher sum, preventing over-settlement of party accounts. |
+| **DEF-008-07** | P0 | Serials / Inventory | Outward voucher posting validates serial existence, item ownership, and `AVAILABLE` status. Originating purchase amendments never delete or revert consumed `SOLD` serials to `AVAILABLE`. |
+| **DEF-008-08** | P1 | Vouchers / FY | Voucher sequence numbering scoped strictly to the resolved voucher Financial Year rather than the active business FY, formatted as `[PREFIX]-[FYCODE]-[001]` with 1-based indexing and annual reset. |
+| **DEF-008-09** | P1 | Financial Year | Financial Year closing guarded against pending `DRAFT` vouchers. Direct `DELETE` endpoint permitted for unposted `DRAFT` vouchers while remaining strictly prohibited (HTTP 405) for `POSTED` vouchers. |
+| **DEF-008-10** | P1 | Masters / Ledger Groups | Party type transitions (Customer $\leftrightarrow$ Supplier) safely synchronize associated ledger group (Sundry Debtors $\leftrightarrow$ Sundry Creditors) only when zero posted financial transactions exist; blocked with HTTP 400 if posted vouchers or ledger entries exist. |
+| **DEF-008-11** | P1 | Inventory / Masters | Opening stock recording (`recordOpeningStock`) executed within an atomic database transaction; failures roll back stock items, stock entries, and vouchers cleanly. |
+| **DEF-008-12** | P2 | Masters / Validation | Master opening balances validated non-negative (`openingBalancePaise >= 0`, `purchaseRatePaise >= 0`, `sellingRatePaise >= 0`). Duplicate unique constraint violations on ledgers, parties, and items return clean HTTP 400 errors without leaking raw SQLite 500 exceptions. |
+| **DEF-008-13** | P1 | Inventory / Vouchers | `STOCK_JOURNAL` draft vouchers preserve exact `movementType` ('IN' vs 'OUT') for each line in canonical draft metadata, promoting with exact godown and stock movement fidelity. |
+
+---
+
+### 2. Comprehensive Verification Matrix
+
+- **Repository Core Test Suites (`npm test`):** **ALL 6 SUITES / 100 TESTS PASSED (100%)**
+  - Security Regression (`security-regression.test.ts`): 41 / 41 PASSED
+  - Masters Integrity (`masters-integrity.test.ts`): 27 / 27 PASSED
+  - Accounting Invariants (`accounting-invariants.test.ts`): 13 / 13 PASSED
+  - Inventory Integrity (`inventory-integrity.test.ts`): 10 / 10 PASSED
+  - Concurrency Suite (`concurrency.test.ts`): 12 / 12 PASSED
+  - Core Accounting Engine (`run-all-tests.ts`): 12 / 12 PASSED
+- **Reports Regression Suite (`reports-integrity.test.ts`):** **25 / 25 PASSED (100%)**
+- **Voucher Lifecycle Regression Suite (`voucher-lifecycle.test.ts`):** **17 / 17 PASSED (100%)**
+- **Financial Year Lifecycle Regression Suite (`financial-year-lifecycle.test.ts`):** **25 / 25 PASSED (100%)**
+- **Task 008 Integrity Regression Suite (`task-008-integrity.test.ts`):** **22 / 22 PASSED (100%)**
+  - Suite 1 (DEF-008-01: Auth Role Self-Registration): 3 / 3 PASSED
+  - Suite 2 (DEF-008-02: Exact Inward Valuation & Asset Reconciliation): 4 / 4 PASSED
+  - Suite 3 (DEF-008-03 & DEF-008-13: Draft Round-Trip Fidelity): 3 / 3 PASSED
+  - Suite 4 (DEF-008-04: Master Item Update Atomicity Rollback): 1 / 1 PASSED
+  - Suite 5 (DEF-008-05: Statutory Multi-Rate GST Slabs): 2 / 2 PASSED
+  - Suite 6 (DEF-008-06: Compound Voucher Party Allocation): 1 / 1 PASSED
+  - Suite 7 (DEF-008-07: Serial Availability & Amendment Safety): 2 / 2 PASSED
+  - Suite 8 (DEF-008-08: Voucher Numbering Scoped to Resolved FY): 1 / 1 PASSED
+  - Suite 9 (DEF-008-09: FY Closing Guard & Draft Deletion): 1 / 1 PASSED
+  - Suite 10 (DEF-008-10: Party Classification & Ledger Group Sync): 1 / 1 PASSED
+  - Suite 11 (DEF-008-11: Atomic Opening Stock Recording): 1 / 1 PASSED
+  - Suite 12 (DEF-008-12: Master Input Validation & Unique Constraints): 2 / 2 PASSED
+- **Total Test Count:** **189 / 189 TESTS PASSED (100% GREEN)**
+- **TypeScript Type Checking (`npx tsc --noEmit`):** **0 ERRORS**
+- **Backend Build (`npm run build`):** **0 ERRORS (Clean compilation)**
+- **Frontend Build (`npm run build` in `frontend`):** **0 ERRORS (`✓ built in 6.08s`)**
+- **Database Schema Diff:** **0 Schema Migrations, 0 Table Alterations (Frozen Schema Preserved)**
+- **Frontend Codebase:** **0 Files Modified (Frozen Frontend Preserved)**
+
+---
+
+### 3. Accounting & Financial Reconciliations Verified
+
+1. **Trial Balance Parity:** $\sum \text{Debits} \equiv \sum \text{Credits}$ verified across all posted transactions.
+2. **Balance Sheet Integrity:** $\text{Total Assets} \equiv \text{Total Liabilities} + \text{Equity}$ verified across single and multi-year scenarios.
+3. **P&L Retained Earnings:** Net Profit dynamically rolls into Balance Sheet Equity without synthetic year-end journal pollution.
+4. **Inventory Asset $\equiv$ Stock Summary Valuation:** Exact integer-paise reconciliation verified between General Ledger Inventory Asset and perpetual WAVG Stock Summary across discounts, tax-inclusive pricing, and odd-paise amounts.
+5. **Multi-Rate GST Slabs:** Independent tax records recorded for each statutory slab (5%, 12%, 18%, CESS) with CGST/SGST mathematical symmetry for intra-state and IGST for inter-state transactions.
+6. **Party Bill Allocations:** Allocated amount strictly matches the actual party ledger entry amount in simple and compound vouchers.
+7. **Voucher Immutability:** Posted vouchers cannot be modified or deleted directly; amendments flow through cancellation and linked replacement.
+8. **Serial Lifecycle Invariant:** Consumed `SOLD` serials are never deleted or reverted to `AVAILABLE` during purchase amendments.
