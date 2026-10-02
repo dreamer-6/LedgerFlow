@@ -343,11 +343,12 @@ export class PostingEngine {
               throw new Error(`Cannot determine COGS for item '${line.itemId}' — no stock or purchase rate available.`);
             }
           } else {
-            // PURCHASE_RETURN: cost is return rate (line.ratePaise) or weighted average
-            unitCost = line.ratePaise > 0 ? line.ratePaise : (stockSummary.weightedAverageRatePaise || 0);
+            // PURCHASE_RETURN: cost is exact line taxable net acquisition cost
+            const returnCost = taxRes.taxableAmountPaise;
+            unitCost = qty > 0 ? Math.round(returnCost / qty) : (line.ratePaise > 0 ? line.ratePaise : (stockSummary.weightedAverageRatePaise || 0));
           }
 
-          const costValue = Math.round(qty * unitCost);
+          const costValue = input.voucherType === 'PURCHASE_RETURN' ? taxRes.taxableAmountPaise : Math.round(qty * unitCost);
           if (input.voucherType === 'SALES') {
             cogsAmountPaise += costValue;
           }
@@ -361,14 +362,18 @@ export class PostingEngine {
             valuePaise: costValue
           });
         } else if (input.voucherType === 'PURCHASE') {
-          const costValue = Math.round(qty * line.ratePaise);
+          // DEF-008-02: Inventory valuation must use exact line-level net acquisition cost in paise
+          // (taxRes.taxableAmountPaise), reflecting discounts and net-of-tax values, to reconcile
+          // exactly with the debit to Inventory Asset.
+          const inwardCostPaise = taxRes.taxableAmountPaise;
+          const effectiveRatePaise = qty > 0 ? Math.round(inwardCostPaise / qty) : 0;
           stockMovements.push({
             itemId: line.itemId,
             godownId: resolvedGodownId,
             movementType: 'IN',
             quantity: qty,
-            ratePaise: line.ratePaise,
-            valuePaise: costValue
+            ratePaise: effectiveRatePaise,
+            valuePaise: inwardCostPaise
           });
         } else if (input.voucherType === 'SALES_RETURN') {
           // P0-1: Restore returned inventory at COST basis, NOT customer selling price
