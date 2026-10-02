@@ -97,7 +97,7 @@ export class PostingEngine {
     }
 
     // For Sales Invoices, use company name initials/acronym (e.g., Dream Tech Solutions -> DTS)
-    // Formatted strictly like: DTS-2627-000
+    // Formatted strictly like: DTS-2627-001; Other vouchers formatted strictly like: PUR-2627-001
     if (voucherType === 'SALES') {
       let compAcronym = 'DTS';
       const comp = db.prepare('SELECT company_name FROM companies WHERE company_id = ?').get(companyId) as { company_name: string } | undefined;
@@ -110,6 +110,8 @@ export class PostingEngine {
         }
       }
       prefix = `${compAcronym}-${fyCode}`;
+    } else {
+      prefix = `${prefix}-${fyCode}`;
     }
 
     const row = db.prepare(`
@@ -118,12 +120,12 @@ export class PostingEngine {
       ORDER BY rowid DESC LIMIT 1
     `).get(companyId, fyId, voucherType) as { voucher_number: string } | undefined;
 
-    let nextCounter = 0;
+    let nextCounter = 1;
     if (row && row.voucher_number) {
       const parts = row.voucher_number.split(/[-/]/);
       const lastNumStr = parts[parts.length - 1];
       const parsed = parseInt(lastNumStr, 10);
-      if (!isNaN(parsed)) {
+      if (!isNaN(parsed) && parsed >= 1) {
         nextCounter = parsed + 1;
       }
     }
@@ -698,13 +700,13 @@ export class PostingEngine {
         if (explicitVNum) {
           const alreadyExists = db.prepare(
             'SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ?'
-          ).get(input.companyId, fyIdToUse, input.voucherType, explicitVNum);
+          ).get(input.companyId, fyId, input.voucherType, explicitVNum);
           if (alreadyExists) {
             throw new Error(`Voucher number '${explicitVNum}' already exists for this company, financial year, and voucher type.`);
           }
           postedVoucherNumber = explicitVNum;
         } else {
-          postedVoucherNumber = this.getNextVoucherNumber(db, input.companyId, fyIdToUse, input.voucherType);
+          postedVoucherNumber = this.getNextVoucherNumber(db, input.companyId, fyId, input.voucherType);
         }
       }
 
