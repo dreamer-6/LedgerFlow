@@ -258,6 +258,24 @@ export function createApiRouter(db: DatabaseSync): Router {
       const party = db.prepare('SELECT * FROM parties WHERE party_id = ?').get(partyId) as any;
       if (!party || !assertResourceOwnership(res, party.company_id, req.companyId!)) return;
 
+      // DEF-008-10: Protect party classification and synchronize ledger group safely
+      if (partyType && partyType !== party.party_type) {
+        const txCount = (db.prepare('SELECT COUNT(*) as cnt FROM ledger_entries WHERE ledger_id = ?').get(party.ledger_id) as any)?.cnt || 0;
+        const vchCount = (db.prepare('SELECT COUNT(*) as cnt FROM vouchers WHERE party_id = ?').get(partyId) as any)?.cnt || 0;
+        if (txCount > 0 || vchCount > 0) {
+          return res.status(400).json({
+            error: `Cannot change party type for '${party.party_name}' from ${party.party_type} to ${partyType}: posted financial activity exists for this party.`
+          });
+        }
+
+        // Safe to synchronize ledger group when no posted transactions exist
+        let newGroupId = `${req.companyId!}_grp_sundry_debtors`;
+        if (partyType === 'SUPPLIER') {
+          newGroupId = `${req.companyId!}_grp_sundry_creditors`;
+        }
+        db.prepare('UPDATE ledgers SET group_id = ? WHERE ledger_id = ? AND company_id = ?').run(newGroupId, party.ledger_id, req.companyId!);
+      }
+
       db.exec('BEGIN TRANSACTION;');
 
       db.prepare(`
