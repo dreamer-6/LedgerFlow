@@ -112,6 +112,10 @@ export function createApiRouter(db: DatabaseSync): Router {
         return res.status(400).json({ error: 'Ledger name is required and must be a non-empty string.' });
       }
 
+      if (openingBalancePaise !== undefined && openingBalancePaise !== null && Number(openingBalancePaise) < 0) {
+        return res.status(400).json({ error: 'Opening balance cannot be negative. Use opening balance type (DR/CR) to indicate debit or credit balance.' });
+      }
+
       if (!groupId || typeof groupId !== 'string' || !groupId.trim()) {
         return res.status(400).json({ error: 'Ledger group is required.' });
       }
@@ -142,6 +146,9 @@ export function createApiRouter(db: DatabaseSync): Router {
 
       res.status(201).json({ ledgerId, ledgerName: ledgerName.trim() });
     } catch (err: any) {
+      if (err.message && err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: 'A ledger with this name or code already exists in this company.' });
+      }
       res.status(500).json({ error: err.message });
     }
   });
@@ -197,6 +204,10 @@ export function createApiRouter(db: DatabaseSync): Router {
         return res.status(400).json({ error: 'Party Name is required.' });
       }
 
+      if (openingBalancePaise !== undefined && openingBalancePaise !== null && Number(openingBalancePaise) < 0) {
+        return res.status(400).json({ error: 'Opening balance cannot be negative. Use opening balance type (DR/CR) to indicate debit or credit balance.' });
+      }
+
       let derivedPan = pan;
       if (!derivedPan && gstin && gstin.length === 15) {
         derivedPan = gstin.substring(2, 12);
@@ -240,7 +251,10 @@ export function createApiRouter(db: DatabaseSync): Router {
       db.exec('COMMIT;');
       res.status(201).json({ partyId, partyName: partyName.trim(), ledgerId });
     } catch (err: any) {
-      db.exec('ROLLBACK;');
+      try { db.exec('ROLLBACK;'); } catch (_) {}
+      if (err.message && err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: 'A party or ledger with this name or unique identifier already exists in this company.' });
+      }
       res.status(500).json({ error: err.message });
     }
   });
@@ -257,6 +271,10 @@ export function createApiRouter(db: DatabaseSync): Router {
       // Resource ownership check
       const party = db.prepare('SELECT * FROM parties WHERE party_id = ?').get(partyId) as any;
       if (!party || !assertResourceOwnership(res, party.company_id, req.companyId!)) return;
+
+      if (openingBalancePaise !== undefined && openingBalancePaise !== null && Number(openingBalancePaise) < 0) {
+        return res.status(400).json({ error: 'Opening balance cannot be negative. Use opening balance type (DR/CR) to indicate debit or credit balance.' });
+      }
 
       // DEF-008-10: Protect party classification and synchronize ledger group safely
       if (partyType && partyType !== party.party_type) {
@@ -368,7 +386,10 @@ export function createApiRouter(db: DatabaseSync): Router {
       db.exec('COMMIT;');
       res.json({ success: true, message: 'Party updated successfully.' });
     } catch (err: any) {
-      db.exec('ROLLBACK;');
+      try { db.exec('ROLLBACK;'); } catch (_) {}
+      if (err.message && err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: 'A party or ledger with this name or unique identifier already exists in this company.' });
+      }
       res.status(500).json({ error: err.message });
     }
   });
@@ -440,6 +461,19 @@ export function createApiRouter(db: DatabaseSync): Router {
 
     if (!b.itemName || !b.itemName.trim()) {
       return res.status(400).json({ error: 'Item name is required.' });
+    }
+
+    if (b.openingQty !== undefined && b.openingQty !== null && Number(b.openingQty) < 0) {
+      return res.status(400).json({ error: 'Opening stock quantity cannot be negative.' });
+    }
+    if (b.quantityToAdd !== undefined && b.quantityToAdd !== null && Number(b.quantityToAdd) < 0) {
+      return res.status(400).json({ error: 'Quantity to add cannot be negative.' });
+    }
+    if (b.purchaseRatePaise !== undefined && b.purchaseRatePaise !== null && Number(b.purchaseRatePaise) < 0) {
+      return res.status(400).json({ error: 'Purchase rate cannot be negative.' });
+    }
+    if (b.sellingRatePaise !== undefined && b.sellingRatePaise !== null && Number(b.sellingRatePaise) < 0) {
+      return res.status(400).json({ error: 'Selling rate cannot be negative.' });
     }
 
     if (b.unitId !== undefined && b.unitId !== null && String(b.unitId).trim() !== '') {
@@ -682,6 +716,9 @@ export function createApiRouter(db: DatabaseSync): Router {
       try {
         db.exec('ROLLBACK;');
       } catch { /* ignore rollback error */ }
+      if (err.message && err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: 'A stock item with this name, item code, or SKU already exists in this company.' });
+      }
       return res.status(400).json({ error: err.message });
     }
   });
@@ -745,6 +782,13 @@ export function createApiRouter(db: DatabaseSync): Router {
       const sellingRatePaise = b.sellingRatePaise !== undefined && b.sellingRatePaise !== null ? Number(b.sellingRatePaise) : (item.selling_rate_paise ?? 0);
       const reorderLevel = b.reorderLevel !== undefined && b.reorderLevel !== null ? Number(b.reorderLevel) : (item.reorder_level ?? 0);
 
+      if (b.purchaseRatePaise !== undefined && b.purchaseRatePaise !== null && Number(b.purchaseRatePaise) < 0) {
+        return res.status(400).json({ error: 'Purchase rate cannot be negative.' });
+      }
+      if (b.sellingRatePaise !== undefined && b.sellingRatePaise !== null && Number(b.sellingRatePaise) < 0) {
+        return res.status(400).json({ error: 'Selling rate cannot be negative.' });
+      }
+
       db.prepare(`
         UPDATE stock_items SET
           item_name = ?, item_code = ?, sku = ?, hsn_sac = ?,
@@ -761,6 +805,9 @@ export function createApiRouter(db: DatabaseSync): Router {
       );
       res.json({ success: true, message: 'Stock item updated successfully.' });
     } catch (err: any) {
+      if (err.message && err.message.includes('UNIQUE constraint failed')) {
+        return res.status(400).json({ error: 'A stock item with this name, item code, or SKU already exists in this company.' });
+      }
       res.status(400).json({ error: err.message });
     }
   });
