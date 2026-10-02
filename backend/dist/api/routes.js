@@ -752,7 +752,7 @@ function createApiRouter(db) {
     });
     router.get('/vouchers', ...withCompany, (req, res) => {
         try {
-            const { type, fromDate, toDate } = req.query;
+            const { type, fromDate, toDate, status } = req.query;
             let query = `
         SELECT v.*, p.party_name, p.gstin as party_gstin, p.party_type
         FROM vouchers v
@@ -763,6 +763,10 @@ function createApiRouter(db) {
             if (type) {
                 query += ` AND v.voucher_type = ?`;
                 params.push(type);
+            }
+            if (status) {
+                query += ` AND v.status = ?`;
+                params.push(status);
             }
             if (fromDate) {
                 query += ` AND v.voucher_date >= ?`;

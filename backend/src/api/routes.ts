@@ -877,7 +877,7 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/vouchers', ...withCompany, (req: SecureRequest, res: Response) => {
     try {
-      const { type, fromDate, toDate } = req.query as any;
+      const { type, fromDate, toDate, status } = req.query as any;
       let query = `
         SELECT v.*, p.party_name, p.gstin as party_gstin, p.party_type
         FROM vouchers v
@@ -888,6 +888,10 @@ export function createApiRouter(db: DatabaseSync): Router {
       if (type) {
         query += ` AND v.voucher_type = ?`;
         params.push(type);
+      }
+      if (status) {
+        query += ` AND v.status = ?`;
+        params.push(status);
       }
       if (fromDate) {
         query += ` AND v.voucher_date >= ?`;
