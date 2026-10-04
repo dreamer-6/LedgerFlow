@@ -262,6 +262,20 @@ export class BusinessService {
       throw new Error(`Financial year '${fyId}' not found for this company.`);
     }
 
+    // DEF-008-09: Guard against closing financial years with pending DRAFT vouchers
+    if (fyStatus === 'CLOSED') {
+      const pendingDrafts = db.prepare(`
+        SELECT COUNT(*) as count FROM vouchers
+        WHERE company_id = ? AND fy_id = ? AND status = 'DRAFT'
+      `).get(companyId, fyId) as { count: number } | undefined;
+
+      if (pendingDrafts && pendingDrafts.count > 0) {
+        throw new Error(
+          `Cannot close Financial Year '${currentFy.name || fyId}': ${pendingDrafts.count} pending DRAFT voucher(s) exist. Please post or delete all drafts before closing the financial year.`
+        );
+      }
+    }
+
     // State machine check: reopening CLOSED -> OPEN requires OWNER + reason
     if (currentFy.status === 'CLOSED' && fyStatus === 'OPEN') {
       if (userRole !== 'OWNER') {

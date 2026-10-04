@@ -25,9 +25,10 @@ function getDatabase(customPath) {
     }
     const dbPath = customPath || getDatabasePath();
     const db = new node_sqlite_1.DatabaseSync(dbPath);
-    // Enable Foreign Keys and WAL Mode for performance and integrity
+    // Enable Foreign Keys, WAL Mode, and Busy Timeout for performance and integrity
     db.exec('PRAGMA foreign_keys = ON;');
     db.exec('PRAGMA journal_mode = WAL;');
+    db.exec('PRAGMA busy_timeout = 5000;');
     // Run schema initialization
     const schemaPath = node_path_1.default.resolve(__dirname, 'schema.sql');
     if (node_fs_1.default.existsSync(schemaPath)) {
@@ -122,6 +123,10 @@ function getDatabase(customPath) {
         PRIMARY KEY (user_id, company_id)
       );
     `);
+    }
+    catch { }
+    try {
+        db.exec('CREATE INDEX IF NOT EXISTS idx_vouchers_comp_date_status ON vouchers(company_id, voucher_date, status);');
     }
     catch { }
     if (!customPath) {

@@ -95,16 +95,26 @@ export const Logo: React.FC<LogoProps> = ({
       <LogoGlyph size={iconSize} />
 
       <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '1px' }}>
           <span
             style={{
               fontWeight: 800,
               fontSize: titleSize,
               letterSpacing: '-0.02em',
-              color: 'var(--text-primary)'
+              color: 'var(--color-text, #0F172A)'
             }}
           >
-            LedgerFlow
+            Ledger
+          </span>
+          <span
+            style={{
+              fontWeight: 800,
+              fontSize: titleSize,
+              letterSpacing: '-0.02em',
+              color: 'var(--color-primary, #F97316)'
+            }}
+          >
+            Flow
           </span>
         </div>
 
@@ -114,12 +124,12 @@ export const Logo: React.FC<LogoProps> = ({
               fontSize: subSize,
               fontWeight: 700,
               letterSpacing: '0.08em',
-              color: 'var(--primary-accent)',
+              color: 'var(--color-text-muted, #94A3B8)',
               textTransform: 'uppercase',
               marginTop: '1px'
             }}
           >
-            ACCOUNTING & ERP OS
+            Simple Accounting. Real Clarity.
           </span>
         )}
 
@@ -127,12 +137,12 @@ export const Logo: React.FC<LogoProps> = ({
           <span
             style={{
               fontSize: '11px',
-              color: 'var(--text-secondary)',
+              color: 'var(--color-text-secondary)',
               marginTop: '2px',
               letterSpacing: '0.01em'
             }}
           >
-            Simple Accounting. Stronger Business.
+            Simple Accounting. Real Clarity.
           </span>
         )}
       </div>

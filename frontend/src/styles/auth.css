@@ -1,0 +1,1002 @@
+/* ==========================================================
+   LEDGERFLOW™ — AUTHENTICATION & BUSINESS ONBOARDING (UI-002)
+   Strictly following LedgerFlow UI Mockups & UI-001 Tokens
+   ========================================================== */
+
+.lf-auth-layout {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  background-color: var(--color-background, #F8F7F4);
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: var(--font-family, 'Inter', system-ui, sans-serif);
+}
+
+/* Light & Dark Ambient Subtle Background Curves */
+.lf-auth-layout::before {
+  content: '';
+  position: absolute;
+  bottom: -100px;
+  right: -100px;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.09) 0%, rgba(248, 247, 244, 0) 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+[data-theme="dark"] .lf-auth-layout::before {
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.08) 0%, rgba(15, 23, 42, 0) 70%);
+}
+
+/* ─── THEME TOGGLE PILL (TOP RIGHT) ─── */
+.lf-auth-theme-toggle {
+  position: absolute;
+  top: 24px;
+  right: 32px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E5E7EB);
+  box-shadow: var(--shadow-sm);
+  gap: 2px;
+}
+
+.lf-auth-theme-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-text-muted, #94A3B8);
+  transition: all 0.18s ease;
+}
+
+.lf-auth-theme-btn:hover {
+  color: var(--color-text, #0F172A);
+}
+
+.lf-auth-theme-btn.active {
+  background: #F97316;
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.35);
+}
+
+/* ─── LEFT COLUMN: EXACT MOCKUP HERO BANNER (35%) ─── */
+.lf-auth-hero-banner-col {
+  flex: 0 0 35%;
+  width: 35%;
+  max-width: 35%;
+  min-width: 35%;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow: hidden;
+  background-color: #1A1A1A;
+  display: flex;
+  box-sizing: border-box;
+}
+
+.lf-auth-hero-banner-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center left;
+  display: block;
+}
+
+/* ─── LEFT COLUMN: BRAND HERO PANEL (ONBOARDING) ─── */
+.lf-auth-hero-col {
+  flex: 1.15;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 48px 48px 36px 64px;
+  position: relative;
+  z-index: 1;
+  max-width: 780px;
+  box-sizing: border-box;
+}
+
+.lf-auth-hero-header {
+  margin-bottom: 28px;
+}
+
+.lf-auth-hero-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.lf-auth-step-badge {
+  display: inline-block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #F97316;
+  letter-spacing: -0.01em;
+  margin-bottom: 2px;
+}
+
+.lf-auth-hero-title {
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  color: var(--color-text, #0F172A);
+  margin: 0;
+}
+
+.lf-auth-hero-title .highlight {
+  color: #F97316;
+}
+
+.lf-auth-hero-subtitle {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--color-text-secondary, #475569);
+  margin: 0;
+  max-width: 520px;
+}
+
+/* 4 Feature Cards Row (Login & Sign-up) */
+.lf-auth-features-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-top: 4px;
+  max-width: 620px;
+}
+
+.lf-auth-feature-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lf-auth-feature-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: rgba(249, 115, 22, 0.12);
+  color: #F97316;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.lf-auth-feature-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text, #0F172A);
+  margin-top: 2px;
+}
+
+.lf-auth-feature-desc {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-text-secondary, #64748B);
+}
+
+/* Bullet Points List (Business Setup) */
+.lf-auth-bullets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+  max-width: 520px;
+}
+
+.lf-auth-bullet-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.lf-auth-bullet-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(249, 115, 22, 0.12);
+  color: #F97316;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lf-auth-bullet-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-text, #0F172A);
+}
+
+.lf-auth-bullet-desc {
+  font-size: 12px;
+  color: var(--color-text-secondary, #64748B);
+  margin-top: 1px;
+}
+
+/* Laptop Mockup Visual */
+.lf-auth-laptop-container {
+  margin-top: 20px;
+  max-width: 600px;
+  position: relative;
+}
+
+.lf-auth-laptop-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 20px 30px rgba(0, 0, 0, 0.12));
+}
+
+/* Hero Footer Tagline */
+.lf-auth-hero-footer {
+  margin-top: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lf-auth-footer-bar {
+  width: 24px;
+  height: 3px;
+  background: #F97316;
+  border-radius: 2px;
+}
+
+.lf-auth-footer-text {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #94A3B8);
+}
+
+/* ─── RIGHT COLUMN: CARD PANEL (65%) ─── */
+.lf-auth-card-col {
+  flex: 0 0 65%;
+  width: 65%;
+  max-width: 65%;
+  min-width: 65%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 40px 36px;
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.lf-auth-card {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E5E7EB);
+  border-radius: 24px;
+  box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.02);
+  padding: 40px 36px 36px;
+  box-sizing: border-box;
+  animation: view-fade-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  margin: auto 0;
+}
+
+[data-theme="dark"] .lf-auth-card {
+  background: #141C2E;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.45);
+}
+
+.lf-auth-card.wide {
+  max-width: 840px;
+  padding: 36px 40px;
+  margin: 20px 0 40px 0;
+}
+
+.lf-auth-card-header {
+  text-align: center;
+  margin-bottom: 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lf-auth-brand-wordmark {
+  height: 42px;
+  width: auto;
+  max-width: 220px;
+  object-fit: contain;
+  margin: 0 auto 20px auto;
+  display: block;
+  user-select: none;
+}
+
+.lf-auth-card-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--color-text, #0F172A);
+  margin: 0 0 6px 0;
+  text-align: center;
+}
+
+.lf-auth-card-subtitle {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--color-text-secondary, #64748B);
+  margin: 0;
+  text-align: center;
+}
+
+/* Auth Card Custom Field Enhancements to match Mockup */
+.lf-auth-card .lf-field {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lf-auth-card .lf-field-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text, #0F172A);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.lf-auth-card .lf-input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.lf-auth-card .lf-input {
+  width: 100%;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E2E8F0);
+  padding: 0 42px 0 42px;
+  font-size: 14px;
+  color: var(--color-text, #0F172A);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+
+[data-theme="dark"] .lf-auth-card .lf-input {
+  background: #0F172A;
+  border-color: #334155;
+  color: #F8FAFC;
+}
+
+.lf-auth-card .lf-input::placeholder {
+  color: var(--color-text-muted, #94A3B8);
+}
+
+.lf-auth-card .lf-input:focus {
+  border-color: #F97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+}
+
+.lf-auth-card .lf-input.error {
+  border-color: var(--color-danger, #EF4444);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+}
+
+.lf-auth-card .lf-input-prefix {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94A3B8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.lf-auth-card .lf-input-suffix {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94A3B8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.lf-auth-card .lf-input-suffix button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  color: #94A3B8;
+  transition: color 0.15s ease;
+}
+
+.lf-auth-card .lf-input-suffix button:hover {
+  color: var(--color-text, #0F172A);
+}
+
+/* Password Security Requirements Checklist (Mockup Matching) */
+.lf-auth-pw-checklist {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 0 2px;
+}
+
+.lf-auth-pw-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--color-text-secondary, #64748B);
+  transition: color 0.15s ease;
+  user-select: none;
+}
+
+.lf-auth-pw-item.valid {
+  color: #15803D;
+  font-weight: 500;
+}
+
+.lf-auth-pw-item .pw-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: #94A3B8;
+  transition: all 0.15s ease;
+}
+
+.lf-auth-pw-item.valid .pw-icon {
+  color: #16A34A;
+}
+
+/* Primary CTA Button matching Mockup */
+.lf-auth-primary-btn {
+  width: 100%;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #FF6600 0%, #F55200 100%);
+  border: none;
+  color: #FFFFFF;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(249, 115, 22, 0.35);
+  transition: all 0.18s ease;
+}
+
+.lf-auth-primary-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #FF7315 0%, #FA5A05 100%);
+  box-shadow: 0 6px 20px rgba(249, 115, 22, 0.45);
+  transform: translateY(-1px);
+}
+
+.lf-auth-primary-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.lf-auth-primary-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* Switcher Link (Bottom) */
+.lf-auth-footer-switch {
+  text-align: center;
+  margin-top: 24px;
+  font-size: 13.5px;
+  color: var(--color-text-secondary, #64748B);
+}
+
+.lf-auth-footer-link {
+  color: #F97316;
+  font-weight: 700;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 4px;
+  text-decoration: none;
+}
+
+.lf-auth-footer-link:hover {
+  text-decoration: underline;
+}
+
+/* ─── STEPPER HEADER (BUSINESS ONBOARDING) ─── */
+.lf-stepper-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 30px;
+  padding: 0 16px;
+  position: relative;
+}
+
+.lf-stepper-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  z-index: 2;
+  cursor: default;
+}
+
+.lf-stepper-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  background: var(--color-surface-muted, #F1F0ED);
+  color: var(--color-text-muted, #94A3B8);
+  border: 2px solid transparent;
+}
+
+.lf-stepper-circle.active {
+  background: #F97316;
+  color: #FFFFFF;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.35);
+}
+
+.lf-stepper-circle.completed {
+  background: #F97316;
+  color: #FFFFFF;
+}
+
+.lf-stepper-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted, #94A3B8);
+  transition: color 0.2s ease;
+  white-space: nowrap;
+}
+
+.lf-stepper-label.active {
+  color: #F97316;
+}
+
+.lf-stepper-label.completed {
+  color: var(--color-text, #0F172A);
+}
+
+.lf-stepper-line {
+  flex: 1;
+  height: 2px;
+  background: var(--color-border, #E5E7EB);
+  margin: -18px 12px 0 12px;
+  z-index: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.lf-stepper-line-fill {
+  height: 100%;
+  background: #F97316;
+  transition: width 0.3s ease;
+}
+
+/* ─── ONBOARDING SECTIONS (STEPS 1, 2, 3) ─── */
+.lf-onboarding-section {
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E5E7EB);
+  border-radius: 14px;
+  padding: 22px;
+  margin-bottom: 20px;
+}
+
+.lf-onboarding-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.lf-onboarding-section-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lf-onboarding-section-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(249, 115, 22, 0.12);
+  color: #F97316;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lf-onboarding-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text, #0F172A);
+}
+
+.lf-onboarding-section-desc {
+  font-size: 12px;
+  color: var(--color-text-secondary, #64748B);
+  margin-top: 1px;
+}
+
+/* Form Layout Grids */
+.lf-form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.lf-form-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+}
+
+.lf-form-row-4 {
+  display: grid;
+  grid-template-columns: 1.2fr 1.2fr 1fr 1fr;
+  gap: 12px;
+}
+
+/* Radio Pill Toggle */
+.lf-radio-pills {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.lf-radio-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #E5E7EB);
+  background: var(--color-surface, #FFFFFF);
+  color: var(--color-text-secondary, #475569);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lf-radio-pill.selected {
+  border-color: #F97316;
+  background: rgba(249, 115, 22, 0.06);
+  color: #F97316;
+  font-weight: 600;
+}
+
+/* Switch Row */
+.lf-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+}
+
+.lf-switch-label-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.lf-switch-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text, #0F172A);
+}
+
+.lf-switch-subtitle {
+  font-size: 12px;
+  color: var(--color-text-secondary, #64748B);
+}
+
+.lf-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.lf-toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.lf-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: var(--color-border-strong, #CBD5E1);
+  transition: 0.2s;
+  border-radius: 999px;
+}
+
+.lf-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.2s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+input:checked + .lf-toggle-slider {
+  background-color: #F97316;
+}
+
+input:checked + .lf-toggle-slider:before {
+  transform: translateX(20px);
+}
+
+/* ─── SUMMARY GRID (STEP 3) ─── */
+.lf-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
+}
+
+.lf-summary-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.lf-summary-key {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-text-muted, #94A3B8);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lf-summary-val {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text, #0F172A);
+  margin-top: 2px;
+  word-break: break-word;
+}
+
+
+/* ─── PASSWORD STRENGTH METER ─── */
+.lf-password-strength {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lf-strength-bar-track {
+  width: 100%;
+  height: 4px;
+  background: var(--color-border, #E5E7EB);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.lf-strength-bar-fill {
+  height: 100%;
+  transition: width 0.25s ease, background-color 0.25s ease;
+  border-radius: 999px;
+}
+
+.lf-strength-bar-fill.weak {
+  width: 25%;
+  background-color: #EF4444;
+}
+
+.lf-strength-bar-fill.fair {
+  width: 50%;
+  background-color: #F59E0B;
+}
+
+.lf-strength-bar-fill.good {
+  width: 75%;
+  background-color: #10B981;
+}
+
+.lf-strength-bar-fill.strong {
+  width: 100%;
+  background-color: #059669;
+}
+
+.lf-strength-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--color-text-secondary, #64748B);
+}
+
+.lf-strength-text-weak {
+  color: #EF4444;
+  font-weight: 600;
+}
+.lf-strength-text-fair {
+  color: #F59E0B;
+  font-weight: 600;
+}
+.lf-strength-text-good {
+  color: #10B981;
+  font-weight: 600;
+}
+.lf-strength-text-strong {
+  color: #059669;
+  font-weight: 700;
+}
+
+/* ─── PASSWORD CHECKLIST (SIGN UP) ─── */
+.lf-password-checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin: 6px 0 14px;
+}
+
+.lf-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-muted, #94A3B8);
+  transition: color 0.18s ease;
+}
+
+.lf-checklist-item.valid {
+  color: #16A34A;
+  font-weight: 500;
+}
+
+/* ─── DIVIDER & GOOGLE BUTTON ─── */
+.lf-auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--color-text-muted, #94A3B8);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.lf-auth-divider::before,
+.lf-auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border, #E5E7EB);
+}
+
+.lf-google-btn {
+  width: 100%;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border, #E5E7EB);
+  background: var(--color-surface, #FFFFFF);
+  color: var(--color-text, #0F172A);
+  font-size: 13.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lf-google-btn:hover {
+  background: var(--color-surface-hover, #F8F7F4);
+  border-color: var(--color-border-strong, #D1D5DB);
+}
+
+/* ─── RESPONSIVE BREAKPOINTS ─── */
+@media (max-width: 1024px) {
+  .lf-auth-layout {
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  .lf-auth-hero-banner-col {
+    display: none;
+  }
+  .lf-auth-hero-col {
+    display: none;
+  }
+  .lf-auth-card-col {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+    min-width: 100%;
+    padding: 32px 20px;
+  }
+  .lf-auth-features-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .lf-form-row-4 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .lf-auth-layout {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+  .lf-auth-hero-col {
+    max-width: 100%;
+    padding: 32px 24px 20px;
+  }
+  .lf-auth-hero-content {
+    margin-top: 16px;
+  }
+  .lf-auth-hero-title {
+    font-size: 28px;
+  }
+  .lf-auth-laptop-container {
+    display: none; /* Hide laptop image on mobile to save vertical space */
+  }
+  .lf-auth-card-col {
+    padding: 16px 20px 40px;
+  }
+  .lf-auth-card,
+  .lf-auth-card.wide {
+    max-width: 100%;
+    padding: 28px 20px;
+  }
+  .lf-form-row-2,
+  .lf-form-row-3,
+  .lf-form-row-4 {
+    grid-template-columns: 1fr;
+  }
+  .lf-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}

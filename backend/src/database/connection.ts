@@ -22,9 +22,10 @@ export function getDatabase(customPath?: string): DatabaseSync {
   const dbPath = customPath || getDatabasePath();
   const db = new DatabaseSync(dbPath);
 
-  // Enable Foreign Keys and WAL Mode for performance and integrity
+  // Enable Foreign Keys, WAL Mode, and Busy Timeout for performance and integrity
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec('PRAGMA journal_mode = WAL;');
+  db.exec('PRAGMA busy_timeout = 5000;');
 
   // Run schema initialization
   const schemaPath = path.resolve(__dirname, 'schema.sql');
@@ -72,6 +73,9 @@ export function getDatabase(customPath?: string): DatabaseSync {
         PRIMARY KEY (user_id, company_id)
       );
     `);
+  } catch {}
+  try {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_vouchers_comp_date_status ON vouchers(company_id, voucher_date, status);');
   } catch {}
 
   if (!customPath) {

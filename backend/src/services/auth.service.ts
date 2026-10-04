@@ -25,11 +25,12 @@ export class AuthService {
     const salt = bcrypt.genSaltSync(12);
     const passwordHash = bcrypt.hashSync(password, salt);
 
-    // New users receive ADMIN role on their own businesses only (user_businesses.role = OWNER)
+    // Public registration defaults strictly to ACCOUNTANT role per security policy
+    const userRole = 'ACCOUNTANT';
     db.prepare(`
       INSERT INTO users (user_id, username, email, password_hash, full_name, role)
-      VALUES (?, ?, ?, ?, ?, 'USER')
-    `).run(userId, cleanEmail, cleanEmail, passwordHash, fullName.trim());
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(userId, cleanEmail, cleanEmail, passwordHash, fullName.trim(), userRole);
 
     // Provision isolated business
     const companyId = 'comp_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
@@ -44,7 +45,7 @@ export class AuthService {
     });
 
     const token = jwt.sign(
-      { userId, username: cleanEmail, role: 'USER', name: fullName.trim(), email: cleanEmail },
+      { userId, username: cleanEmail, role: userRole, name: fullName.trim(), email: cleanEmail },
       jwtSecret(),
       { expiresIn: '7d' }
     );
@@ -63,7 +64,7 @@ export class AuthService {
         userId,
         email: cleanEmail,
         fullName: fullName.trim(),
-        role: 'USER'
+        role: userRole
       },
       activeCompanyId: companyId,
       company: businesses[0] || null,
