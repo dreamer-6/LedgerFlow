@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api, Company, FinancialYear, authStorage, UserSession } from './api/client';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
+import { AppShell } from './components/layout/AppShell';
 import { BusinessSwitcherModal } from './components/BusinessSwitcherModal';
 import { AuthView } from './pages/AuthView';
 import { DashboardView } from './pages/DashboardView';
@@ -39,6 +40,39 @@ export const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!authStorage.getToken() && !!authStorage.getUser());
   const [businesses, setBusinesses] = useState<Company[]>([]);
   const [showBusinessSwitcher, setShowBusinessSwitcher] = useState<boolean>(false);
+
+  // Routing state for /login, /signup, /business-setup, /
+  const [currentRoute, setCurrentRoute] = useState<string>(() => {
+    return typeof window !== 'undefined' ? window.location.pathname : '/';
+  });
+
+  const [draftSignupUser, setDraftSignupUser] = useState<{
+    fullName: string;
+    email: string;
+    password: string;
+  } | null>(() => {
+    try {
+      const stored = sessionStorage.getItem('lf_draft_signup');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const navigateTo = (path: string) => {
+    if (typeof window !== 'undefined' && window.location.pathname !== path) {
+      window.history.pushState(null, '', path);
+    }
+    setCurrentRoute(path);
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentRoute(window.location.pathname);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const [company, setCompany] = useState<Company | null>(null);
   const [activeFy, setActiveFy] = useState<FinancialYear | null>(null);
@@ -96,6 +130,13 @@ export const App: React.FC = () => {
   };
 
   const loadCompanyData = async () => {
+    const activeId = authStorage.getActiveCompanyId();
+    if (!activeId) {
+      setCompany(null);
+      setActiveFy(null);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const res = await api.getCompanyAndFy();
@@ -126,26 +167,67 @@ export const App: React.FC = () => {
     }
   }, [isAuthenticated]);
 
-  const handleAuthSuccess = (authUser: UserSession, activeCompId: string, userBizs: Company[]) => {
+  const handleAuthSuccess = (
+    authUser: UserSession,
+    activeCompId: string,
+    userBizs: Company[],
+    requiresOnboarding: boolean = false
+  ) => {
     setUser(authUser);
     setIsAuthenticated(true);
+    sessionStorage.removeItem('lf_draft_signup');
+    setDraftSignupUser(null);
+
     if (activeCompId) {
       authStorage.setActiveCompanyId(activeCompId);
     }
     if (userBizs && userBizs.length > 0) {
       setBusinesses(userBizs);
     }
-    loadCompanyData();
-    loadBusinesses();
+
+    if (requiresOnboarding) {
+      sessionStorage.setItem('lf_onboarding_pending', 'true');
+      navigateTo('/business-setup?step=1');
+    } else {
+      sessionStorage.removeItem('lf_onboarding_pending');
+      loadCompanyData();
+      loadBusinesses();
+      navigateTo('/');
+    }
   };
 
   const handleLogout = () => {
     authStorage.clear();
+    sessionStorage.removeItem('lf_draft_signup');
+    sessionStorage.removeItem('lf_onboarding_pending');
+    sessionStorage.removeItem('lf_onboarding_draft');
+    setDraftSignupUser(null);
     setUser(null);
     setIsAuthenticated(false);
     setCompany(null);
     setActiveFy(null);
+    navigateTo('/login');
   };
+
+  const handleNavigateToBusinessSetup = (draftUser: { fullName: string; email: string; password: string }) => {
+    setDraftSignupUser(draftUser);
+    sessionStorage.setItem('lf_draft_signup', JSON.stringify(draftUser));
+    navigateTo('/business-setup');
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      if (sessionStorage.getItem('lf_onboarding_pending') === 'true') {
+        if (currentRoute === '/' || currentRoute === '/login' || currentRoute === '/signup') {
+          navigateTo('/business-setup?step=1');
+        }
+      } else {
+        if (currentRoute === '/login' || currentRoute === '/signup') {
+          navigateTo('/');
+        }
+      }
+    }
+  }, [isAuthenticated, currentRoute]);
 
   // Global Keyboard Navigation Shortcuts
   useEffect(() => {
@@ -335,7 +417,39 @@ export const App: React.FC = () => {
   };
 
   if (!isAuthenticated) {
-    return <AuthView onAuthSuccess={handleAuthSuccess} />;
+    return (
+      <AuthView
+        initialMode={currentRoute === '/signup' ? 'SIGNUP' : 'LOGIN'}
+        onAuthSuccess={handleAuthSuccess}
+        onNavigateToBusinessSetup={handleNavigateToBusinessSetup}
+      />
+    );
+  }
+
+  // If user is authenticated and onboarding is pending, render business setup wizard immediately
+  const isOnboardingPending =
+    sessionStorage.getItem('lf_onboarding_pending') === 'true' ||
+    currentRoute.startsWith('/business-setup') ||
+    (!company && businesses.length === 0);
+
+  if (isOnboardingPending) {
+    return (
+      <CreateBusinessOnboarding
+        user={user}
+        draftSignupUser={null}
+        onBusinessCreated={(newCompany) => {
+          sessionStorage.removeItem('lf_onboarding_pending');
+          sessionStorage.removeItem('lf_onboarding_draft');
+          setBusinesses([newCompany]);
+          setCompany(newCompany);
+          authStorage.setActiveCompanyId(newCompany.company_id);
+          loadCompanyData();
+          loadBusinesses();
+          navigateTo('/');
+        }}
+        onLogout={handleLogout}
+      />
+    );
   }
 
   if (loading) {
@@ -347,12 +461,12 @@ export const App: React.FC = () => {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: 'var(--bg-app)',
-          color: 'var(--text-secondary)',
+          backgroundColor: 'var(--color-background, #F8F7F4)',
+          color: 'var(--color-text-secondary, #475569)',
           gap: '12px'
         }}
       >
-        <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
+        <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--color-text, #0F172A)' }}>
           LedgerFlow™
         </div>
         <div style={{ fontSize: '12px' }}>
@@ -362,75 +476,41 @@ export const App: React.FC = () => {
     );
   }
 
-  // If user is authenticated but has no business registered yet
-  if (!company && businesses.length === 0) {
-    return (
-      <CreateBusinessOnboarding
-        user={user}
-        onBusinessCreated={(newCompany) => {
-          setBusinesses([newCompany]);
-          setCompany(newCompany);
-          authStorage.setActiveCompanyId(newCompany.company_id);
-          loadCompanyData();
-          loadBusinesses();
-        }}
-        onLogout={handleLogout}
-      />
-    );
-  }
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--bg-app)' }}>
-      {/* Top Bar Header */}
-      <Navbar
+    <>
+      <AppShell
         company={company}
         activeFy={activeFy}
-        currentDate={currentDate}
+        user={user}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        user={user}
-        onOpenSearch={() => setShowSearchModal(true)}
-        onToggleSidebar={handleToggleSidebar}
-        isSidebarCollapsed={sidebarCollapsed}
+        reportSubTab={reportSubTab}
+        setReportSubTab={setReportSubTab}
+        voucherInitialType={voucherInitialType}
+        setVoucherInitialType={setVoucherInitialType}
         onOpenBusinessSwitcher={() => setShowBusinessSwitcher(true)}
-        onOpenDateModal={() => setShowDateModal(true)}
         onOpenFyModal={() => setShowFyModal(true)}
+        onOpenSearch={() => setShowSearchModal(true)}
         onLogout={handleLogout}
-      />
-
-      {/* Main Layout: Left Sidebar + Content Area */}
-      <div style={{ display: 'flex', flex: 1, height: 'calc(100vh - 58px)', overflow: 'hidden', position: 'relative' }}>
-        {/* Compact Left Sidebar */}
-        <Sidebar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          reportSubTab={reportSubTab}
-          setReportSubTab={setReportSubTab}
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          isCollapsed={sidebarCollapsed}
-          onToggleCollapse={handleToggleSidebar}
-        />
-
-        {/* Scrollable Main Content */}
-        <main
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            height: 'calc(100vh - 58px)',
-            background: 'var(--bg-app)'
-          }}
-        >
+      >
           {/* 1. Dashboard View */}
           {activeTab === 'dashboard' && (
             <div key="dashboard" className="view-container-animated">
               <DashboardView
                 companyId={company?.company_id || ''}
+                company={company}
+                activeFy={activeFy}
+                user={user}
+                currentDate={currentDate}
                 onOpenNewVoucher={handleOpenNewVoucher}
                 onViewVoucher={(id) => setActivePrintVoucherId(id)}
                 onNavigateReports={(sub) => {
                   setReportSubTab(sub);
                   setActiveTab('reports');
+                }}
+                onNavigateTab={(tab, sub) => {
+                  setActiveTab(tab);
+                  if (sub) setReportSubTab(sub);
                 }}
               />
             </div>
@@ -530,8 +610,7 @@ export const App: React.FC = () => {
               />
             </div>
           )}
-        </main>
-      </div>
+      </AppShell>
 
       {/* Printable Invoice Modal */}
       {activePrintVoucherId && (
@@ -682,6 +761,6 @@ export const App: React.FC = () => {
           handleSelectFy(newFy);
         }}
       />
-    </div>
+    </>
   );
 };

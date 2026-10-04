@@ -1,451 +1,1178 @@
-import React, { useEffect, useState } from "react";
-import { api } from "../api/client";
+import React, { useEffect, useState, useMemo } from 'react';
+import { api, Company, FinancialYear, UserSession } from '../api/client';
 import {
-  TrendingUp, CheckCircle2, ArrowUpRight, ChevronRight,
-  ReceiptText, Wallet, Boxes, ArrowRight, Wrench, Monitor, Printer, Laptop, PlusCircle, Trash2
-} from "lucide-react";
+  TrendingUp,
+  BarChart2,
+  BarChart3,
+  ShoppingBag,
+  Users,
+  Wallet,
+  Receipt,
+  FileText,
+  Activity,
+  Info,
+  ChevronRight,
+  MoreVertical,
+  Filter,
+  Maximize2,
+  Calendar,
+  Zap,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  BookText,
+  AlertCircle,
+  RefreshCw
+} from 'lucide-react';
+import { EmptyState } from '../components/ui/EmptyState';
+import { Skeleton } from '../components/ui/LoadingState';
 
-interface DashboardViewProps {
+export interface DashboardViewProps {
   companyId: string;
+  company?: Company | null;
+  activeFy?: FinancialYear | null;
+  user?: UserSession | null;
+  currentDate?: string;
   onOpenNewVoucher: (type?: string) => void;
   onViewVoucher: (voucherId: string) => void;
   onNavigateReports: (subTab: string) => void;
+  onNavigateTab?: (tab: string, subTab?: string) => void;
 }
 
-const fmt = (p: number | undefined | null) =>
-  p != null && !isNaN(p)
-    ? "₹" + (p / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    : "₹0.00";
+const MONTHS_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const ACCENT = "#FF5733";
-const ACCENT2 = "#FF8C6B";
-const MONTHS_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-const SVC_KEY = "lf_service_jobs";
-interface ServiceJob {
-  id: string; type: string; customer: string; device: string;
-  status: "Pending" | "In Progress" | "Done"; date: string;
+/**
+ * Format paise into Indian Rupee string matching Dashboard.png:
+ * e.g. 124832000 paise -> "₹ 12,48,320"
+ */
+function formatINR(paise: number | undefined | null): string {
+  if (paise == null || isNaN(paise)) return '₹ 0';
+  const rupees = Math.round(paise / 100);
+  const isNeg = rupees < 0;
+  const abs = Math.abs(rupees);
+  return (isNeg ? '-₹ ' : '₹ ') + abs.toLocaleString('en-IN');
 }
-const loadJobs = (): ServiceJob[] => {
-  try { return JSON.parse(localStorage.getItem(SVC_KEY) || "[]"); } catch { return []; }
-};
-const saveJobs = (jobs: ServiceJob[]) => localStorage.setItem(SVC_KEY, JSON.stringify(jobs));
 
-const svcColor: Record<ServiceJob["status"], string> = {
-  "Pending":     "#FFB45F",
-  "In Progress": "#5685F5",
-  "Done":        "#20D9A3",
-};
+/**
+ * Format date for display: "28 Sep 2024"
+ */
+function formatDateDisplay(dateStr?: string): string {
+  const d = dateStr ? new Date(dateStr) : new Date();
+  if (isNaN(d.getTime())) {
+    const today = new Date();
+    return `${today.getDate()} ${MONTHS_ABBR[today.getMonth()]} ${today.getFullYear()}`;
+  }
+  return `${d.getDate()} ${MONTHS_ABBR[d.getMonth()]} ${d.getFullYear()}`;
+}
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
-  companyId, onOpenNewVoucher, onViewVoucher, onNavigateReports
+  companyId,
+  company,
+  activeFy,
+  user,
+  currentDate,
+  onOpenNewVoucher,
+  onViewVoucher,
+  onNavigateReports,
+  onNavigateTab
 }) => {
   const [data, setData] = useState<any>(null);
+  const [pnlData, setPnlData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<"Monthly"|"Quarterly"|"Yearly">("Monthly");
-  const [serviceJobs, setServiceJobs] = useState<ServiceJob[]>(loadJobs);
-  const [showAddJob, setShowAddJob] = useState(false);
-  const [newJob, setNewJob] = useState({ type: "Printer", customer: "", device: "", status: "Pending" as ServiceJob["status"] });
+  const [error, setError] = useState<string | null>(null);
+  const [period, setPeriod] = useState<'Last 6 Months' | 'This FY' | 'Last 12 Months'>('Last 6 Months');
+  const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
+  const [isFullscreenChart, setIsFullscreenChart] = useState(false);
 
-  useEffect(() => {
+  const loadDashboardData = async () => {
     if (!companyId) return;
     setLoading(true);
-    api.getDashboard(companyId).then(setData).catch(console.error).finally(() => setLoading(false));
-  }, [companyId]);
+    setError(null);
+    try {
+      const todayStr = currentDate || new Date().toISOString().split('T')[0];
+      const fyStart = activeFy?.start_date || '2024-04-01';
 
-  const rawTrend: { month: string; voucher_type: string; total: number }[] = data?.trendData || [];
-  const trendMap: Record<string, { s: number; p: number }> = {};
-  rawTrend.forEach(r => {
-    if (!trendMap[r.month]) trendMap[r.month] = { s: 0, p: 0 };
-    if (r.voucher_type === "SALES") trendMap[r.month].s = r.total / 100;
-    if (r.voucher_type === "PURCHASE") trendMap[r.month].p = r.total / 100;
-  });
-  const sortedMonths = Object.keys(trendMap).sort();
-  const last6 = sortedMonths.slice(-6);
-  const bars: { m: string; s: number; p: number }[] =
-    last6.length > 0
-      ? last6.map(mo => {
-          const [, mm] = mo.split("-");
-          return { m: MONTHS_ABBR[parseInt(mm, 10) - 1] || mo, s: trendMap[mo].s, p: trendMap[mo].p };
+      // Parallel fetch of dashboard summary and profit & loss report
+      const [dashRes, pnlRes] = await Promise.all([
+        api.getDashboard(companyId).catch((err) => {
+          console.warn('Dashboard summary fetch failed:', err);
+          return null;
+        }),
+        api.getProfitAndLoss(companyId, fyStart, todayStr).catch((err) => {
+          console.warn('P&L report fetch failed:', err);
+          return null;
         })
-      : [0,1,2,3,4,5].map(i => {
-          const d = new Date(); d.setMonth(d.getMonth() - (5 - i));
-          return { m: MONTHS_ABBR[d.getMonth()], s: 0, p: 0 };
-        });
-  const maxBar = Math.max(...bars.map(b => Math.max(b.s, b.p)), 1);
+      ]);
 
-  const recent = data?.recentVouchers?.slice(0, 6).map((v: any) => ({
-    id: v.voucher_id, vType: v.voucher_type,
-    label: v.voucher_type === "SALES" ? "Sales" : v.voucher_type === "PURCHASE" ? "Purchase"
-         : v.voucher_type === "RECEIPT" ? "Receipt" : "Payment",
-    number: v.voucher_number, party: v.party_name || "General",
-    amount: fmt(v.total_amount_paise),
-  })) ?? [];
+      if (!dashRes && !pnlRes) {
+        throw new Error('Unable to connect to financial report server');
+      }
 
-  const sales = (data?.todaySalesPaise ?? 0) / 100;
-  const purchases = (data?.todayPurchasesPaise ?? 0) / 100;
-  const total = sales + purchases || 1;
-  const sPct = Math.round((sales / total) * 100);
-  const pPct = 100 - sPct;
-  const R = 36, C = 2 * Math.PI * R;
-  const sDash = (sPct / 100) * C;
-
-  const card: React.CSSProperties = {
-    borderRadius: 16, overflow: "hidden",
-    display: "flex", flexDirection: "column",
-    transition: "box-shadow 0.22s ease, transform 0.2s ease, border-color 0.2s ease",
-  };
-  const kpiClasses = ["kpi-card-sales", "kpi-card-receivable", "kpi-card-payable", "kpi-card-cash"];
-  const vDot: Record<string, string> = {
-    SALES: ACCENT, PURCHASE: "#5685F5", RECEIPT: "#20D9A3", PAYMENT: "#FFB45F"
-
+      setData(dashRes);
+      setPnlData(pnlRes);
+    } catch (err: any) {
+      console.error('Failed to load dashboard:', err);
+      setError(err.message || 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const addServiceJob = () => {
-    if (!newJob.customer.trim() || !newJob.device.trim()) return;
-    const job: ServiceJob = {
-      id: Date.now().toString(), type: newJob.type,
-      customer: newJob.customer.trim(), device: newJob.device.trim(),
-      status: newJob.status, date: new Date().toLocaleDateString("en-IN"),
+  useEffect(() => {
+    loadDashboardData();
+  }, [companyId, activeFy?.fy_id, currentDate]);
+
+  // Authenticated user greeting based on time of day
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    const timeGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    const rawName = user?.fullName || 'Business Owner';
+    const firstName = rawName.split(' ')[0];
+    return `${timeGreeting}, ${firstName} 👋`;
+  }, [user]);
+
+  // Extract financial metrics from real backend responses
+  const totalSalesPaise = useMemo(() => {
+    if (pnlData?.tradingIncomePaise != null && pnlData.tradingIncomePaise > 0) {
+      return pnlData.tradingIncomePaise;
+    }
+    return data?.todaySalesPaise ?? 0;
+  }, [pnlData, data]);
+
+  const totalPurchasePaise = useMemo(() => {
+    if (pnlData?.tradingExpensePaise != null && pnlData.tradingExpensePaise > 0) {
+      return pnlData.tradingExpensePaise;
+    }
+    return data?.todayPurchasesPaise ?? 0;
+  }, [pnlData, data]);
+
+  const receivablesPaise = data?.receivablesPaise ?? 0;
+  const payablesPaise = data?.payablesPaise ?? 0;
+  const serviceIncomePaise = pnlData?.indirectIncomePaise ?? 0;
+  const cashBankPaise = data?.cashBankPaise ?? 0;
+
+  // Process trend data for the 6-month grouped bar chart
+  const { chartBars, yMax, yLabels, salesTrendPct, purchaseTrendPct } = useMemo(() => {
+    const rawTrend: { month: string; voucher_type: string; total: number }[] = data?.trendData || [];
+    const trendMap: Record<string, { s: number; p: number }> = {};
+
+    rawTrend.forEach((r) => {
+      if (!trendMap[r.month]) trendMap[r.month] = { s: 0, p: 0 };
+      if (r.voucher_type === 'SALES') trendMap[r.month].s = r.total;
+      if (r.voucher_type === 'PURCHASE') trendMap[r.month].p = r.total;
+    });
+
+    const sortedMonths = Object.keys(trendMap).sort();
+
+    // Determine month-over-month trend legitimately from real data
+    let sTrend: number | null = null;
+    let pTrend: number | null = null;
+    if (sortedMonths.length >= 2) {
+      const currMo = sortedMonths[sortedMonths.length - 1];
+      const prevMo = sortedMonths[sortedMonths.length - 2];
+      const prevS = trendMap[prevMo].s;
+      const currS = trendMap[currMo].s;
+      if (prevS > 0) {
+        sTrend = Math.round(((currS - prevS) / prevS) * 1000) / 10;
+      }
+      const prevP = trendMap[prevMo].p;
+      const currP = trendMap[currMo].p;
+      if (prevP > 0) {
+        pTrend = Math.round(((currP - prevP) / prevP) * 1000) / 10;
+      }
+    }
+
+    // Build the 6 months list (either recent 6 months with data or previous 6 calendar months)
+    let monthsToDisplay: string[] = [];
+    if (sortedMonths.length > 0) {
+      monthsToDisplay = sortedMonths.slice(-6);
+    }
+
+    if (monthsToDisplay.length < 6) {
+      const today = new Date();
+      const filler: string[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        filler.push(`${y}-${m}`);
+      }
+      monthsToDisplay = filler;
+    }
+
+    const bars = monthsToDisplay.map((moKey) => {
+      const [, mm] = moKey.split('-');
+      const monthIdx = parseInt(mm, 10) - 1;
+      const sPaise = trendMap[moKey]?.s ?? 0;
+      const pPaise = trendMap[moKey]?.p ?? 0;
+      return {
+        key: moKey,
+        monthName: MONTHS_ABBR[monthIdx] || moKey,
+        salesPaise: sPaise,
+        purchasePaise: pPaise
+      };
+    });
+
+    const maxValPaise = Math.max(...bars.map((b) => Math.max(b.salesPaise, b.purchasePaise)), 10000000); // min 1L for scale
+    const maxRupees = maxValPaise / 100;
+
+    // Y-Axis scale formatted in Lakhs (L) or Thousands (K)
+    const formatScaleLabel = (rupees: number) => {
+      if (rupees >= 100000) {
+        const l = rupees / 100000;
+        return `${Number.isInteger(l) ? l : l.toFixed(1)}L`;
+      }
+      if (rupees >= 1000) {
+        const k = rupees / 1000;
+        return `${Number.isInteger(k) ? k : k.toFixed(0)}K`;
+      }
+      return rupees === 0 ? '0' : String(rupees);
     };
-    const updated = [job, ...serviceJobs];
-    setServiceJobs(updated); saveJobs(updated);
-    setNewJob({ type: "Printer", customer: "", device: "", status: "Pending" });
-    setShowAddJob(false);
-  };
-  const cycleStatus = (id: string) => {
-    const order: ServiceJob["status"][] = ["Pending", "In Progress", "Done"];
-    const updated = serviceJobs.map(j =>
-      j.id === id ? { ...j, status: order[(order.indexOf(j.status) + 1) % 3] } : j
-    );
-    setServiceJobs(updated); saveJobs(updated);
-  };
-  const removeJob = (id: string) => {
-    const updated = serviceJobs.filter(j => j.id !== id);
-    setServiceJobs(updated); saveJobs(updated);
-  };
-  const jobCounts = { Pending: 0, "In Progress": 0, Done: 0 };
-  serviceJobs.forEach(j => { jobCounts[j.status]++; });
 
-  if (loading) return <div style={{ padding: 40, color: "var(--text-muted)", fontSize: 15 }}>Loading dashboard…</div>;
+    const yLevels = [1, 0.75, 0.5, 0.25, 0].map((step) => formatScaleLabel(maxRupees * step));
 
-  return (
-    <div style={{ padding: "24px 28px", maxWidth: 1400, margin: "0 auto" }}>
+    return {
+      chartBars: bars,
+      yMax: maxValPaise,
+      yLabels: yLevels,
+      salesTrendPct: sTrend,
+      purchaseTrendPct: pTrend
+    };
+  }, [data]);
 
-      {/* HEADER */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: 22 }}>
-        <div>
-          <div style={{ fontSize:12, color:"var(--text-muted)", fontWeight:600, letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:4 }}>Overview</div>
-          <h1 style={{ fontSize:24, fontWeight:700, letterSpacing:"-0.02em", color:"var(--text-primary)" }}>Financial Dashboard</h1>
-        </div>
-        <div style={{ display:"flex", gap:10 }}>
-          {[{label:"Sales Invoice",type:"SALES"},{label:"Receipt",type:"RECEIPT"},{label:"Payment",type:"PAYMENT"}].map(a => (
-            <button key={a.type} onClick={() => onOpenNewVoucher(a.type)}
-              style={{ padding:"9px 15px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface)",
-                color:"var(--text-primary)", fontSize:13, fontWeight:600, cursor:"pointer",
-                display:"flex", alignItems:"center", gap:5, transition:"all 0.15s" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = ACCENT; (e.currentTarget as HTMLElement).style.color = ACCENT; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLElement).style.color = "var(--text-primary)"; }}>
-              + {a.label}
-            </button>
-          ))}
-        </div>
-      </div>
+  // Semicircular Business Health Gauge calculations
+  const { healthScore, healthStatusText, healthDescText, salesShare, purchaseShare, recvShare, payShare, svcShare } = useMemo(() => {
+    const totalBenchmark = Math.max(totalSalesPaise, 1);
 
-      {/* ROW 1: KPI CARDS */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:16, marginBottom:20 }}>
-        {[
-          { title:"Today's Sales", value:fmt(data?.todaySalesPaise), badge:data?.todaySalesPaise>0?"+Active":"None", good:(data?.todaySalesPaise??0)>0, icon:<TrendingUp size={26} strokeWidth={1.5} color={ACCENT}/>, tab:"sales_register" },
-          { title:"Receivables",   value:fmt(data?.receivablesPaise), badge:data?.receivablesPaise>0?"Pending":"Clear", good:(data?.receivablesPaise??0)===0, icon:<ArrowUpRight size={26} strokeWidth={1.5} color="#5685F5"/>, tab:"outstanding" },
-          { title:"Payables",      value:fmt(data?.payablesPaise),    badge:data?.payablesPaise>0?"Due":"Clear",        good:(data?.payablesPaise??0)===0,    icon:<Wallet size={26} strokeWidth={1.5} color="#FFB45F"/>, tab:"outstanding" },
-          { title:"Cash & Bank",   value:fmt(data?.cashBankPaise),    badge:"Liquid",                                   good:true,                            icon:<Boxes size={26} strokeWidth={1.5} color="#20D9A3"/>, tab:"trial_balance" },
-        ].map((k, i) => (
-          <div key={i} className={`kpi-card ${kpiClasses[i]}`} style={{ ...card, cursor: "pointer" }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-3px)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ""; }}
-          >
-            <div style={{ padding:"20px 20px 14px", flex:1 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
-                <span style={{ fontSize:13, fontWeight:600, color:"var(--text-secondary)" }}>{k.title}</span>
-                <div className="kpi-icon-chip" style={{ width:46, height:46, borderRadius:12, background:"var(--bg-subtle)", display:"flex", alignItems:"center", justifyContent:"center" }}>{k.icon}</div>
-              </div>
-              <div style={{ fontSize:23, fontWeight:800, letterSpacing:"-0.03em", color:"var(--text-primary)", marginBottom:8, fontVariantNumeric:"tabular-nums" }}>{k.value}</div>
-              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                <span style={{ fontSize:11, fontWeight:700, padding:"2px 7px", borderRadius:20,
-                  background: k.good?"rgba(32,217,163,0.12)":"rgba(255,87,51,0.1)",
-                  color: k.good?"#20D9A3":ACCENT }}>{k.badge}</span>
-                <span style={{ fontSize:11, color:"var(--text-muted)" }}>vs last period</span>
-              </div>
-            </div>
-            <button onClick={() => onNavigateReports(k.tab)}
-              style={{ padding:"10px 20px", background:"transparent",
-                border:"none", display:"flex", alignItems:"center", justifyContent:"space-between",
-                cursor:"pointer", fontSize:13, fontWeight:600, color:"var(--text-secondary)", transition:"color 0.15s",
-                borderTop:"1px solid var(--border)" } as any}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = ACCENT; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; }}>
-              See Details <ArrowRight size={14}/>
-            </button>
-          </div>
-        ))}
-      </div>
+    // Compute standard accounting liquidity ratio: (Cash & Bank + Receivables) / Payables
+    const liquidAssets = Math.max(0, cashBankPaise) + receivablesPaise;
+    const currentLiabilities = payablesPaise;
 
-      {/* ROW 2: BAR CHART + RECENT ACTIVITY */}
-      <div style={{ display:"grid", gridTemplateColumns:"1.55fr 1fr", gap:16, marginBottom:20 }}>
-        <div className="dash-panel" style={{ ...card }}>
-          <div style={{ padding:"20px 24px 14px", borderBottom:"1px solid var(--border)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+    let computedScore = 0;
+    let statusText = 'Welcome to LedgerFlow! ✨';
+    let descText = 'Post your first sales and purchase vouchers to activate live business health tracking.';
+
+    const hasAnyTransactions = totalSalesPaise > 0 || totalPurchasePaise > 0 || receivablesPaise > 0 || payablesPaise > 0;
+
+    if (hasAnyTransactions) {
+      if (currentLiabilities > 0) {
+        const quickRatio = liquidAssets / currentLiabilities;
+        // 1.0 quick ratio maps to 80 points; 1.5+ quick ratio maps to 90-100 points
+        computedScore = Math.min(100, Math.max(10, Math.round(quickRatio * 80)));
+      } else if (liquidAssets > 0) {
+        // Zero debt / payables with positive liquidity
+        computedScore = 95;
+      } else {
+        computedScore = 65;
+      }
+
+      if (computedScore >= 80) {
+        statusText = 'Your business is performing well! ✨';
+        descText = "You're ahead in key areas like collections, working capital, and operational liquidity.";
+      } else if (computedScore >= 60) {
+        statusText = 'Business health is stable 👍';
+        descText = 'Working capital is balanced. Monitor outstanding receivables to ensure steady cash flow.';
+      } else {
+        statusText = 'Attention recommended ⚠️';
+        descText = 'Short-term payables exceed liquid reserves. Review upcoming supplier dues and accelerate collections.';
+      }
+    }
+
+    const calcShare = (val: number) => {
+      if (totalSalesPaise <= 0) return '--';
+      const pct = (val / totalBenchmark) * 100;
+      return `${pct >= 100 ? '100%' : pct.toFixed(1) + '%'}`;
+    };
+
+    return {
+      healthScore: hasAnyTransactions ? computedScore : 0,
+      healthStatusText: statusText,
+      healthDescText: descText,
+      salesShare: totalSalesPaise > 0 ? '100%' : '--',
+      purchaseShare: calcShare(totalPurchasePaise),
+      recvShare: calcShare(receivablesPaise),
+      payShare: calcShare(payablesPaise),
+      svcShare: calcShare(serviceIncomePaise)
+    };
+  }, [totalSalesPaise, totalPurchasePaise, receivablesPaise, payablesPaise, serviceIncomePaise, cashBankPaise]);
+
+  // Recent vouchers list from backend
+  const recentVouchers = useMemo(() => {
+    const list: any[] = data?.recentVouchers || [];
+    return list.slice(0, 5);
+  }, [data]);
+
+  // Loading skeleton screen preserving exact composition
+  if (loading) {
+    return (
+      <div className="lf-dashboard">
+        <div className="lf-dashboard-content">
+          {/* Header Skeleton */}
+          <div className="lf-dashboard-header">
             <div>
-              <div style={{ fontSize:14, fontWeight:700, color:"var(--text-primary)" }}>Sales & Purchase Trend</div>
-              <div style={{ fontSize:12, color:"var(--text-muted)", marginTop:2 }}>
-                {last6.length > 0 ? "Actual posted vouchers by month" : "No vouchers posted yet — start billing to see real data"}
+              <Skeleton width={260} height={28} borderRadius={6} />
+              <div style={{ marginTop: 6 }}>
+                <Skeleton width={320} height={16} borderRadius={4} />
               </div>
             </div>
-            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-              {[{label:"Sales",color:ACCENT},{label:"Purchase",color:"#5685F5"}].map(l=>(
-                <span key={l.label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color:"var(--text-secondary)", fontWeight:500 }}>
-                  <span style={{ width:8, height:8, borderRadius:"50%", background:l.color, display:"inline-block" }}/>{l.label}
-                </span>
-              ))}
-              <select value={period} onChange={e => setPeriod(e.target.value as any)}
-                style={{ fontSize:12, padding:"4px 8px", borderRadius:8, border:"1px solid var(--border)", background:"var(--surface)", color:"var(--text-secondary)", cursor:"pointer" }}>
-                <option value="Monthly">Last 6 Months</option>
-                <option value="Quarterly">This FY</option>
-                <option value="Yearly">Last 12 Months</option>
-              </select>
-            </div>
-          </div>
-          <div style={{ padding:"20px 24px 16px", flex:1 }}>
-            <div style={{ display:"flex", gap:12, alignItems:"flex-end" }}>
-              <div style={{ display:"flex", flexDirection:"column", justifyContent:"space-between", alignItems:"flex-end", paddingBottom:20, height:160, flexShrink:0 }}>
-                {["100%","75%","50%","25%","0"].map(l=><span key={l} style={{ fontSize:11, color:"var(--text-muted)", lineHeight:1 }}>{l}</span>)}
-              </div>
-              <div style={{ flex:1, display:"flex", alignItems:"flex-end", gap:8, position:"relative", height:180 }}>
-                {[0,25,50,75,100].map(pct=>(
-                  <div key={pct} style={{ position:"absolute", left:0, right:0, bottom:`calc(${pct/100*160}px + 20px)`, height:1, background:"var(--border-subtle)" }}/>
-                ))}
-                {bars.map((b,i)=>(
-                  <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center" }}>
-                    <div style={{ display:"flex", gap:4, alignItems:"flex-end", height:160, width:"100%", justifyContent:"center" }}>
-                      {[
-                        { h:Math.max((b.s/maxBar)*160, b.s>0?4:2), color:ACCENT, glow:"rgba(255,87,51,0.3)", val:b.s },
-                        { h:Math.max((b.p/maxBar)*160, b.p>0?4:2), color:"#5685F5", glow:"rgba(86,133,245,0.3)", val:b.p }
-                      ].map((bar,bi)=>(
-                        <div key={bi}
-                          title={`${bi===0?"Sales":"Purchase"}: ${bar.val>0?"₹"+bar.val.toLocaleString("en-IN",{maximumFractionDigits:0}):"No data"}`}
-                          style={{ width:14, height:bar.h, minHeight:2,
-                            background: bar.val===0 ? "var(--border-subtle)" : `linear-gradient(180deg,${bar.color} 0%,${bar.color}BB 100%)`,
-                            borderRadius:"6px 6px 4px 4px",
-                            boxShadow: bar.val>0 ? `0 4px 12px ${bar.glow}` : "none",
-                            transition:"height 0.4s ease" }}/>
-                      ))}
-                    </div>
-                    <span style={{ fontSize:11, color:"var(--text-muted)", marginTop:6, fontWeight:500 }}>{b.m}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="dash-panel" style={{ ...card }}>
-          <div style={{ padding:"20px 20px 14px", borderBottom:"1px solid var(--border)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div>
-              <div style={{ fontSize:14, fontWeight:700, color:"var(--text-primary)" }}>Recent Activity</div>
-              <div style={{ fontSize:12, color:"var(--text-muted)", marginTop:2 }}>Latest posted vouchers</div>
-            </div>
-            <button onClick={() => onNavigateReports("daybook")}
-              style={{ background:"none", border:"none", color:ACCENT, fontSize:12, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:3 }}>
-              Day Book <ChevronRight size={13}/>
-
-            </button>
-          </div>
-          <div style={{ flex:1, overflowY:"auto" }}>
-            {recent.length>0 ? recent.map((v:any,i:number)=>(
-              <div key={i} onClick={()=>onViewVoucher(v.id)}
-                style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 20px",
-                  borderBottom:"1px solid var(--border-subtle)", cursor:"pointer", transition:"background 0.12s" }}
-                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="var(--bg-hover)";}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";}}>
-                <div style={{ width:36, height:36, borderRadius:10, flexShrink:0, background:`${vDot[v.vType]||ACCENT}22`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <ReceiptText size={15} color={vDot[v.vType]||ACCENT}/>
-                </div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13, fontWeight:600, color:"var(--text-primary)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{v.label}</div>
-                  <div style={{ fontSize:11, color:"var(--text-muted)", marginTop:1 }}>{v.number} · {v.party}</div>
-                </div>
-                <div style={{ textAlign:"right", flexShrink:0 }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:"var(--text-primary)", fontVariantNumeric:"tabular-nums" }}>{v.amount}</div>
-                  <div style={{ fontSize:10, color:"#20D9A3", fontWeight:700, marginTop:1 }}>Posted</div>
-                </div>
-              </div>
-            )) : (
-              <div style={{ textAlign:"center", padding:"40px 16px", color:"var(--text-muted)", fontSize:13 }}>
-                <ReceiptText size={32} color="var(--border)" style={{ marginBottom:10 }}/>
-                <div style={{ fontWeight:600, color:"var(--text-secondary)", marginBottom:4 }}>No transactions yet</div>
-                Record your first voucher using the buttons above.
-              </div>
-            )}
-          </div>
-          <button onClick={()=>onOpenNewVoucher("SALES")}
-            style={{ margin:"12px 16px", padding:"11px", borderRadius:10,
-              background:`linear-gradient(135deg,${ACCENT} 0%,${ACCENT2} 100%)`,
-              border:"none", color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer",
-              display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-            + New Sales Invoice
-          </button>
-        </div>
-      </div>
-
-      {/* ROW 3: SERVICE JOBS + TODAY'S SPLIT */}
-      <div style={{ display:"grid", gridTemplateColumns:"1.6fr 1fr", gap:16 }}>
-
-        {/* SERVICE JOBS */}
-        <div className="dash-panel" style={card}>
-          <div style={{ padding:"18px 24px 14px", borderBottom:"1px solid var(--border)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div>
-              <div style={{ fontSize:14, fontWeight:700, color:"var(--text-primary)" }}>Service Jobs</div>
-              <div style={{ fontSize:12, color:"var(--text-muted)", marginTop:2 }}>Printer · Desktop · Laptop repairs & service</div>
-            </div>
-            <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-              {(["Pending","In Progress","Done"] as ServiceJob["status"][]).map(s => (
-                <span key={s} style={{ fontSize:11, fontWeight:700, color:svcColor[s] }}>
-                  {jobCounts[s]} {s}
-                </span>
-              ))}
-              <button onClick={() => setShowAddJob(!showAddJob)}
-                style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px", borderRadius:8,
-                  background:`linear-gradient(135deg,${ACCENT} 0%,${ACCENT2} 100%)`,
-                  border:"none", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-                <PlusCircle size={13}/> Add Job
-              </button>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <Skeleton width={140} height={18} borderRadius={4} />
+              <Skeleton width={170} height={14} borderRadius={4} />
             </div>
           </div>
 
-          {showAddJob && (
-            <div style={{ padding:"14px 24px", borderBottom:"1px solid var(--border-subtle)", background:"var(--bg-subtle)", display:"flex", gap:10, alignItems:"flex-end", flexWrap:"wrap" }}>
-              <div style={{ flex:"1 1 100px" }}>
-                <label style={{ fontSize:11, fontWeight:600, color:"var(--text-secondary)", display:"block", marginBottom:3 }}>Type</label>
-                <select value={newJob.type} onChange={e => setNewJob({...newJob, type: e.target.value})}
-                  style={{ width:"100%", fontSize:13, padding:"6px 8px" }}>
-                  {["Printer","Desktop","Laptop","UPS/Other"].map(t => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-              <div style={{ flex:"2 1 140px" }}>
-                <label style={{ fontSize:11, fontWeight:600, color:"var(--text-secondary)", display:"block", marginBottom:3 }}>Customer Name</label>
-                <input placeholder="Customer name" value={newJob.customer} onChange={e => setNewJob({...newJob, customer: e.target.value})}
-                  style={{ width:"100%", fontSize:13, padding:"6px 10px" }}/>
-              </div>
-              <div style={{ flex:"2 1 140px" }}>
-                <label style={{ fontSize:11, fontWeight:600, color:"var(--text-secondary)", display:"block", marginBottom:3 }}>Device / Model</label>
-                <input placeholder="e.g. HP LaserJet M1005" value={newJob.device} onChange={e => setNewJob({...newJob, device: e.target.value})}
-                  style={{ width:"100%", fontSize:13, padding:"6px 10px" }}/>
-              </div>
-              <div style={{ flex:"1 1 90px" }}>
-                <label style={{ fontSize:11, fontWeight:600, color:"var(--text-secondary)", display:"block", marginBottom:3 }}>Status</label>
-                <select value={newJob.status} onChange={e => setNewJob({...newJob, status: e.target.value as ServiceJob["status"]})}
-                  style={{ width:"100%", fontSize:13, padding:"6px 8px" }}>
-                  <option>Pending</option><option>In Progress</option><option>Done</option>
-                </select>
-              </div>
-              <button onClick={addServiceJob}
-                style={{ padding:"8px 16px", borderRadius:8, background:ACCENT, border:"none", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer", flexShrink:0 }}>
-                Save
-              </button>
-              <button onClick={() => setShowAddJob(false)}
-                style={{ padding:"8px 12px", borderRadius:8, background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text-secondary)", fontWeight:600, fontSize:13, cursor:"pointer", flexShrink:0 }}>
-                Cancel
-              </button>
-            </div>
-          )}
-
-          <div style={{ flex:1, overflowY:"auto", maxHeight:260 }}>
-            {serviceJobs.length === 0 ? (
-              <div style={{ textAlign:"center", padding:"36px 16px", color:"var(--text-muted)", fontSize:13 }}>
-                <Wrench size={30} color="var(--border)" style={{ marginBottom:10 }}/>
-                <div style={{ fontWeight:600, color:"var(--text-secondary)", marginBottom:4 }}>No service jobs yet</div>
-                Click "Add Job" to track printer, desktop or laptop repairs.
-              </div>
-            ) : serviceJobs.map(j => (
-              <div key={j.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 20px",
-                borderBottom:"1px solid var(--border-subtle)", transition:"background 0.12s" }}
-                onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background="var(--bg-hover)";}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background="transparent";}}>
-                <div style={{ width:36, height:36, borderRadius:10, flexShrink:0, background:`${svcColor[j.status]}22`,
-                  display:"flex", alignItems:"center", justifyContent:"center", color:svcColor[j.status] }}>
-                  {j.type === "Printer" ? <Printer size={15}/> : j.type === "Desktop" ? <Monitor size={15}/> : j.type === "Laptop" ? <Laptop size={15}/> : <Wrench size={15}/>}
+          {/* 5 KPI Cards Skeleton */}
+          <div className="lf-kpi-grid">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="lf-kpi-card-mockup" style={{ minHeight: 124 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <Skeleton width={110} height={20} borderRadius={6} />
+                  <Skeleton width={16} height={16} borderRadius={4} />
                 </div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13, fontWeight:600, color:"var(--text-primary)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{j.customer}</div>
-                  <div style={{ fontSize:11, color:"var(--text-muted)", marginTop:1 }}>{j.type} · {j.device}</div>
-                </div>
-                <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
-                  <button onClick={() => cycleStatus(j.id)} title="Click to advance status"
-                    style={{ fontSize:11, fontWeight:700, padding:"3px 9px", borderRadius:20, border:"none", cursor:"pointer",
-                      background:`${svcColor[j.status]}22`, color:svcColor[j.status] }}>
-                    {j.status}
-                  </button>
-                  <span style={{ fontSize:11, color:"var(--text-muted)" }}>{j.date}</span>
-                  <button onClick={() => removeJob(j.id)}
-                    style={{ background:"none", border:"none", color:"var(--text-muted)", cursor:"pointer", padding:"2px", display:"flex" }}>
-                    <Trash2 size={13}/>
-                  </button>
+                <Skeleton width={130} height={26} borderRadius={4} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
+                  <Skeleton width={70} height={16} borderRadius={4} />
+                  <Skeleton width={48} height={24} borderRadius={4} />
                 </div>
               </div>
             ))}
           </div>
-        </div>
 
-        {/* TODAY'S SPLIT */}
-        <div className="dash-panel" style={card}>
-          <div style={{ padding:"20px 20px 14px", borderBottom:"1px solid var(--border)" }}>
-            <div style={{ fontSize:14, fontWeight:700, color:"var(--text-primary)" }}>Today's Split</div>
-            <div style={{ fontSize:12, color:"var(--text-muted)", marginTop:2 }}>Sales vs Purchases</div>
-          </div>
-          <div style={{ padding:"20px", flex:1, display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:20, marginBottom:16 }}>
-              <div style={{ position:"relative", flexShrink:0 }}>
-                <svg width={96} height={96} viewBox="0 0 96 96">
-                  <circle cx={48} cy={48} r={R} fill="none" stroke="var(--border)" strokeWidth={9}/>
-                  <circle cx={48} cy={48} r={R} fill="none" stroke={ACCENT} strokeWidth={9} strokeLinecap="round"
-                    strokeDasharray={`${sDash} ${C}`} transform="rotate(-90 48 48)"
-                    style={{ transition:"stroke-dasharray 0.6s ease" }}/>
-                  <circle cx={48} cy={48} r={R} fill="none" stroke="#5685F5" strokeWidth={9} strokeLinecap="round"
-                    strokeDasharray={`${C-sDash} ${C}`} strokeDashoffset={-sDash} transform="rotate(-90 48 48)"/>
-                </svg>
-                <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-                  <span style={{ fontSize:16, fontWeight:800, color:"var(--text-primary)" }}>{sPct}%</span>
-                  <span style={{ fontSize:9, color:"var(--text-muted)", fontWeight:500 }}>Sales</span>
+          {/* Middle Row Skeleton */}
+          <div className="lf-dashboard-grid-middle">
+            <div className="lf-panel-card" style={{ height: 320 }}>
+              <div style={{ padding: 18 }}>
+                <Skeleton width={180} height={22} borderRadius={6} />
+              </div>
+              <div style={{ padding: 24, display: 'flex', gap: 20 }}>
+                <Skeleton width={180} height={180} borderRadius={90} />
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {[1, 2, 3, 4, 5].map((k) => (
+                    <Skeleton key={k} width="100%" height={18} borderRadius={4} />
+                  ))}
                 </div>
               </div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:22, fontWeight:800, letterSpacing:"-0.03em", color:"var(--text-primary)", marginBottom:2 }}>
-                  {fmt((data?.todaySalesPaise??0)+(data?.todayPurchasesPaise??0))}
-                </div>
-                <div style={{ fontSize:12, color:"var(--text-muted)", marginBottom:14 }}>Total today's volume</div>
-                {[
-                  { label:"Sales",     color:ACCENT,    pct:sPct, val:fmt(data?.todaySalesPaise) },
-                  { label:"Purchases", color:"#5685F5", pct:pPct, val:fmt(data?.todayPurchasesPaise) },
-                ].map(row=>(
-                  <div key={row.label} style={{ marginBottom:10 }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:4 }}>
-                      <span style={{ display:"flex", alignItems:"center", gap:6, color:"var(--text-secondary)", fontWeight:500 }}>
-                        <span style={{ width:7, height:7, borderRadius:"50%", background:row.color, display:"inline-block" }}/>{row.label}
-                      </span>
-                      <span style={{ fontWeight:700, color:"var(--text-primary)", fontVariantNumeric:"tabular-nums" }}>{row.val}</span>
-                    </div>
-                    <div style={{ height:5, borderRadius:10, background:"var(--border)" }}>
-                      <div style={{ height:"100%", width:`${row.pct}%`, borderRadius:10, background:row.color, transition:"width 0.5s ease" }}/>
-                    </div>
-                  </div>
+            </div>
+
+            <div className="lf-panel-card" style={{ height: 320 }}>
+              <div style={{ padding: 18 }}>
+                <Skeleton width={220} height={22} borderRadius={6} />
+              </div>
+              <div style={{ padding: 24 }}>
+                <Skeleton width="100%" height={210} borderRadius={8} />
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Row Skeleton */}
+          <div className="lf-dashboard-grid-bottom">
+            <div className="lf-panel-card" style={{ height: 290 }}>
+              <div style={{ padding: 18 }}>
+                <Skeleton width={160} height={22} borderRadius={6} />
+              </div>
+              <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {[1, 2, 3, 4].map((k) => (
+                  <Skeleton key={k} width="100%" height={24} borderRadius={4} />
                 ))}
               </div>
             </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:7, borderTop:"1px solid var(--border-subtle)", paddingTop:14 }}>
-              {["Double-entry verified","Accounts balanced","GST engine active"].map(item=>(
-                <div key={item} style={{ display:"flex", alignItems:"center", gap:7, fontSize:12, color:"var(--text-secondary)" }}>
-                  <CheckCircle2 size={13} color="#20D9A3"/>{item}
+            <div className="lf-panel-card" style={{ height: 290 }}>
+              <div style={{ padding: 18 }}>
+                <Skeleton width={150} height={22} borderRadius={6} />
+              </div>
+              <div style={{ padding: 18, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {[1, 2, 3, 4, 5, 6].map((k) => (
+                  <Skeleton key={k} width="100%" height={56} borderRadius={8} />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error boundary state
+  if (error && !data) {
+    return (
+      <div className="lf-dashboard">
+        <div style={{ maxWidth: 500, margin: '60px auto', textAlign: 'center', padding: 32, background: 'var(--color-surface)', borderRadius: 12, border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-md)' }}>
+          <AlertCircle size={40} color="var(--color-danger, #EF4444)" style={{ marginBottom: 12 }} />
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: 'var(--color-text)' }}>Unable to Load Dashboard</h2>
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 20 }}>
+            {error || 'A problem occurred while retrieving your company financial metrics.'}
+          </p>
+          <button
+            type="button"
+            className="lf-ctrl-btn"
+            onClick={loadDashboardData}
+            style={{ padding: '8px 18px', background: 'var(--color-primary)', color: '#fff', border: 'none', fontWeight: 600, display: 'inline-flex', margin: '0 auto' }}
+          >
+            <RefreshCw size={14} /> Retry Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="lf-dashboard">
+      <div className="lf-dashboard-content">
+        {/* ==========================================================
+            1. HEADER SECTION
+            ========================================================== */}
+        <header className="lf-dashboard-header">
+          <div className="lf-dashboard-title-group">
+            <h1>{greeting}</h1>
+            <p className="lf-dashboard-subtitle">
+              Here's what's happening with your business today.
+            </p>
+          </div>
+
+          <div className="lf-dashboard-date-indicator">
+            <div className="lf-dashboard-date-badge">
+              <Calendar size={15} style={{ color: 'var(--color-text-muted, #94A3B8)' }} />
+              <span>Today, {formatDateDisplay(currentDate)}</span>
+            </div>
+            <span className="lf-dashboard-date-subtext">Compared to previous period</span>
+          </div>
+        </header>
+
+        {/* ==========================================================
+            2. ROW OF 5 KPI CARDS
+            1. Total Sales
+            2. Total Purchase
+            3. Receivables
+            4. Payables
+            5. Service Income
+            ========================================================== */}
+        <div className="lf-kpi-grid">
+          {/* 1. Total Sales */}
+          <div
+            className="lf-kpi-card-mockup"
+            onClick={() => onNavigateReports('pnl')}
+            title="View Sales Breakdown in Profit & Loss"
+          >
+            <div className="lf-kpi-card-top">
+              <div className="lf-kpi-card-icon-title">
+                <div className="lf-kpi-card-icon-box" style={{ background: '#FFF7ED', color: '#F97316' }}>
+                  <BarChart3 size={18} strokeWidth={2.2} />
                 </div>
-              ))}
+                <span className="lf-kpi-card-title">Total Sales</span>
+              </div>
+              <button type="button" className="lf-kpi-card-menu-btn" aria-label="Sales options" onClick={(e) => { e.stopPropagation(); onNavigateReports('pnl'); }}>
+                <MoreVertical size={15} />
+              </button>
+            </div>
+
+            <div className="lf-kpi-card-amount">{formatINR(totalSalesPaise)}</div>
+
+            <div className="lf-kpi-card-bottom">
+              <div className="lf-kpi-trend">
+                {salesTrendPct !== null ? (
+                  <>
+                    <span className={`lf-kpi-trend-badge ${salesTrendPct >= 0 ? 'positive' : 'negative'}`}>
+                      {salesTrendPct >= 0 ? '↑' : '↓'} {Math.abs(salesTrendPct)}%
+                    </span>
+                    <span className="lf-kpi-trend-label">vs last month</span>
+                  </>
+                ) : (
+                  <span className="lf-kpi-trend-label">Active Period</span>
+                )}
+              </div>
+
+              {/* 6 mini bars with orange graduation */}
+              <div className="lf-kpi-sparkline" style={{ gap: 2.5, height: 26 }}>
+                {[0.3, 0.45, 0.55, 0.7, 0.85, 1.0].map((h, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      width: 5,
+                      height: Math.max(6, Math.round(h * 24)),
+                      borderRadius: 1.5,
+                      backgroundColor: '#F97316',
+                      opacity: 0.25 + idx * 0.15
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Total Purchase */}
+          <div
+            className="lf-kpi-card-mockup"
+            onClick={() => onNavigateReports('pnl')}
+            title="View Purchases in Profit & Loss"
+          >
+            <div className="lf-kpi-card-top">
+              <div className="lf-kpi-card-icon-title">
+                <div className="lf-kpi-card-icon-box" style={{ background: '#FFF3ED', color: '#EA580C' }}>
+                  <ShoppingBag size={18} strokeWidth={2.2} />
+                </div>
+                <span className="lf-kpi-card-title">Total Purchase</span>
+              </div>
+              <button type="button" className="lf-kpi-card-menu-btn" aria-label="Purchase options" onClick={(e) => { e.stopPropagation(); onNavigateReports('pnl'); }}>
+                <MoreVertical size={15} />
+              </button>
+            </div>
+
+            <div className="lf-kpi-card-amount">{formatINR(totalPurchasePaise)}</div>
+
+            <div className="lf-kpi-card-bottom">
+              <div className="lf-kpi-trend">
+                {purchaseTrendPct !== null ? (
+                  <>
+                    <span className={`lf-kpi-trend-badge ${purchaseTrendPct <= 0 ? 'positive' : 'negative'}`}>
+                      {purchaseTrendPct >= 0 ? '↑' : '↓'} {Math.abs(purchaseTrendPct)}%
+                    </span>
+                    <span className="lf-kpi-trend-label">vs last month</span>
+                  </>
+                ) : (
+                  <span className="lf-kpi-trend-label">Active Period</span>
+                )}
+              </div>
+
+              {/* 6 mini bars with warm sand tint */}
+              <div className="lf-kpi-sparkline" style={{ gap: 2.5, height: 26 }}>
+                {[0.25, 0.35, 0.45, 0.6, 0.75, 0.9].map((h, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      width: 5,
+                      height: Math.max(6, Math.round(h * 24)),
+                      borderRadius: 1.5,
+                      backgroundColor: '#E2D9D0',
+                      opacity: 0.4 + idx * 0.12
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Receivables */}
+          <div
+            className="lf-kpi-card-mockup"
+            onClick={() => onNavigateReports('outstanding')}
+            title="View Customer Receivables"
+          >
+            <div className="lf-kpi-card-top">
+              <div className="lf-kpi-card-icon-title">
+                <div className="lf-kpi-card-icon-box" style={{ background: '#F1F5F9', color: '#475569' }}>
+                  <Users size={18} strokeWidth={2.2} />
+                </div>
+                <span className="lf-kpi-card-title">Receivables</span>
+              </div>
+              <button type="button" className="lf-kpi-card-menu-btn" aria-label="Receivables options" onClick={(e) => { e.stopPropagation(); onNavigateReports('outstanding'); }}>
+                <MoreVertical size={15} />
+              </button>
+            </div>
+
+            <div className="lf-kpi-card-amount">{formatINR(receivablesPaise)}</div>
+
+            <div className="lf-kpi-card-bottom">
+              <div className="lf-kpi-trend">
+                <span className="lf-kpi-trend-label">Due from Debtors</span>
+              </div>
+
+              {/* Mini curved sparkline curve */}
+              <div className="lf-kpi-sparkline" style={{ width: 56, height: 24 }}>
+                <svg width="56" height="24" viewBox="0 0 56 24" fill="none">
+                  <path
+                    d="M2 20C12 18 18 22 28 14C38 6 46 12 54 4"
+                    stroke="#F97316"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Payables */}
+          <div
+            className="lf-kpi-card-mockup"
+            onClick={() => onNavigateReports('outstanding')}
+            title="View Supplier Payables"
+          >
+            <div className="lf-kpi-card-top">
+              <div className="lf-kpi-card-icon-title">
+                <div className="lf-kpi-card-icon-box" style={{ background: '#FFF7ED', color: '#D97706' }}>
+                  <Wallet size={18} strokeWidth={2.2} />
+                </div>
+                <span className="lf-kpi-card-title">Payables</span>
+              </div>
+              <button type="button" className="lf-kpi-card-menu-btn" aria-label="Payables options" onClick={(e) => { e.stopPropagation(); onNavigateReports('outstanding'); }}>
+                <MoreVertical size={15} />
+              </button>
+            </div>
+
+            <div className="lf-kpi-card-amount">{formatINR(payablesPaise)}</div>
+
+            <div className="lf-kpi-card-bottom">
+              <div className="lf-kpi-trend">
+                <span className="lf-kpi-trend-label">Due to Creditors</span>
+              </div>
+
+              {/* Mini curved sparkline curve */}
+              <div className="lf-kpi-sparkline" style={{ width: 56, height: 24 }}>
+                <svg width="56" height="24" viewBox="0 0 56 24" fill="none">
+                  <path
+                    d="M2 18C10 20 20 12 30 16C40 20 48 8 54 6"
+                    stroke="#D97706"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity="0.85"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          {/* 5. Service Income */}
+          <div
+            className="lf-kpi-card-mockup"
+            onClick={() => (onNavigateTab ? onNavigateTab('service_bill') : onNavigateReports('pnl'))}
+            title="View Service Bills and Revenue"
+          >
+            <div className="lf-kpi-card-top">
+              <div className="lf-kpi-card-icon-title">
+                <div className="lf-kpi-card-icon-box" style={{ background: '#FFF3ED', color: '#F97316' }}>
+                  <Receipt size={18} strokeWidth={2.2} />
+                </div>
+                <span className="lf-kpi-card-title">Service Income</span>
+              </div>
+              <button type="button" className="lf-kpi-card-menu-btn" aria-label="Service options" onClick={(e) => { e.stopPropagation(); onNavigateReports('pnl'); }}>
+                <MoreVertical size={15} />
+              </button>
+            </div>
+
+            <div className="lf-kpi-card-amount">{formatINR(serviceIncomePaise)}</div>
+
+            <div className="lf-kpi-card-bottom">
+              <div className="lf-kpi-trend">
+                <span className="lf-kpi-trend-label">Repairs & Labor</span>
+              </div>
+
+              {/* 6 mini bars with warm sand tint */}
+              <div className="lf-kpi-sparkline" style={{ gap: 2.5, height: 26 }}>
+                {[0.2, 0.35, 0.45, 0.6, 0.8, 1.0].map((h, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      width: 5,
+                      height: Math.max(6, Math.round(h * 24)),
+                      borderRadius: 1.5,
+                      backgroundColor: '#E2D9D0',
+                      opacity: 0.4 + idx * 0.12
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ==========================================================
+            3. MIDDLE ROW:
+            LEFT: Business Health Semicircular Gauge
+            RIGHT: Sales & Purchase Overview Grouped Bar Chart
+            ========================================================== */}
+        <div className="lf-dashboard-grid-middle">
+          {/* 3A. BUSINESS HEALTH */}
+          <div className="lf-panel-card">
+            <div className="lf-panel-header">
+              <div className="lf-panel-header-left">
+                <div className="lf-panel-icon">
+                  <Activity size={18} strokeWidth={2.2} />
+                </div>
+                <span className="lf-panel-title">Business Health</span>
+                <span className="lf-panel-info-icon" title="Assessment of solvency and working capital liquidity based on double-entry accounting balances">
+                  <Info size={14} />
+                </span>
+              </div>
+              <button
+                type="button"
+                className="lf-panel-header-link"
+                onClick={() => onNavigateReports('pnl')}
+              >
+                View Details →
+              </button>
+            </div>
+
+            <div className="lf-health-body">
+              {/* Gauge Column */}
+              <div className="lf-health-gauge-box">
+                <div className="lf-gauge-wrapper">
+                  <svg width="190" height="105" viewBox="0 0 190 105">
+                    <defs>
+                      <linearGradient id="lfHealthGaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#FB923C" />
+                        <stop offset="100%" stopColor="#F97316" />
+                      </linearGradient>
+                    </defs>
+                    {/* Background Arc: 180-deg semicircle with radius 75 */}
+                    <path
+                      d="M 20 95 A 75 75 0 0 1 170 95"
+                      fill="none"
+                      stroke="var(--color-border, #E5E7EB)"
+                      strokeWidth="14"
+                      strokeLinecap="round"
+                    />
+                    {/* Filled Arc proportional to healthScore */}
+                    {healthScore > 0 && (
+                      <path
+                        d="M 20 95 A 75 75 0 0 1 170 95"
+                        fill="none"
+                        stroke="url(#lfHealthGaugeGrad)"
+                        strokeWidth="14"
+                        strokeLinecap="round"
+                        strokeDasharray="235.6"
+                        strokeDashoffset={235.6 * (1 - Math.min(100, healthScore) / 100)}
+                        style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                      />
+                    )}
+                  </svg>
+
+                  <div className="lf-gauge-center">
+                    <div className="lf-gauge-score-row">
+                      <span className="lf-gauge-score">{healthScore > 0 ? healthScore : '--'}</span>
+                      {healthScore >= 75 && <span className="lf-gauge-delta">+1</span>}
+                    </div>
+                    <span className="lf-gauge-label">of 100 points</span>
+                  </div>
+                </div>
+
+                <div className="lf-health-callout">
+                  <div className="lf-health-callout-title">{healthStatusText}</div>
+                  <div className="lf-health-callout-desc">{healthDescText}</div>
+                </div>
+              </div>
+
+              {/* Breakdown List Column */}
+              <div className="lf-health-breakdown">
+                <div className="lf-health-row">
+                  <div className="lf-health-row-left">
+                    <span className="lf-health-dot" style={{ backgroundColor: '#F97316' }} />
+                    <span className="lf-health-label">Sales</span>
+                  </div>
+                  <div className="lf-health-row-right">
+                    <span className="lf-health-amount">{formatINR(totalSalesPaise)}</span>
+                    <span className="lf-health-pct">{salesShare}</span>
+                  </div>
+                </div>
+
+                <div className="lf-health-row">
+                  <div className="lf-health-row-left">
+                    <span className="lf-health-dot" style={{ backgroundColor: '#E4A47E' }} />
+                    <span className="lf-health-label">Purchase</span>
+                  </div>
+                  <div className="lf-health-row-right">
+                    <span className="lf-health-amount">{formatINR(totalPurchasePaise)}</span>
+                    <span className="lf-health-pct">{purchaseShare}</span>
+                  </div>
+                </div>
+
+                <div className="lf-health-row">
+                  <div className="lf-health-row-left">
+                    <span className="lf-health-dot" style={{ backgroundColor: '#FDBA74' }} />
+                    <span className="lf-health-label">Receivables</span>
+                  </div>
+                  <div className="lf-health-row-right">
+                    <span className="lf-health-amount">{formatINR(receivablesPaise)}</span>
+                    <span className="lf-health-pct">{recvShare}</span>
+                  </div>
+                </div>
+
+                <div className="lf-health-row">
+                  <div className="lf-health-row-left">
+                    <span className="lf-health-dot" style={{ backgroundColor: '#FB923C' }} />
+                    <span className="lf-health-label">Payables</span>
+                  </div>
+                  <div className="lf-health-row-right">
+                    <span className="lf-health-amount">{formatINR(payablesPaise)}</span>
+                    <span className="lf-health-pct">{payShare}</span>
+                  </div>
+                </div>
+
+                <div className="lf-health-row">
+                  <div className="lf-health-row-left">
+                    <span className="lf-health-dot" style={{ backgroundColor: '#94A3B8' }} />
+                    <span className="lf-health-label">Service Income</span>
+                  </div>
+                  <div className="lf-health-row-right">
+                    <span className="lf-health-amount">{formatINR(serviceIncomePaise)}</span>
+                    <span className="lf-health-pct">{svcShare}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3B. SALES & PURCHASE OVERVIEW CHART */}
+          <div className="lf-panel-card">
+            <div className="lf-panel-header">
+              <div className="lf-panel-header-left">
+                <div className="lf-panel-icon">
+                  <BarChart2 size={18} strokeWidth={2.2} />
+                </div>
+                <span className="lf-panel-title">Sales & Purchase Overview</span>
+                <span className="lf-panel-info-icon" title="Comparative monthly trend of posted sales and purchase transactions">
+                  <Info size={14} />
+                </span>
+              </div>
+
+              <div className="lf-panel-controls">
+                <button
+                  type="button"
+                  className="lf-ctrl-btn"
+                  onClick={() => onNavigateReports('daybook')}
+                  title="Filter transactions in Day Book"
+                >
+                  <Filter size={13} /> Filter
+                </button>
+                <select
+                  value={period}
+                  onChange={(e) => setPeriod(e.target.value as any)}
+                  className="lf-ctrl-select"
+                >
+                  <option value="Last 6 Months">Last 6 Months</option>
+                  <option value="This FY">This FY</option>
+                  <option value="Last 12 Months">Last 12 Months</option>
+                </select>
+                <button
+                  type="button"
+                  className="lf-ctrl-icon-btn"
+                  onClick={() => setIsFullscreenChart((prev) => !prev)}
+                  title={isFullscreenChart ? 'Minimize Chart' : 'Maximize Chart'}
+                  aria-label="Expand chart"
+                >
+                  <Maximize2 size={14} />
+                </button>
+              </div>
+            </div>
+
+            <div className="lf-chart-body">
+              {/* Legend */}
+              <div className="lf-chart-legend">
+                <span className="lf-legend-item">
+                  <span className="lf-legend-dot sales" /> Sales
+                </span>
+                <span className="lf-legend-item">
+                  <span className="lf-legend-dot purchase" /> Purchase
+                </span>
+              </div>
+
+              {/* Plot Area */}
+              <div className="lf-chart-plot-area">
+                {/* Y-Axis scale */}
+                <div className="lf-chart-y-axis">
+                  {yLabels.map((lbl, idx) => (
+                    <span key={idx}>{lbl}</span>
+                  ))}
+                </div>
+
+                {/* Bars Container with 5 horizontal gridlines */}
+                <div className="lf-chart-bars-container">
+                  {[0, 25, 50, 75, 100].map((pct) => (
+                    <div
+                      key={pct}
+                      className="lf-chart-gridline"
+                      style={{ bottom: `calc(${pct * 0.8}% + 22px)` }}
+                    />
+                  ))}
+
+                  {/* 6 Grouped month columns */}
+                  {chartBars.map((bar, idx) => {
+                    const sHeight = Math.max(3, Math.round((bar.salesPaise / yMax) * 145));
+                    const pHeight = Math.max(3, Math.round((bar.purchasePaise / yMax) * 145));
+                    const isHovered = hoveredBarIndex === idx;
+
+                    return (
+                      <div
+                        key={bar.key}
+                        className="lf-chart-col"
+                        onMouseEnter={() => setHoveredBarIndex(idx)}
+                        onMouseLeave={() => setHoveredBarIndex(null)}
+                      >
+                        {/* Hover Tooltip matching Dashboard.png dark card */}
+                        {isHovered && (
+                          <div className="lf-chart-tooltip">
+                            <div className="lf-chart-tooltip-month">
+                              {bar.monthName}, {bar.key.split('-')[0]}
+                            </div>
+                            <div className="lf-chart-tooltip-row">
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#F97316' }} />
+                                Sales
+                              </span>
+                              <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                                {formatINR(bar.salesPaise)}
+                              </span>
+                            </div>
+                            <div className="lf-chart-tooltip-row">
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#E2D9D0' }} />
+                                Purchase
+                              </span>
+                              <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                                {formatINR(bar.purchasePaise)}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="lf-chart-col-bars">
+                          {/* Sales Bar */}
+                          <div
+                            className="lf-bar sales"
+                            style={{ height: `${sHeight}px` }}
+                            title={`Sales: ${formatINR(bar.salesPaise)}`}
+                          />
+                          {/* Purchase Bar */}
+                          <div
+                            className="lf-bar purchase"
+                            style={{ height: `${pHeight}px` }}
+                            title={`Purchase: ${formatINR(bar.purchasePaise)}`}
+                          />
+                        </div>
+                        <span className="lf-chart-month-label">{bar.monthName}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ==========================================================
+            4. LOWER ROW:
+            LEFT: Recent Vouchers Table
+            RIGHT: Quick Actions Grid
+            ========================================================== */}
+        <div className="lf-dashboard-grid-bottom">
+          {/* 4A. RECENT VOUCHERS */}
+          <div className="lf-panel-card">
+            <div className="lf-panel-header">
+              <div className="lf-panel-header-left">
+                <div className="lf-panel-icon">
+                  <FileText size={18} strokeWidth={2.2} />
+                </div>
+                <span className="lf-panel-title">Recent Vouchers</span>
+                <span className="lf-panel-info-icon" title="Latest vouchers posted to the double-entry general ledger">
+                  <Info size={14} />
+                </span>
+              </div>
+              <button
+                type="button"
+                className="lf-panel-header-link orange"
+                onClick={() => onNavigateReports('daybook')}
+              >
+                View All →
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowX: 'auto' }}>
+              {recentVouchers.length > 0 ? (
+                <table className="lf-vouchers-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Voucher No.</th>
+                      <th>Type</th>
+                      <th>Party</th>
+                      <th className="text-right">Amount</th>
+                      <th className="text-center">Status</th>
+                      <th style={{ width: 30 }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentVouchers.map((v: any) => {
+                      const vType = (v.voucher_type || 'SALES').toUpperCase();
+                      const typeLabel =
+                        vType === 'SALES' ? 'Sales' : vType === 'PURCHASE' ? 'Purchase' : vType === 'RECEIPT' ? 'Receipt' : vType === 'PAYMENT' ? 'Payment' : 'Journal';
+                      const typeClass =
+                        vType === 'SALES'
+                          ? 'type-sales'
+                          : vType === 'PURCHASE'
+                          ? 'type-purchase'
+                          : vType === 'RECEIPT'
+                          ? 'type-receipt'
+                          : vType === 'PAYMENT'
+                          ? 'type-payment'
+                          : 'type-journal';
+
+                      const statusStr = (v.status || 'POSTED').toUpperCase();
+                      const statusClass =
+                        statusStr === 'POSTED' ? 'status-posted' : statusStr === 'DRAFT' ? 'status-draft' : 'status-cancelled';
+
+                      return (
+                        <tr key={v.voucher_id}>
+                          <td style={{ whiteSpace: 'nowrap' }}>{formatDateDisplay(v.voucher_date)}</td>
+                          <td>
+                            <span
+                              className="lf-voucher-num-link"
+                              onClick={() => onViewVoucher(v.voucher_id)}
+                              title="Click to view/print voucher"
+                            >
+                              {v.voucher_number || 'VCH-000'}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`lf-pill-badge ${typeClass}`}>{typeLabel}</span>
+                          </td>
+                          <td style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {v.party_name || 'General / Cash'}
+                          </td>
+                          <td className="text-right" style={{ fontWeight: 600 }}>
+                            {formatINR(v.total_amount_paise)}
+                          </td>
+                          <td className="text-center">
+                            <span className={`lf-pill-badge ${statusClass}`}>
+                              {statusStr === 'POSTED' ? 'Posted' : statusStr === 'DRAFT' ? 'Draft' : 'Cancelled'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right', paddingRight: 14 }}>
+                            <button
+                              type="button"
+                              className="lf-kpi-card-menu-btn"
+                              onClick={() => onViewVoucher(v.voucher_id)}
+                              aria-label="View voucher options"
+                            >
+                              <MoreVertical size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <EmptyState
+                  icon={<FileText size={30} color="var(--color-text-muted)" />}
+                  title="No vouchers recorded yet"
+                  description="Begin recording sales invoices, receipts, and purchases to populate your double-entry accounts."
+                  actionLabel="+ Create Sales Invoice"
+                  onAction={() => onOpenNewVoucher('SALES')}
+                  className="py-8"
+                />
+              )}
+            </div>
+          </div>
+
+          {/* 4B. QUICK ACTIONS */}
+          <div className="lf-panel-card">
+            <div className="lf-panel-header">
+              <div className="lf-panel-header-left">
+                <div className="lf-panel-icon">
+                  <Zap size={18} strokeWidth={2.2} />
+                </div>
+                <span className="lf-panel-title">Quick Actions</span>
+                <span className="lf-panel-info-icon" title="Direct access to primary daily bookkeeping operations">
+                  <Info size={14} />
+                </span>
+              </div>
+            </div>
+
+            <div className="lf-quick-actions-grid">
+              {/* 1. Create Sales Invoice */}
+              <div
+                className="lf-quick-action-item"
+                onClick={() => onOpenNewVoucher('SALES')}
+                title="Create a GST-compliant Sales Invoice (Alt+S)"
+              >
+                <div className="lf-quick-action-icon-box" style={{ background: '#FFF7ED', color: '#F97316' }}>
+                  <FileText size={18} strokeWidth={2} />
+                </div>
+                <div className="lf-quick-action-text">
+                  <div className="lf-quick-action-title">Create Sales Invoice</div>
+                  <div className="lf-quick-action-desc">Issue a sales invoice</div>
+                </div>
+                <ChevronRight size={15} className="lf-quick-action-chevron" />
+              </div>
+
+              {/* 2. Create Purchase Invoice */}
+              <div
+                className="lf-quick-action-item"
+                onClick={() => onOpenNewVoucher('PURCHASE')}
+                title="Record an inward Supplier Purchase Invoice (Alt+P)"
+              >
+                <div className="lf-quick-action-icon-box" style={{ background: '#FFF3ED', color: '#EA580C' }}>
+                  <ShoppingBag size={18} strokeWidth={2} />
+                </div>
+                <div className="lf-quick-action-text">
+                  <div className="lf-quick-action-title">Create Purchase Invoice</div>
+                  <div className="lf-quick-action-desc">Record a purchase</div>
+                </div>
+                <ChevronRight size={15} className="lf-quick-action-chevron" />
+              </div>
+
+              {/* 3. Record Receipt */}
+              <div
+                className="lf-quick-action-item"
+                onClick={() => onOpenNewVoucher('RECEIPT')}
+                title="Record customer inbound payment (Alt+R)"
+              >
+                <div className="lf-quick-action-icon-box" style={{ background: '#FFFBEB', color: '#D97706' }}>
+                  <ArrowDownToLine size={18} strokeWidth={2} />
+                </div>
+                <div className="lf-quick-action-text">
+                  <div className="lf-quick-action-title">Record Receipt</div>
+                  <div className="lf-quick-action-desc">Receive payment</div>
+                </div>
+                <ChevronRight size={15} className="lf-quick-action-chevron" />
+              </div>
+
+              {/* 4. Record Payment */}
+              <div
+                className="lf-quick-action-item"
+                onClick={() => onOpenNewVoucher('PAYMENT')}
+                title="Record outbound vendor payment (Alt+M)"
+              >
+                <div className="lf-quick-action-icon-box" style={{ background: '#FFF3ED', color: '#EA580C' }}>
+                  <ArrowUpFromLine size={18} strokeWidth={2} />
+                </div>
+                <div className="lf-quick-action-text">
+                  <div className="lf-quick-action-title">Record Payment</div>
+                  <div className="lf-quick-action-desc">Make a payment</div>
+                </div>
+                <ChevronRight size={15} className="lf-quick-action-chevron" />
+              </div>
+
+              {/* 5. Create Journal */}
+              <div
+                className="lf-quick-action-item"
+                onClick={() => onOpenNewVoucher('JOURNAL')}
+                title="Create a General Journal entry (Alt+J)"
+              >
+                <div className="lf-quick-action-icon-box" style={{ background: '#FFF7ED', color: '#F97316' }}>
+                  <BookText size={18} strokeWidth={2} />
+                </div>
+                <div className="lf-quick-action-text">
+                  <div className="lf-quick-action-title">Create Journal</div>
+                  <div className="lf-quick-action-desc">Accounting adjustment</div>
+                </div>
+                <ChevronRight size={15} className="lf-quick-action-chevron" />
+              </div>
+
+              {/* 6. Create Service Bill */}
+              <div
+                className="lf-quick-action-item"
+                onClick={() => (onNavigateTab ? onNavigateTab('service_bill') : onOpenNewVoucher('SALES'))}
+                title="Create a Repair / Service Bill with serial numbers (Alt+4)"
+              >
+                <div className="lf-quick-action-icon-box" style={{ background: '#FFF7ED', color: '#F97316' }}>
+                  <Receipt size={18} strokeWidth={2} />
+                </div>
+                <div className="lf-quick-action-text">
+                  <div className="lf-quick-action-title">Create Service Bill</div>
+                  <div className="lf-quick-action-desc">Record service income</div>
+                </div>
+                <ChevronRight size={15} className="lf-quick-action-chevron" />
+              </div>
             </div>
           </div>
         </div>

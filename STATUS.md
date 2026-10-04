@@ -1858,4 +1858,21 @@ PHASE 3 VERIFICATION & COMPLETION REPORT
 5. **Multi-Rate GST Slabs:** Independent tax records recorded for each statutory slab (5%, 12%, 18%, CESS) with CGST/SGST mathematical symmetry for intra-state and IGST for inter-state transactions.
 6. **Party Bill Allocations:** Allocated amount strictly matches the actual party ledger entry amount in simple and compound vouchers.
 7. **Voucher Immutability:** Posted vouchers cannot be modified or deleted directly; amendments flow through cancellation and linked replacement.
-8. **Serial Lifecycle Invariant:** Consumed `SOLD` serials are never deleted or reverted to `AVAILABLE` during purchase amendments.
+8. **Serial Lifecycle Invariant:** Consumed `SOLD` serials are never deleted or reverted to `AVAILABLE` during purchase amendments.
+
+---
+
+## UI-001 & UI-002 — Design System & Authentication / Onboarding Status
+
+| Phase | Status | Details |
+|---|---|---|
+| **UI-001: Design System & Application Shell** | **COMPLETE** | Warm Orange/Amber palette (`#ff641f`), Inter font, responsive App Shell, Header, Navigation Sidebar, Status badges, and Data Tables. |
+| **UI-002: Authentication & Business Onboarding** | **COMPLETE** | Login, Registration, 3D CSS Laptop Scene, Password Strength Meter, Optional Last Name, 3-Step Business Onboarding Wizard, Theme Switcher, Zero Backend Alteration. |
+
+- **UI-002 Key Features:**
+  - Login view: Email/username, password visibility toggle, "Keep me signed in" checkbox, Google SSO handling, theme toggle (light/dark).
+  - Sign Up view: First name (required), Last name (optional), email, real-time password strength meter + criteria checklist, password confirm, terms agreement.
+  - 3-Step Business Wizard: Organization profile, statutory GST/TIN & books start date, review & confirmation summary.
+  - Connection & Error Handling: Resolved Vite dev server IPv4/IPv6 proxy error (HTTP 500 ECONNREFUSED); stream-safe response parsing.
+  - Build Status: Zero TypeScript errors, production bundle compiled cleanly in 4.23s.
+

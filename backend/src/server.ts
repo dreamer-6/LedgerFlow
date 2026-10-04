@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { getDatabase } from './database/connection.js';
@@ -9,14 +10,15 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ── CORS ──────────────────────────────────────────────────────────────────
-// ALLOWED_ORIGIN must be set in production.
-// Development default allows localhost:5173 (Vite dev server).
-const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
+// ALLOWED_ORIGIN can be set in production.
+// Development allows any localhost or 127.0.0.1 port (3000, 5173, etc.).
+const allowedOrigin = process.env.ALLOWED_ORIGIN;
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (curl, Postman, same-origin)
     if (!origin) return callback(null, true);
-    if (origin === allowedOrigin) return callback(null, true);
+    if (allowedOrigin && origin === allowedOrigin) return callback(null, true);
+    if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
     callback(new Error(`CORS: Origin '${origin}' is not allowed`));
   },
   credentials: true

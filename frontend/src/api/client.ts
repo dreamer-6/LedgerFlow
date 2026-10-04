@@ -86,23 +86,46 @@ function getHeaders(extraHeaders: Record<string, string> = {}): Record<string, s
   return headers;
 }
 
+
+async function extractErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const text = await res.text();
+    if (!text || !text.trim()) return `${fallback} (HTTP ${res.status})`;
+    try {
+      const data = JSON.parse(text);
+      if (data && typeof data === 'object') {
+        return data.error || data.message || text;
+      }
+    } catch {
+      if (text.includes('ECONNREFUSED') || text.includes('500 Internal Server Error')) {
+        return 'Unable to reach backend server. Please verify the backend is running on port 5000.';
+      }
+      if (text.trim().startsWith('<')) {
+        return `${fallback}: Server returned HTTP ${res.status}`;
+      }
+      return text;
+    }
+    return text;
+  } catch {
+    return `${fallback} (HTTP ${res.status})`;
+  }
+}
+
 export const api = {
   // ---------------- AUTHENTICATION & BUSINESS TENANCY ----------------
   async login(credentials: { emailOrUsername: string; password: string }) {
-    const res = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials)
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials)
+      });
+    } catch (networkErr: any) {
+      throw new Error('Network error: Unable to connect to backend server. Please check your connection.');
+    }
     if (!res.ok) {
-      let msg = 'Login failed';
-      try {
-        const d = await res.json();
-        msg = d.error || msg;
-      } catch {
-        msg = await res.text();
-      }
-      throw new Error(msg);
+      throw new Error(await extractErrorMessage(res, 'Login failed'));
     }
     const data = await res.json();
     authStorage.setToken(data.token);
@@ -120,14 +143,7 @@ export const api = {
       body: JSON.stringify(payload)
     });
     if (!res.ok) {
-      let msg = 'SSO login failed';
-      try {
-        const d = await res.json();
-        msg = d.error || msg;
-      } catch {
-        msg = await res.text();
-      }
-      throw new Error(msg);
+      throw new Error(await extractErrorMessage(res, 'SSO login failed'));
     }
     const data = await res.json();
     authStorage.setToken(data.token);
@@ -161,14 +177,7 @@ export const api = {
       body: JSON.stringify(payload)
     });
     if (!res.ok) {
-      let msg = 'Registration failed';
-      try {
-        const d = await res.json();
-        msg = d.error || msg;
-      } catch {
-        msg = await res.text();
-      }
-      throw new Error(msg);
+      throw new Error(await extractErrorMessage(res, 'Registration failed'));
     }
     const data = await res.json();
     authStorage.setToken(data.token);
@@ -192,7 +201,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/businesses`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -203,14 +212,7 @@ export const api = {
       body: JSON.stringify(data)
     });
     if (!res.ok) {
-      let msg = 'Failed to create business';
-      try {
-        const d = await res.json();
-        msg = d.error || msg;
-      } catch {
-        msg = await res.text();
-      }
-      throw new Error(msg);
+      throw new Error(await extractErrorMessage(res, 'Failed to create business'));
     }
     return res.json();
   },
@@ -220,7 +222,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/companies/current`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -230,7 +232,7 @@ export const api = {
       headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(data)
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
   },
 
   async deleteCompany(companyId: string, password: string): Promise<{ success: boolean; remainingBusinesses: Company[]; nextActiveCompanyId: string | null }> {
@@ -240,14 +242,7 @@ export const api = {
       body: JSON.stringify({ password })
     });
     if (!res.ok) {
-      let msg = 'Failed to delete company';
-      try {
-        const d = await res.json();
-        msg = d.error || msg;
-      } catch {
-        msg = await res.text();
-      }
-      throw new Error(msg);
+      throw new Error(await extractErrorMessage(res, 'Failed to delete company'));
     }
     const result = await res.json();
     if (result.nextActiveCompanyId) {
@@ -261,7 +256,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/financial-years?companyId=${encodeURIComponent(targetCompId)}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -278,14 +273,7 @@ export const api = {
       body: JSON.stringify(data)
     });
     if (!res.ok) {
-      let msg = 'Failed to create financial year';
-      try {
-        const d = await res.json();
-        msg = d.error || msg;
-      } catch {
-        msg = await res.text();
-      }
-      throw new Error(msg);
+      throw new Error(await extractErrorMessage(res, 'Failed to create financial year'));
     }
     return res.json();
   },
@@ -295,7 +283,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/reports/dashboard?companyId=${encodeURIComponent(targetCompId)}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -303,7 +291,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/masters/ledgers`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -312,7 +300,7 @@ export const api = {
     const res = await fetch(url, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -323,14 +311,7 @@ export const api = {
       body: JSON.stringify(party)
     });
     if (!res.ok) {
-      let msg = 'Failed to create party';
-      try {
-        const data = await res.json();
-        msg = data.error || msg;
-      } catch {
-        msg = await res.text();
-      }
-      throw new Error(msg);
+      throw new Error(await extractErrorMessage(res, 'Failed to create party'));
     }
     return res.json();
   },
@@ -342,14 +323,7 @@ export const api = {
       body: JSON.stringify(party)
     });
     if (!res.ok) {
-      let msg = 'Failed to update party';
-      try {
-        const data = await res.json();
-        msg = data.error || msg;
-      } catch {
-        msg = await res.text();
-      }
-      throw new Error(msg);
+      throw new Error(await extractErrorMessage(res, 'Failed to update party'));
     }
     return res.json();
   },
@@ -360,14 +334,7 @@ export const api = {
       headers: getHeaders()
     });
     if (!res.ok) {
-      let msg = 'Failed to delete party';
-      try {
-        const data = await res.json();
-        msg = data.error || msg;
-      } catch {
-        msg = await res.text();
-      }
-      throw new Error(msg);
+      throw new Error(await extractErrorMessage(res, 'Failed to delete party'));
     }
     return res.json();
   },
@@ -376,7 +343,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/masters/items`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -387,14 +354,7 @@ export const api = {
       body: JSON.stringify(item)
     });
     if (!res.ok) {
-      let msg = 'Failed to create item';
-      try {
-        const data = await res.json();
-        msg = data.error || msg;
-      } catch {
-        msg = await res.text();
-      }
-      throw new Error(msg);
+      throw new Error(await extractErrorMessage(res, 'Failed to create item'));
     }
     return res.json();
   },
@@ -406,14 +366,7 @@ export const api = {
       body: JSON.stringify(item)
     });
     if (!res.ok) {
-      let msg = 'Failed to update item';
-      try {
-        const data = await res.json();
-        msg = data.error || msg;
-      } catch {
-        msg = await res.text();
-      }
-      throw new Error(msg);
+      throw new Error(await extractErrorMessage(res, 'Failed to update item'));
     }
     return res.json();
   },
@@ -423,7 +376,7 @@ export const api = {
       method: 'DELETE',
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -431,7 +384,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/masters/godowns`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -439,7 +392,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/masters/units`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -447,7 +400,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/vouchers/next-number?companyId=${companyId}&fyId=${fyId}&type=${type}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -459,7 +412,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -467,7 +420,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/vouchers/${id}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -503,7 +456,7 @@ export const api = {
       headers: getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ reason })
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -512,7 +465,7 @@ export const api = {
       method: 'DELETE',
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -521,7 +474,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/reports/daybook?companyId=${companyId}&fromDate=${fromDate}&toDate=${toDate}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -529,7 +482,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/reports/ledger/${ledgerId}?fromDate=${fromDate}&toDate=${toDate}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -537,7 +490,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/reports/trial-balance?companyId=${companyId}&asOnDate=${asOnDate}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -545,7 +498,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/reports/profit-loss?companyId=${companyId}&fromDate=${fromDate}&toDate=${toDate}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -553,7 +506,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/reports/balance-sheet?companyId=${companyId}&asOnDate=${asOnDate}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -561,7 +514,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/reports/stock-summary?companyId=${companyId}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -569,7 +522,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/reports/outstanding?companyId=${companyId}&type=${type}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -577,7 +530,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/reports/gst-summary?companyId=${companyId}&fromDate=${fromDate}&toDate=${toDate}`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -587,7 +540,7 @@ export const api = {
       method: 'POST',
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -595,7 +548,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/utilities/audit-logs`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -604,7 +557,7 @@ export const api = {
       method: 'POST',
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   },
 
@@ -612,7 +565,7 @@ export const api = {
     const res = await fetch(`${API_BASE}/masters/items/${itemId}/serials`, {
       headers: getHeaders()
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
   }
 };
