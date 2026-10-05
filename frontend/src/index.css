@@ -3,6 +3,7 @@
 @import './styles/auth.css';
 @import './styles/dashboard.css';
 @import './styles/parties.css';
+@import './styles/items.css';
 
 /* Card surfaces matching Style Guide (#1A1D22 in dark, #FFFFFF in light) */
 [data-theme="dark"] .ledger-card,

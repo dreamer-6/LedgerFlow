@@ -102,6 +102,88 @@ export interface CreatePartyPayload {
 
 export interface UpdatePartyPayload extends Partial<CreatePartyPayload> {}
 
+export interface StockItem {
+  item_id: string;
+  company_id: string;
+  item_name: string;
+  item_code?: string | null;
+  sku?: string | null;
+  hsn_sac: string;
+  unit_id: string;
+  unit_symbol?: string | null;
+  gst_rate: number;
+  cess_rate?: number;
+  purchase_rate_paise: number;
+  selling_rate_paise: number;
+  opening_qty: number;
+  opening_rate_paise: number;
+  reorder_level: number;
+  is_active: number;
+  created_at?: string;
+  serial_numbers?: string | null;
+  has_serial_no?: number;
+  current_stock?: number;
+  total_value_paise?: number;
+}
+
+export interface UnitMaster {
+  unit_id: string;
+  company_id: string | null;
+  unit_name: string;
+  symbol: string;
+  decimal_places: number;
+}
+
+export interface GodownMaster {
+  godown_id: string;
+  company_id: string | null;
+  godown_name: string;
+  location?: string | null;
+  is_default: number;
+}
+
+export interface StockSummaryItem {
+  itemId: string;
+  item_id: string;
+  itemName: string;
+  item_name: string;
+  sku: string;
+  hsn: string;
+  hsn_sac: string;
+  unit: string;
+  unit_symbol: string;
+  quantity: number;
+  closing_qty: number;
+  currentStock: number;
+  reorderLevel: number;
+  reorder_level: number;
+  avgRatePaise: number;
+  avg_rate_paise: number;
+  totalValuePaise: number;
+  total_value_paise: number;
+}
+
+export interface CreateStockItemPayload {
+  itemName: string;
+  itemCode?: string;
+  sku?: string;
+  hsnSac?: string;
+  unitId?: string;
+  gstRate?: number;
+  cessRate?: number;
+  purchaseRatePaise?: number;
+  sellingRatePaise?: number;
+  openingQty?: number;
+  openingRatePaise?: number;
+  reorderLevel?: number;
+  godownId?: string;
+  serialNumbers?: string;
+  hasSerialNo?: boolean | number;
+  quantityToAdd?: number;
+  allowNegativeStock?: boolean;
+  [key: string]: any;
+}
+
 export const authStorage = {
   getToken: () => localStorage.getItem('lf_token'),
   setToken: (token: string | null) => {
@@ -398,7 +480,7 @@ export const api = {
     return res.json();
   },
 
-  async getStockItems() {
+  async getStockItems(): Promise<StockItem[]> {
     const res = await fetch(`${API_BASE}/masters/items`, {
       headers: getHeaders()
     });
@@ -406,7 +488,19 @@ export const api = {
     return res.json();
   },
 
-  async createStockItem(item: any) {
+  async getStockSummary(param?: string, asOfDate?: string): Promise<StockSummaryItem[]> {
+    const actualAsOfDate = asOfDate || (param && param.includes('-') && param.length === 10 ? param : undefined);
+    const url = actualAsOfDate
+      ? `${API_BASE}/reports/stock-summary?asOfDate=${encodeURIComponent(actualAsOfDate)}`
+      : `${API_BASE}/reports/stock-summary`;
+    const res = await fetch(url, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
+  },
+
+  async createStockItem(item: CreateStockItemPayload): Promise<any> {
     const res = await fetch(`${API_BASE}/masters/items`, {
       method: 'POST',
       headers: getHeaders({ 'Content-Type': 'application/json' }),
@@ -418,7 +512,7 @@ export const api = {
     return res.json();
   },
 
-  async updateStockItem(id: string, item: any) {
+  async updateStockItem(id: string, item: Partial<CreateStockItemPayload>): Promise<any> {
     const res = await fetch(`${API_BASE}/masters/items/${id}`, {
       method: 'PUT',
       headers: getHeaders({ 'Content-Type': 'application/json' }),
@@ -430,7 +524,7 @@ export const api = {
     return res.json();
   },
 
-  async deleteStockItem(id: string) {
+  async deleteStockItem(id: string): Promise<any> {
     const res = await fetch(`${API_BASE}/masters/items/${id}`, {
       method: 'DELETE',
       headers: getHeaders()
@@ -439,7 +533,7 @@ export const api = {
     return res.json();
   },
 
-  async getGodowns() {
+  async getGodowns(): Promise<GodownMaster[]> {
     const res = await fetch(`${API_BASE}/masters/godowns`, {
       headers: getHeaders()
     });
@@ -447,7 +541,7 @@ export const api = {
     return res.json();
   },
 
-  async getUnits() {
+  async getUnits(): Promise<UnitMaster[]> {
     const res = await fetch(`${API_BASE}/masters/units`, {
       headers: getHeaders()
     });
@@ -569,13 +663,6 @@ export const api = {
     return res.json();
   },
 
-  async getStockSummary(companyId: string) {
-    const res = await fetch(`${API_BASE}/reports/stock-summary?companyId=${companyId}`, {
-      headers: getHeaders()
-    });
-    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
-    return res.json();
-  },
 
   async getOutstanding(companyId: string, type: 'CUSTOMER' | 'SUPPLIER') {
     const res = await fetch(`${API_BASE}/reports/outstanding?companyId=${companyId}&type=${type}`, {

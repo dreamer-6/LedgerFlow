@@ -21,7 +21,8 @@ import {
   ArrowUpFromLine,
   BookText,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/LoadingState';
@@ -82,6 +83,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [period, setPeriod] = useState<'Last 6 Months' | 'This FY' | 'Last 12 Months'>('Last 6 Months');
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
   const [isFullscreenChart, setIsFullscreenChart] = useState(false);
+  const [activeMenuVoucherId, setActiveMenuVoucherId] = useState<string | null>(null);
+  const [cancellingVoucher, setCancellingVoucher] = useState<any | null>(null);
+  const [cancelReason, setCancelReason] = useState<string>('Cancelled by user');
+  const [isCancelling, setIsCancelling] = useState<boolean>(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest('.lf-voucher-action-cell')) {
+        return;
+      }
+      setActiveMenuVoucherId(null);
+    };
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  const handleConfirmCancelVoucher = async () => {
+    if (!cancellingVoucher) return;
+    try {
+      setIsCancelling(true);
+      setCancelError(null);
+      if (cancellingVoucher.status === 'DRAFT') {
+        await api.deleteVoucher(cancellingVoucher.voucher_id);
+      } else {
+        await api.cancelVoucher(cancellingVoucher.voucher_id, cancelReason.trim() || 'Cancelled by user');
+      }
+      setCancellingVoucher(null);
+      await loadDashboardData();
+    } catch (err: any) {
+      console.error('Failed to cancel/delete voucher:', err);
+      setCancelError(err.message || 'Operation failed');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   const loadDashboardData = async () => {
     if (!companyId) return;
@@ -1057,15 +1095,63 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               {statusStr === 'POSTED' ? 'Posted' : statusStr === 'DRAFT' ? 'Draft' : 'Cancelled'}
                             </span>
                           </td>
-                          <td style={{ textAlign: 'right', paddingRight: 14 }}>
+                          <td className="lf-voucher-action-cell" style={{ textAlign: 'right', paddingRight: 14, position: 'relative' }} onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
                               className="lf-kpi-card-menu-btn"
-                              onClick={() => onViewVoucher(v.voucher_id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenuVoucherId(prev => prev === v.voucher_id ? null : v.voucher_id);
+                              }}
                               aria-label="View voucher options"
                             >
                               <MoreVertical size={14} />
                             </button>
+
+                            {activeMenuVoucherId === v.voucher_id && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  right: 14,
+                                  top: 'calc(100% + 2px)',
+                                  background: 'var(--color-surface, #fff)',
+                                  border: '1px solid var(--color-border)',
+                                  borderRadius: 8,
+                                  boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)',
+                                  zIndex: 100,
+                                  width: 170,
+                                  padding: 4,
+                                  textAlign: 'left'
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  className="lf-ctrl-btn"
+                                  style={{ width: '100%', justifyContent: 'flex-start', border: 'none', borderRadius: 4, padding: '6px 10px', fontSize: '12px' }}
+                                  onClick={() => {
+                                    setActiveMenuVoucherId(null);
+                                    onViewVoucher(v.voucher_id);
+                                  }}
+                                >
+                                  <span>View / Print</span>
+                                </button>
+                                {v.status !== 'CANCELLED' && (
+                                  <button
+                                    type="button"
+                                    className="lf-ctrl-btn"
+                                    style={{ width: '100%', justifyContent: 'flex-start', border: 'none', borderRadius: 4, padding: '6px 10px', fontSize: '12px', color: '#DC2626' }}
+                                    onClick={() => {
+                                      setActiveMenuVoucherId(null);
+                                      setCancellingVoucher(v);
+                                    }}
+                                  >
+                                    <Trash2 size={13} style={{ marginRight: 6 }} />
+                                    <span>{v.status === 'DRAFT' ? 'Delete Draft' : 'Cancel Voucher'}</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -1199,6 +1285,130 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Cancel Voucher Confirmation Modal */}
+      {cancellingVoucher && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999
+          }}
+          onClick={() => setCancellingVoucher(null)}
+        >
+          <div
+            className="ledger-card"
+            style={{
+              width: '440px',
+              padding: '24px',
+              borderRadius: '12px',
+              background: 'var(--color-surface, #1E293B)',
+              color: 'var(--color-text, #F8FAFC)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4)',
+              border: '1px solid var(--color-border)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#DC2626'
+                }}
+              >
+                <AlertCircle size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>
+                  {cancellingVoucher.status === 'DRAFT' ? 'Delete Draft Voucher' : 'Cancel Voucher'}
+                </h3>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                  {cancellingVoucher.voucher_number || 'Transaction'}
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13.5px', color: 'var(--color-text)', lineHeight: 1.5, marginBottom: '16px' }}>
+              {cancellingVoucher.status === 'DRAFT' ? (
+                <>Are you sure you want to permanently delete this unposted draft voucher?</>
+              ) : (
+                <>
+                  Cancelling this voucher will reverse all associated inventory movements and double-entry ledger postings in the general ledger while maintaining the audit trail.
+                </>
+              )}
+            </p>
+
+            {cancellingVoucher.status !== 'DRAFT' && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '6px', color: 'var(--color-text-muted)' }}>
+                  Cancellation Reason
+                </label>
+                <input
+                  type="text"
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="e.g. Invoiced in error, duplicate entry..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-bg, #0F172A)',
+                    color: 'var(--color-text, #fff)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            )}
+
+            {cancelError && (
+              <div style={{ color: '#DC2626', fontSize: '12.5px', marginBottom: '14px' }}>
+                {cancelError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="lf-ctrl-btn"
+                onClick={() => setCancellingVoucher(null)}
+                disabled={isCancelling}
+                style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '13px' }}
+              >
+                Keep Voucher
+              </button>
+              <button
+                type="button"
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '6px',
+                  background: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+                onClick={handleConfirmCancelVoucher}
+                disabled={isCancelling}
+              >
+                {isCancelling ? 'Processing...' : cancellingVoucher.status === 'DRAFT' ? 'Delete Draft' : 'Confirm Cancellation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

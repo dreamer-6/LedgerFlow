@@ -6,6 +6,7 @@ import { BusinessSwitcherModal } from './components/BusinessSwitcherModal';
 import { AuthView } from './pages/AuthView';
 import { DashboardView } from './pages/DashboardView';
 import { PartiesView } from './pages/PartiesView';
+import { ItemsView } from './pages/ItemsView';
 import { VoucherEntryView } from './pages/VoucherEntryView';
 import { ReportsView } from './pages/ReportsView';
 import { MastersView } from './pages/MastersView';
@@ -334,6 +335,9 @@ export const App: React.FC = () => {
         } else if (k === '3') {
           e.preventDefault();
           setActiveTab('parties');
+        } else if (k === 'i') {
+          e.preventDefault();
+          setActiveTab('items');
         } else if (k === '4') {
           e.preventDefault();
           setActiveTab('reports');
@@ -388,7 +392,7 @@ export const App: React.FC = () => {
     { label: 'Receipt Voucher', tab: 'vouchers', vType: 'RECEIPT', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+R' },
     { label: 'Payment Voucher', tab: 'vouchers', vType: 'PAYMENT', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+Y' },
     { label: 'Parties (Customers & Suppliers)', tab: 'parties', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+3' },
-    { label: 'Stock Items & Inventory', tab: 'masters', category: 'Master', icon: <Boxes size={14} /> },
+    { label: 'Stock Items & Inventory', tab: 'items', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+I' },
     { label: 'Day Book Report', tab: 'reports', subTab: 'daybook', category: 'Report', icon: <Clock size={14} /> },
     { label: 'Sales Register (Display Sales Entries)', tab: 'reports', subTab: 'sales_register', category: 'Report', icon: <ShoppingCart size={14} /> },
     { label: 'Purchase Register (Display Purchase Entries)', tab: 'reports', subTab: 'purchase_register', category: 'Report', icon: <ShoppingBag size={14} /> },
@@ -572,8 +576,22 @@ export const App: React.FC = () => {
             </div>
           )}
 
+          {/* 2.3 Items View (UI-005) */}
+          {(activeTab === 'items' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'items')) && (
+            <div key="items" className="view-container-animated">
+              <ItemsView
+                company={company}
+                onOpenNewVoucher={handleOpenNewVoucher}
+                onNavigateReports={(sub) => {
+                  setReportSubTab(sub);
+                  setActiveTab('reports');
+                }}
+              />
+            </div>
+          )}
+
           {/* 3. Masters View */}
-          {activeTab === 'masters' && (
+          {activeTab === 'masters' && (window as any)._currentMasterTab !== 'parties' && (window as any)._currentMasterTab !== 'items' && (
             <div key="masters" className="view-container-animated">
               <MastersView company={company} onCompanyUpdated={loadCompanyData} />
             </div>

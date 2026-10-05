@@ -291,11 +291,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'masters-items',
               'Items',
               <Package size={16} />,
-              activeTab === 'masters' && (window as any)._currentMasterTab === 'items',
+              activeTab === 'items' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'items'),
               () => {
                 (window as any)._currentMasterTab = 'items';
-                handleNav('masters', { masterTab: 'items' });
-              }
+                handleNav('items', { masterTab: 'items' });
+              },
+              'Alt+I'
             )}
             {renderItem(
               'masters-ledgers',

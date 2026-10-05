@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, Company } from '../api/client';
-import { Printer, X, Download, FileText, Receipt } from 'lucide-react';
+import { Printer, X, Download, FileText, Receipt, Trash2, AlertCircle } from 'lucide-react';
 
 export interface InvoicePrintModalProps {
   voucherId?: string | null;
@@ -23,6 +23,11 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
   const [data, setData] = useState<any>(liveVoucherData || null);
   const [loading, setLoading] = useState<boolean>(!liveVoucherData && !!voucherId);
   const [format, setFormat] = useState<PaperFormat>('A4');
+  const [showCancelModal, setShowCancelModal] = useState<boolean>(false);
+  const [cancelReason, setCancelReason] = useState<string>('Cancelled by user');
+  const [isCancelling, setIsCancelling] = useState<boolean>(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -49,6 +54,37 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
         .finally(() => setLoading(false));
     }
   }, [voucherId, liveVoucherData]);
+
+  const handleCancelOrDeleteVoucher = async () => {
+    if (!data?.voucher) return;
+    const v = data.voucher;
+    try {
+      setIsCancelling(true);
+      setCancelError(null);
+      if (v.status === 'DRAFT') {
+        await api.deleteVoucher(v.voucher_id);
+        setToastMessage(`Draft voucher ${v.voucher_number || ''} deleted successfully.`);
+        setTimeout(() => {
+          onClose();
+          window.location.reload();
+        }, 1000);
+      } else {
+        await api.cancelVoucher(v.voucher_id, cancelReason.trim() || 'Cancelled by user');
+        setToastMessage(`Voucher ${v.voucher_number || ''} cancelled successfully.`);
+        setData((prev: any) => prev ? { ...prev, voucher: { ...prev.voucher, status: 'CANCELLED' } } : prev);
+        setTimeout(() => {
+          onClose();
+          window.location.reload();
+        }, 1000);
+      }
+      setShowCancelModal(false);
+    } catch (err: any) {
+      console.error('Failed to cancel/delete voucher:', err);
+      setCancelError(err.message || 'Operation failed');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   const numberToWords = (num: number): string => {
     const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
@@ -286,6 +322,29 @@ ${printTarget.outerHTML}
         </div>
 
         <div style={{ display: 'flex', gap: '8px' }}>
+          {voucher && voucher.status !== 'CANCELLED' && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setShowCancelModal(true)}
+              style={{
+                height: '34px',
+                padding: '0 12px',
+                color: '#DC2626',
+                borderColor: 'rgba(239, 68, 68, 0.4)',
+                backgroundColor: 'rgba(239, 68, 68, 0.06)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12.5px',
+                cursor: 'pointer'
+              }}
+              title={voucher.status === 'DRAFT' ? 'Delete unposted draft voucher' : 'Cancel voucher and reverse accounting effects'}
+            >
+              <Trash2 size={14} />
+              <span>{voucher.status === 'DRAFT' ? 'Delete Draft' : 'Cancel Voucher'}</span>
+            </button>
+          )}
           <button className="btn-primary" onClick={handlePrint} style={{ height: '34px', padding: '0 14px' }}>
             <Printer size={14} />
             <span>Print</span>
@@ -730,6 +789,130 @@ ${printTarget.outerHTML}
 
           <div style={{ textAlign: 'center', fontSize: '10px', color: '#64748B', borderTop: '1px dashed #CBD5E1', paddingTop: '6px' }}>
             Thank you for your business!
+          </div>
+        </div>
+      )}
+
+      {/* Cancellation / Deletion Modal */}
+      {showCancelModal && data?.voucher && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999
+          }}
+          onClick={() => setShowCancelModal(false)}
+        >
+          <div
+            className="ledger-card"
+            style={{
+              width: '440px',
+              padding: '24px',
+              borderRadius: '12px',
+              background: 'var(--surface, #1E293B)',
+              color: 'var(--text-primary, #F8FAFC)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4)',
+              border: '1px solid var(--border)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#DC2626'
+                }}
+              >
+                <AlertCircle size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>
+                  {data.voucher.status === 'DRAFT' ? 'Delete Draft Voucher' : 'Cancel Voucher'}
+                </h3>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  {data.voucher.voucher_number || 'Transaction'}
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13.5px', color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: '16px' }}>
+              {data.voucher.status === 'DRAFT' ? (
+                <>Are you sure you want to permanently delete this unposted draft voucher?</>
+              ) : (
+                <>
+                  Cancelling this voucher will reverse all associated inventory movements and double-entry ledger postings in the general ledger while maintaining the audit trail.
+                </>
+              )}
+            </p>
+
+            {data.voucher.status !== 'DRAFT' && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '6px', color: 'var(--text-secondary)' }}>
+                  Cancellation Reason
+                </label>
+                <input
+                  type="text"
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="e.g. Invoiced in error, duplicate entry..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-canvas, #0F172A)',
+                    color: 'var(--text-primary, #fff)',
+                    fontSize: '13px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            )}
+
+            {cancelError && (
+              <div style={{ color: '#DC2626', fontSize: '12.5px', marginBottom: '14px' }}>
+                {cancelError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setShowCancelModal(false)}
+                disabled={isCancelling}
+                style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '13px' }}
+              >
+                Keep Voucher
+              </button>
+              <button
+                type="button"
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '6px',
+                  background: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+                onClick={handleCancelOrDeleteVoucher}
+                disabled={isCancelling}
+              >
+                {isCancelling ? 'Processing...' : data.voucher.status === 'DRAFT' ? 'Delete Draft' : 'Confirm Cancellation'}
+              </button>
+            </div>
           </div>
         </div>
       )}

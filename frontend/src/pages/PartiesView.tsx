@@ -21,6 +21,8 @@ import {
   ChevronRight,
   FileText,
   FileCheck,
+  Edit2,
+  Trash2,
   BookOpen,
   Receipt,
   X,
@@ -199,7 +201,11 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
 
   // Close menus when clicking outside
   useEffect(() => {
-    const handleClickOutside = () => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.closest('.party-action-btn') || target.closest('.party-menu-dropdown'))) {
+        return;
+      }
       setActiveMenuPartyId(null);
     };
     window.addEventListener('click', handleClickOutside);
@@ -1886,15 +1892,31 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                             type="button"
                             className="party-action-btn"
                             title="More actions"
-                            onClick={() => {
-                              setActiveMenuPartyId(activeMenuPartyId === party.party_id ? null : party.party_id);
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuPartyId((prev) => (prev === party.party_id ? null : party.party_id));
                             }}
                           >
                             <MoreVertical size={16} />
                           </button>
 
                           {activeMenuPartyId === party.party_id && (
-                            <div className="party-menu-dropdown">
+                            <div
+                              className="party-menu-dropdown"
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                position: 'absolute',
+                                right: '10px',
+                                top: 'calc(100% + 2px)',
+                                zIndex: 9999,
+                                background: 'var(--surface)',
+                                border: '1px solid var(--border)',
+                                borderRadius: '8px',
+                                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25)',
+                                width: '180px',
+                                padding: '4px'
+                              }}
+                            >
                               <button
                                 type="button"
                                 className="party-menu-item"
@@ -1903,6 +1925,7 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                                   openEditForm(party);
                                 }}
                               >
+                                <Edit2 size={14} style={{ marginRight: '6px' }} />
                                 <span>Edit Party</span>
                               </button>
 
@@ -1916,6 +1939,7 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                                       onOpenNewVoucher('SALES', party.party_id);
                                     }}
                                   >
+                                    <FileText size={14} style={{ marginRight: '6px' }} />
                                     <span>Create Sales Invoice</span>
                                   </button>
                                   <button
@@ -1926,6 +1950,7 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                                       onOpenNewVoucher('PURCHASE', party.party_id);
                                     }}
                                   >
+                                    <FileCheck size={14} style={{ marginRight: '6px' }} />
                                     <span>Create Purchase Bill</span>
                                   </button>
                                 </>
@@ -1940,6 +1965,7 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                                     onNavigateReports('ledger', party.party_id);
                                   }}
                                 >
+                                  <BookOpen size={14} style={{ marginRight: '6px' }} />
                                   <span>View Ledger</span>
                                 </button>
                               )}
@@ -1947,11 +1973,13 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                               <button
                                 type="button"
                                 className="party-menu-item danger"
+                                style={{ color: '#DC2626' }}
                                 onClick={() => {
                                   setActiveMenuPartyId(null);
                                   setDeleteConfirmParty(party);
                                 }}
                               >
+                                <Trash2 size={14} style={{ marginRight: '6px' }} />
                                 <span>Delete Party</span>
                               </button>
                             </div>
@@ -2038,16 +2066,61 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
                 <span className="party-badge-status-active">Active</span>
                 <button
                   type="button"
                   className="party-action-btn"
-                  title="Edit Party"
-                  onClick={() => openEditForm(selectedParty)}
+                  title="More options"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveMenuPartyId((prev) => (prev === 'details_header_menu' ? null : 'details_header_menu'));
+                  }}
                 >
                   <MoreVertical size={16} />
                 </button>
+                {activeMenuPartyId === 'details_header_menu' && (
+                  <div
+                    className="party-menu-dropdown"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: 'calc(100% + 4px)',
+                      zIndex: 9999,
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25)',
+                      width: '160px',
+                      padding: '4px'
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="party-menu-item"
+                      onClick={() => {
+                        setActiveMenuPartyId(null);
+                        openEditForm(selectedParty);
+                      }}
+                    >
+                      <Edit2 size={14} style={{ marginRight: '6px' }} />
+                      <span>Edit Party</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="party-menu-item danger"
+                      style={{ color: '#DC2626' }}
+                      onClick={() => {
+                        setActiveMenuPartyId(null);
+                        setDeleteConfirmParty(selectedParty);
+                      }}
+                    >
+                      <Trash2 size={14} style={{ marginRight: '6px' }} />
+                      <span>Delete Party</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2308,6 +2381,19 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                       <span>Party Statement</span>
                     </div>
                     <ChevronRight size={14} color="var(--text-muted)" />
+                  </button>
+
+                  <button
+                    type="button"
+                    className="party-quick-action-link"
+                    style={{ color: '#DC2626' }}
+                    onClick={() => setDeleteConfirmParty(selectedParty)}
+                  >
+                    <div className="party-quick-action-link-left">
+                      <Trash2 size={15} color="#DC2626" />
+                      <span style={{ color: '#DC2626' }}>Delete Party</span>
+                    </div>
+                    <ChevronRight size={14} color="#DC2626" />
                   </button>
                 </>
               )}
