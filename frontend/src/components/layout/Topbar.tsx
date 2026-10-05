@@ -176,29 +176,7 @@ export const Topbar: React.FC<TopbarProps> = ({
         <HelpCircle size={18} />
       </button>
 
-      {/* 6. Theme Toggle */}
-      <div className="lf-theme-toggle">
-        <button
-          type="button"
-          className={theme === 'light' ? 'active' : ''}
-          onClick={() => toggleTheme('light')}
-          title="Light Mode"
-          aria-label="Light mode"
-        >
-          <Sun size={14} />
-        </button>
-        <button
-          type="button"
-          className={theme === 'dark' ? 'active' : ''}
-          onClick={() => toggleTheme('dark')}
-          title="Dark Mode"
-          aria-label="Dark mode"
-        >
-          <Moon size={14} />
-        </button>
-      </div>
-
-      {/* 7. User Menu */}
+      {/* 6. User Menu */}
       <div ref={userRef} className="relative">
         <button
           type="button"
@@ -215,10 +193,34 @@ export const Topbar: React.FC<TopbarProps> = ({
         </button>
 
         {showUserMenu && (
-          <div className="lf-dropdown" style={{ top: 'calc(100% + 8px)', right: 0, minWidth: 200 }}>
+          <div className="lf-dropdown" style={{ top: 'calc(100% + 8px)', right: 0, minWidth: 210 }}>
             <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--color-border)' }}>
               <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text)' }}>{userName}</div>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{user?.email || 'admin@ledgerflow.app'}</div>
+            </div>
+
+            <div style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border)', fontSize: '12px' }}>
+              <span style={{ color: 'var(--color-text-secondary)' }}>Appearance</span>
+              <div className="lf-theme-toggle" style={{ margin: 0 }}>
+                <button
+                  type="button"
+                  className={theme === 'light' ? 'active' : ''}
+                  onClick={() => toggleTheme('light')}
+                  title="Light Mode"
+                  aria-label="Light mode"
+                >
+                  <Sun size={13} />
+                </button>
+                <button
+                  type="button"
+                  className={theme === 'dark' ? 'active' : ''}
+                  onClick={() => toggleTheme('dark')}
+                  title="Dark Mode"
+                  aria-label="Dark mode"
+                >
+                  <Moon size={13} />
+                </button>
+              </div>
             </div>
 
             {onNavigateSettings && (

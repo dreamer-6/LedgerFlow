@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { api, Company, FinancialYear, authStorage, UserSession } from './api/client';
 import { Navbar } from './components/Navbar';
-import { Sidebar } from './components/Sidebar';
 import { AppShell } from './components/layout/AppShell';
 import { BusinessSwitcherModal } from './components/BusinessSwitcherModal';
 import { AuthView } from './pages/AuthView';
 import { DashboardView } from './pages/DashboardView';
+import { PartiesView } from './pages/PartiesView';
 import { VoucherEntryView } from './pages/VoucherEntryView';
 import { ReportsView } from './pages/ReportsView';
 import { MastersView } from './pages/MastersView';
@@ -333,7 +333,7 @@ export const App: React.FC = () => {
           setActiveTab('vouchers');
         } else if (k === '3') {
           e.preventDefault();
-          setActiveTab('masters');
+          setActiveTab('parties');
         } else if (k === '4') {
           e.preventDefault();
           setActiveTab('reports');
@@ -367,8 +367,11 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showSearchModal, activePrintVoucherId]);
 
-  const handleOpenNewVoucher = (type: string = 'SALES') => {
+  const handleOpenNewVoucher = (type: string = 'SALES', partyId?: string) => {
     setVoucherInitialType(type);
+    if (partyId) {
+      (window as any)._preselectedPartyId = partyId;
+    }
     setActiveTab('vouchers');
   };
 
@@ -384,7 +387,7 @@ export const App: React.FC = () => {
     { label: 'Purchase Voucher', tab: 'vouchers', vType: 'PURCHASE', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+P' },
     { label: 'Receipt Voucher', tab: 'vouchers', vType: 'RECEIPT', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+R' },
     { label: 'Payment Voucher', tab: 'vouchers', vType: 'PAYMENT', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+Y' },
-    { label: 'Party Masters (Customers & Suppliers)', tab: 'masters', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+3' },
+    { label: 'Parties (Customers & Suppliers)', tab: 'parties', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+3' },
     { label: 'Stock Items & Inventory', tab: 'masters', category: 'Master', icon: <Boxes size={14} /> },
     { label: 'Day Book Report', tab: 'reports', subTab: 'daybook', category: 'Report', icon: <Clock size={14} /> },
     { label: 'Sales Register (Display Sales Entries)', tab: 'reports', subTab: 'sales_register', category: 'Report', icon: <ShoppingCart size={14} /> },
@@ -416,7 +419,7 @@ export const App: React.FC = () => {
     setSearchQuery('');
   };
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !currentRoute.startsWith('/business-setup')) {
     return (
       <AuthView
         initialMode={currentRoute === '/signup' ? 'SIGNUP' : 'LOGIN'}
@@ -550,6 +553,20 @@ export const App: React.FC = () => {
                 }}
                 onPostSuccess={(id) => {
                   setActivePrintVoucherId(id);
+                }}
+              />
+            </div>
+          )}
+
+          {/* 2.2 Parties View (UI-004) */}
+          {activeTab === 'parties' && (
+            <div key="parties" className="view-container-animated">
+              <PartiesView
+                company={company}
+                onOpenNewVoucher={handleOpenNewVoucher}
+                onNavigateReports={(sub) => {
+                  setReportSubTab(sub);
+                  setActiveTab('reports');
                 }}
               />
             </div>

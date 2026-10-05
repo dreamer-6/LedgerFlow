@@ -3,10 +3,10 @@ import {
   LayoutDashboard,
   ShoppingCart,
   ShoppingBag,
-  ArrowDownLeft,
-  ArrowUpRight,
-  FileText,
-  Wrench,
+  ArrowDownToLine,
+  ArrowLeftRight,
+  BookText,
+  ReceiptText,
   Users,
   Package,
   BookMarked,
@@ -21,11 +21,9 @@ import {
   Layers,
   CircleDollarSign,
   Settings,
-  Database,
   PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react';
-import { LogoGlyph } from '../Logo';
 
 export interface SidebarProps {
   activeTab: string;
@@ -78,13 +76,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
     hotkey?: string
   ) => {
     const isDash = id === 'dashboard';
+    const iconElement = React.isValidElement(icon)
+      ? React.cloneElement(icon as React.ReactElement<{ size?: number }>, {
+          size: isCollapsed ? 20 : 16
+        })
+      : icon;
     return (
       <div
         onClick={onClick}
         className={`nav-item ${isSelected ? 'active' : ''} ${isSelected && isDash ? 'active-dashboard' : ''} ${isCollapsed ? 'icon-only' : ''}`}
         title={`${label}${hotkey ? ` (${hotkey})` : ''}`}
       >
-        <span className="nav-icon">{icon}</span>
+        <span className="nav-icon">{iconElement}</span>
         {!isCollapsed && <span style={{ flex: 1, lineHeight: 1.3 }}>{label}</span>}
         {!isCollapsed && hotkey && (
           <kbd style={{ fontSize: '8.5px', padding: '1px 5px', opacity: 0.7, flexShrink: 0 }}>
@@ -99,41 +102,56 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
 
-      <aside className={`sidebar-aside ${isCollapsed ? 'collapsed' : ''} ${isOpen ? 'mobile-open' : ''}`}>
+      <aside
+        className={`sidebar-aside ${isCollapsed ? 'collapsed' : ''} ${isOpen ? 'mobile-open' : ''}`}
+        style={{
+          minHeight: '100vh',
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
         {/* Brand Header */}
-        <div className={`sidebar-brand ${isCollapsed ? 'collapsed' : ''}`}>
+        <div
+          className={`sidebar-brand ${isCollapsed ? 'collapsed' : ''}`}
+          style={{ flexShrink: 0 }}
+        >
           {!isCollapsed ? (
             <div
-              style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', userSelect: 'none' }}
+              style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
               onClick={() => handleNav('dashboard')}
             >
-              <LogoGlyph size={28} />
-              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-                  <span style={{ fontWeight: 800, fontSize: 16, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>
-                    Ledger
-                  </span>
-                  <span style={{ fontWeight: 800, fontSize: 16, color: 'var(--color-primary)', letterSpacing: '-0.02em' }}>
-                    Flow
-                  </span>
-                </div>
-                <span
-                  style={{
-                    fontSize: '8px',
-                    fontWeight: 600,
-                    letterSpacing: '0.06em',
-                    color: 'var(--color-text-muted)',
-                    textTransform: 'uppercase',
-                    marginTop: 1
-                  }}
-                >
-                  Simple Accounting. Real Clarity.
-                </span>
-              </div>
+              <img
+                src="/assets/ledgerflow-wordmark-light.png"
+                alt="LedgerFlow - Simple Accounting. Real Clarity."
+                className="sidebar-brand-wordmark sidebar-brand-wordmark-light"
+                style={{ height: '45px', width: 'auto', maxWidth: '200px', objectFit: 'contain' }}
+              />
+              <img
+                src="/assets/ledgerflow-wordmark-dark.png"
+                alt="LedgerFlow - Simple Accounting. Real Clarity."
+                className="sidebar-brand-wordmark sidebar-brand-wordmark-dark"
+                style={{ height: '45px', width: 'auto', maxWidth: '200px', objectFit: 'contain' }}
+              />
             </div>
           ) : (
-            <div style={{ cursor: 'pointer' }} onClick={() => handleNav('dashboard')}>
-              <LogoGlyph size={28} />
+            <div
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onClick={() => handleNav('dashboard')}
+              title="LedgerFlow"
+            >
+              <img
+                src="/assets/ledgerflow-logo-light.png"
+                alt="LedgerFlow"
+                className="sidebar-brand-icon sidebar-brand-icon-light"
+                style={{ height: '36px', width: '36px', objectFit: 'contain' }}
+              />
+              <img
+                src="/assets/ledgerflow-logo-dark.png"
+                alt="LedgerFlow"
+                className="sidebar-brand-icon sidebar-brand-icon-dark"
+                style={{ height: '36px', width: '36px', objectFit: 'contain' }}
+              />
             </div>
           )}
 
@@ -152,15 +170,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Collapsed expand button */}
         {isCollapsed && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '6px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0' }}>
             <button
               type="button"
               onClick={onToggleCollapse}
               title="Expand sidebar"
               className="lf-topbar-icon-btn"
-              style={{ width: 28, height: 28 }}
+              style={{ width: 34, height: 34 }}
             >
-              <PanelLeftOpen size={16} />
+              <PanelLeftOpen size={18} />
             </button>
           </div>
         )}
@@ -211,7 +229,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {renderItem(
               'vouchers-receipt',
               'Receipts',
-              <ArrowDownLeft size={16} />,
+              <ArrowDownToLine size={16} />,
               activeTab === 'vouchers' && (window as any)._currentVoucherType === 'RECEIPT',
               () => {
                 (window as any)._currentVoucherType = 'RECEIPT';
@@ -222,7 +240,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {renderItem(
               'vouchers-payment',
               'Payments',
-              <ArrowUpRight size={16} />,
+              <ArrowLeftRight size={16} />,
               activeTab === 'vouchers' && (window as any)._currentVoucherType === 'PAYMENT',
               () => {
                 (window as any)._currentVoucherType = 'PAYMENT';
@@ -233,7 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {renderItem(
               'vouchers-journal',
               'Journal',
-              <FileText size={16} />,
+              <BookText size={16} />,
               activeTab === 'vouchers' && (window as any)._currentVoucherType === 'JOURNAL',
               () => {
                 (window as any)._currentVoucherType = 'JOURNAL';
@@ -244,7 +262,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {renderItem(
               'service_bill',
               'Service Bills',
-              <Wrench size={16} />,
+              <ReceiptText size={16} />,
               activeTab === 'service_bill',
               () => handleNav('service_bill'),
               'Alt+4'
@@ -262,10 +280,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'masters-parties',
               'Parties',
               <Users size={16} />,
-              activeTab === 'masters' && (!setMastersSubTab || (window as any)._currentMasterTab === 'parties'),
+              activeTab === 'parties' || (activeTab === 'masters' && (!setMastersSubTab || (window as any)._currentMasterTab === 'parties')),
               () => {
                 (window as any)._currentMasterTab = 'parties';
-                handleNav('masters', { masterTab: 'parties' });
+                handleNav('parties', { masterTab: 'parties' });
               },
               'Alt+3'
             )}
@@ -386,48 +404,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
               () => handleNav('reports', { reportId: 'outstanding' })
             )}
           </div>
-
-          {/* SETTINGS */}
-          <div className="nav-section">
-            {!isCollapsed ? (
-              <div className="nav-section-label">SYSTEM</div>
-            ) : (
-              <div className="nav-section-divider" />
-            )}
-            {renderItem(
-              'utilities',
-              'Backup & Audit',
-              <Database size={16} />,
-              activeTab === 'utilities',
-              () => handleNav('utilities'),
-              'Alt+5'
-            )}
-            {renderItem(
-              'settings',
-              'Settings',
-              <Settings size={16} />,
-              activeTab === 'settings',
-              () => handleNav('settings')
-            )}
-          </div>
         </nav>
 
-        {/* Footer */}
-        <div className={`sidebar-footer ${isCollapsed ? 'collapsed' : ''}`}>
-          {isCollapsed ? (
-            <div
-              title="LedgerFlow OS — LIVE"
-              onClick={onToggleCollapse}
-              style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer' }}
-            >
-              <span className="beacon-dot" />
-            </div>
-          ) : (
-            <div className="sidebar-status">
-              <span className="beacon-dot" />
-              <span className="sidebar-status-label">LedgerFlow OS</span>
-              <small className="sidebar-status-live">LIVE</small>
-            </div>
+        {/* Bottom: Settings matching Dashboard.png */}
+        <div
+          className="sidebar-bottom-action"
+          style={{
+            padding: isCollapsed ? '10px 8px' : '10px 10px',
+            borderTop: '1px solid var(--sidebar-border, #E5E7EB)',
+            marginTop: 'auto',
+            flexShrink: 0
+          }}
+        >
+          {renderItem(
+            'settings',
+            'Settings',
+            <Settings size={16} />,
+            activeTab === 'settings',
+            () => handleNav('settings')
           )}
         </div>
       </aside>

@@ -138,7 +138,7 @@
   --chart-receipt:        #16A34A;
   --chart-payment:        #DC2626;
   --sidebar-width:        220px;
-  --sidebar-width-collapsed: 56px;
+  --sidebar-width-collapsed: 68px;
 
   /* ── Legacy Aliases (keeps existing components working) ── */
   --primary:              #F97316;

@@ -239,42 +239,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
   }, [data]);
 
-  // Semicircular Business Health Gauge calculations
-  const { healthScore, healthStatusText, healthDescText, salesShare, purchaseShare, recvShare, payShare, svcShare } = useMemo(() => {
+  // Business Health status indicators
+  // CRITICAL REQUIREMENT 10: Backend currently does not provide an official health rating score.
+  // We do NOT invent a synthetic accounting health score formula.
+  // Real financial breakdown indicators are displayed, and score shows '--' (Pending).
+  const { hasAnyTransactions, healthScoreDisplay, healthStatusText, healthDescText, salesShare, purchaseShare, recvShare, payShare, svcShare } = useMemo(() => {
     const totalBenchmark = Math.max(totalSalesPaise, 1);
+    const hasTransactions = totalSalesPaise > 0 || totalPurchasePaise > 0 || receivablesPaise > 0 || payablesPaise > 0;
 
-    // Compute standard accounting liquidity ratio: (Cash & Bank + Receivables) / Payables
-    const liquidAssets = Math.max(0, cashBankPaise) + receivablesPaise;
-    const currentLiabilities = payablesPaise;
-
-    let computedScore = 0;
     let statusText = 'Welcome to LedgerFlow! ✨';
     let descText = 'Post your first sales and purchase vouchers to activate live business health tracking.';
 
-    const hasAnyTransactions = totalSalesPaise > 0 || totalPurchasePaise > 0 || receivablesPaise > 0 || payablesPaise > 0;
-
-    if (hasAnyTransactions) {
-      if (currentLiabilities > 0) {
-        const quickRatio = liquidAssets / currentLiabilities;
-        // 1.0 quick ratio maps to 80 points; 1.5+ quick ratio maps to 90-100 points
-        computedScore = Math.min(100, Math.max(10, Math.round(quickRatio * 80)));
-      } else if (liquidAssets > 0) {
-        // Zero debt / payables with positive liquidity
-        computedScore = 95;
-      } else {
-        computedScore = 65;
-      }
-
-      if (computedScore >= 80) {
-        statusText = 'Your business is performing well! ✨';
-        descText = "You're ahead in key areas like collections, working capital, and operational liquidity.";
-      } else if (computedScore >= 60) {
-        statusText = 'Business health is stable 👍';
-        descText = 'Working capital is balanced. Monitor outstanding receivables to ensure steady cash flow.';
-      } else {
-        statusText = 'Attention recommended ⚠️';
-        descText = 'Short-term payables exceed liquid reserves. Review upcoming supplier dues and accelerate collections.';
-      }
+    if (hasTransactions) {
+      statusText = 'Operating Metrics Active ✨';
+      descText = 'Double-entry books are active and balanced. Credit scoring model is pending backend analytics integration.';
     }
 
     const calcShare = (val: number) => {
@@ -284,7 +262,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
 
     return {
-      healthScore: hasAnyTransactions ? computedScore : 0,
+      hasAnyTransactions: hasTransactions,
+      healthScoreDisplay: '--',
       healthStatusText: statusText,
       healthDescText: descText,
       salesShare: totalSalesPaise > 0 ? '100%' : '--',
@@ -293,7 +272,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       payShare: calcShare(payablesPaise),
       svcShare: calcShare(serviceIncomePaise)
     };
-  }, [totalSalesPaise, totalPurchasePaise, receivablesPaise, payablesPaise, serviceIncomePaise, cashBankPaise]);
+  }, [totalSalesPaise, totalPurchasePaise, receivablesPaise, payablesPaise, serviceIncomePaise]);
+
+  // Dynamic miniature sparkline indicators derived strictly from real period data
+  const { salesSparkline, purchaseSparkline, totalChartVolume } = useMemo(() => {
+    const sMax = Math.max(...chartBars.map((b) => b.salesPaise), 0);
+    const pMax = Math.max(...chartBars.map((b) => b.purchasePaise), 0);
+    const tot = chartBars.reduce((sum, b) => sum + b.salesPaise + b.purchasePaise, 0);
+
+    const sBars = chartBars.map((b) => (sMax > 0 ? Math.max(4, Math.round((b.salesPaise / sMax) * 24)) : 4));
+    const pBars = chartBars.map((b) => (pMax > 0 ? Math.max(4, Math.round((b.purchasePaise / pMax) * 24)) : 4));
+
+    return {
+      salesSparkline: sBars,
+      purchaseSparkline: pBars,
+      totalChartVolume: tot
+    };
+  }, [chartBars]);
 
   // Recent vouchers list from backend
   const recentVouchers = useMemo(() => {
@@ -480,17 +475,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 )}
               </div>
 
-              {/* 6 mini bars with orange graduation */}
+              {/* Mini bars strictly proportional to real monthly sales */}
               <div className="lf-kpi-sparkline" style={{ gap: 2.5, height: 26 }}>
-                {[0.3, 0.45, 0.55, 0.7, 0.85, 1.0].map((h, idx) => (
+                {salesSparkline.map((h, idx) => (
                   <div
                     key={idx}
                     style={{
                       width: 5,
-                      height: Math.max(6, Math.round(h * 24)),
+                      height: h,
                       borderRadius: 1.5,
                       backgroundColor: '#F97316',
-                      opacity: 0.25 + idx * 0.15
+                      opacity: totalSalesPaise > 0 ? 0.3 + idx * 0.14 : 0.2
                     }}
                   />
                 ))}
@@ -532,17 +527,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 )}
               </div>
 
-              {/* 6 mini bars with warm sand tint */}
+              {/* Mini bars strictly proportional to real monthly purchases */}
               <div className="lf-kpi-sparkline" style={{ gap: 2.5, height: 26 }}>
-                {[0.25, 0.35, 0.45, 0.6, 0.75, 0.9].map((h, idx) => (
+                {purchaseSparkline.map((h, idx) => (
                   <div
                     key={idx}
                     style={{
                       width: 5,
-                      height: Math.max(6, Math.round(h * 24)),
+                      height: h,
                       borderRadius: 1.5,
                       backgroundColor: '#E2D9D0',
-                      opacity: 0.4 + idx * 0.12
+                      opacity: totalPurchasePaise > 0 ? 0.4 + idx * 0.12 : 0.25
                     }}
                   />
                 ))}
@@ -576,15 +571,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               {/* Mini curved sparkline curve */}
-              <div className="lf-kpi-sparkline" style={{ width: 56, height: 24 }}>
+              <div className="lf-kpi-sparkline" style={{ width: 56, height: 24, display: 'flex', alignItems: 'center' }}>
                 <svg width="56" height="24" viewBox="0 0 56 24" fill="none">
-                  <path
-                    d="M2 20C12 18 18 22 28 14C38 6 46 12 54 4"
-                    stroke="#F97316"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
+                  {receivablesPaise > 0 ? (
+                    <path
+                      d="M2 20C12 18 18 22 28 14C38 6 46 12 54 4"
+                      stroke="#F97316"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  ) : (
+                    <line x1="2" y1="18" x2="54" y2="18" stroke="#CBD5E1" strokeWidth="2" strokeDasharray="3 3" />
+                  )}
                 </svg>
               </div>
             </div>
@@ -616,16 +615,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               {/* Mini curved sparkline curve */}
-              <div className="lf-kpi-sparkline" style={{ width: 56, height: 24 }}>
+              <div className="lf-kpi-sparkline" style={{ width: 56, height: 24, display: 'flex', alignItems: 'center' }}>
                 <svg width="56" height="24" viewBox="0 0 56 24" fill="none">
-                  <path
-                    d="M2 18C10 20 20 12 30 16C40 20 48 8 54 6"
-                    stroke="#D97706"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    opacity="0.85"
-                  />
+                  {payablesPaise > 0 ? (
+                    <path
+                      d="M2 18C10 20 20 12 30 16C40 20 48 8 54 6"
+                      stroke="#D97706"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      opacity="0.85"
+                    />
+                  ) : (
+                    <line x1="2" y1="18" x2="54" y2="18" stroke="#CBD5E1" strokeWidth="2" strokeDasharray="3 3" />
+                  )}
                 </svg>
               </div>
             </div>
@@ -656,17 +659,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="lf-kpi-trend-label">Repairs & Labor</span>
               </div>
 
-              {/* 6 mini bars with warm sand tint */}
+              {/* 6 mini bars */}
               <div className="lf-kpi-sparkline" style={{ gap: 2.5, height: 26 }}>
-                {[0.2, 0.35, 0.45, 0.6, 0.8, 1.0].map((h, idx) => (
+                {[0.2, 0.35, 0.5, 0.65, 0.8, 1.0].map((factor, idx) => (
                   <div
                     key={idx}
                     style={{
                       width: 5,
-                      height: Math.max(6, Math.round(h * 24)),
+                      height: serviceIncomePaise > 0 ? Math.max(4, Math.round(factor * 24)) : 4,
                       borderRadius: 1.5,
                       backgroundColor: '#E2D9D0',
-                      opacity: 0.4 + idx * 0.12
+                      opacity: serviceIncomePaise > 0 ? 0.4 + idx * 0.12 : 0.25
                     }}
                   />
                 ))}
@@ -721,8 +724,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       strokeWidth="14"
                       strokeLinecap="round"
                     />
-                    {/* Filled Arc proportional to healthScore */}
-                    {healthScore > 0 && (
+                    {/* Active Arc: Neutral indicator when books are live */}
+                    {hasAnyTransactions && (
                       <path
                         d="M 20 95 A 75 75 0 0 1 170 95"
                         fill="none"
@@ -730,16 +733,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         strokeWidth="14"
                         strokeLinecap="round"
                         strokeDasharray="235.6"
-                        strokeDashoffset={235.6 * (1 - Math.min(100, healthScore) / 100)}
-                        style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                        strokeDashoffset={235.6 * 0.4}
                       />
                     )}
                   </svg>
 
                   <div className="lf-gauge-center">
                     <div className="lf-gauge-score-row">
-                      <span className="lf-gauge-score">{healthScore > 0 ? healthScore : '--'}</span>
-                      {healthScore >= 75 && <span className="lf-gauge-delta">+1</span>}
+                      <span className="lf-gauge-score" style={{ letterSpacing: '0.04em' }}>{healthScoreDisplay}</span>
                     </div>
                     <span className="lf-gauge-label">of 100 points</span>
                   </div>
@@ -883,6 +884,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       style={{ bottom: `calc(${pct * 0.8}% + 22px)` }}
                     />
                   ))}
+
+                  {totalChartVolume === 0 && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '40%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        fontSize: '11.5px',
+                        color: 'var(--color-text-muted)',
+                        backgroundColor: 'var(--color-surface)',
+                        padding: '6px 14px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--color-border)',
+                        pointerEvents: 'none',
+                        zIndex: 5
+                      }}
+                    >
+                      No transactions recorded for this period
+                    </div>
+                  )}
 
                   {/* 6 Grouped month columns */}
                   {chartBars.map((bar, idx) => {

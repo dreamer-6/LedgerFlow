@@ -43,6 +43,65 @@ export interface UserSession {
   role: string;
 }
 
+export interface Party {
+  party_id: string;
+  company_id: string;
+  ledger_id: string;
+  party_type: 'CUSTOMER' | 'SUPPLIER' | 'BOTH';
+  party_name: string;
+  gstin?: string | null;
+  pan?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  contact_person?: string | null;
+  credit_limit_paise?: number;
+  credit_period_days?: number;
+  banking_name?: string | null;
+  banking_account_no?: string | null;
+  banking_ifsc?: string | null;
+  address_line1?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  state_code?: string | null;
+  pincode?: string | null;
+  opening_balance_paise?: number;
+  opening_balance_type?: 'DR' | 'CR';
+  current_balance_paise: number;
+  created_at?: string;
+}
+
+export interface CreatePartyPayload {
+  partyName?: string;
+  party_name?: string;
+  partyType?: 'CUSTOMER' | 'SUPPLIER' | 'BOTH';
+  party_type?: 'CUSTOMER' | 'SUPPLIER' | 'BOTH';
+  companyId?: string;
+  company_id?: string;
+  gstin?: string;
+  pan?: string;
+  phone?: string;
+  email?: string;
+  contactPerson?: string;
+  contact_person?: string;
+  bankingName?: string;
+  bankingAccountNo?: string;
+  bankingIfsc?: string;
+  addressLine1?: string;
+  address_line1?: string;
+  addressLine2?: string;
+  address_line2?: string;
+  city?: string;
+  state?: string;
+  stateCode?: string;
+  state_code?: string;
+  pincode?: string;
+  openingBalancePaise?: number;
+  [key: string]: any;
+}
+
+export interface UpdatePartyPayload extends Partial<CreatePartyPayload> {}
+
 export const authStorage = {
   getToken: () => localStorage.getItem('lf_token'),
   setToken: (token: string | null) => {
@@ -295,7 +354,7 @@ export const api = {
     return res.json();
   },
 
-  async getParties(type?: string) {
+  async getParties(type?: string): Promise<Party[]> {
     const url = type ? `${API_BASE}/masters/parties?type=${type}` : `${API_BASE}/masters/parties`;
     const res = await fetch(url, {
       headers: getHeaders()
@@ -304,7 +363,7 @@ export const api = {
     return res.json();
   },
 
-  async createParty(party: any) {
+  async createParty(party: CreatePartyPayload): Promise<any> {
     const res = await fetch(`${API_BASE}/masters/parties`, {
       method: 'POST',
       headers: getHeaders({ 'Content-Type': 'application/json' }),
@@ -316,7 +375,7 @@ export const api = {
     return res.json();
   },
 
-  async updateParty(id: string, party: any) {
+  async updateParty(id: string, party: UpdatePartyPayload): Promise<{ success: boolean; message: string }> {
     const res = await fetch(`${API_BASE}/masters/parties/${id}`, {
       method: 'PUT',
       headers: getHeaders({ 'Content-Type': 'application/json' }),
@@ -328,7 +387,7 @@ export const api = {
     return res.json();
   },
 
-  async deleteParty(id: string) {
+  async deleteParty(id: string): Promise<{ success: boolean; message: string }> {
     const res = await fetch(`${API_BASE}/masters/parties/${id}`, {
       method: 'DELETE',
       headers: getHeaders()

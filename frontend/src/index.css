@@ -2,12 +2,13 @@
 @import './styles/components.css';
 @import './styles/auth.css';
 @import './styles/dashboard.css';
+@import './styles/parties.css';
 
 /* Card surfaces matching Style Guide (#1A1D22 in dark, #FFFFFF in light) */
 [data-theme="dark"] .ledger-card,
 [data-theme="dark"] .vev2-card,
 [data-theme="dark"] .lf-card,
-[data-theme="dark"] [class*="card"] {
+[data-theme="dark"] .card {
   background: var(--surface);
   box-shadow: var(--card-shadow);
   border: 1px solid var(--border);
@@ -16,7 +17,7 @@
 [data-theme="light"] .ledger-card,
 [data-theme="light"] .vev2-card,
 [data-theme="light"] .lf-card,
-[data-theme="light"] [class*="card"] {
+[data-theme="light"] .card {
   background: var(--surface);
   box-shadow: var(--card-shadow);
   border: 1px solid var(--border);
@@ -727,14 +728,14 @@ kbd {
 }
 
 .sidebar-aside {
-  width: var(--sidebar-width, 238px);
+  width: var(--sidebar-width, 220px);
   background-color: var(--sidebar-bg);
   border-right: 1px solid var(--border-subtle);
-  height: calc(100vh - var(--topbar-height, 58px));
+  height: 100vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 90;
   flex-shrink: 0;
@@ -766,22 +767,42 @@ kbd {
 }
 
 .sidebar-aside.collapsed .nav-item {
-  justify-content: center;
-  margin: 4px 10px;
-  padding: 10px 0;
+  width: 44px;
+  height: 42px;
+  margin: 3px auto;
+  padding: 0;
   border-radius: 10px;
+  overflow: visible;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sidebar-aside.collapsed .nav-item .nav-icon {
   margin: 0;
+  width: 22px;
+  height: 22px;
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
+.sidebar-aside.collapsed .nav-icon svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
 .sidebar-aside.collapsed .nav-item.active {
   background-color: var(--bg-selected);
-  box-shadow: 0 0 12px rgba(255, 122, 0, 0.25);
+  box-shadow: none;
+}
+
+.sidebar-aside.collapsed .nav-item.active::before {
+  left: -12px;
+  width: 3.5px;
+  height: 26px;
+  border-radius: 0 4px 4px 0;
 }
 
 .sidebar-aside.collapsed .sidebar-footer {
@@ -1060,13 +1081,15 @@ kbd {
 
   .sidebar-aside {
     position: fixed;
-    top: var(--topbar-height, 58px);
+    top: 0;
     left: 0;
     bottom: 0;
-    width: 260px;
-    height: calc(100vh - var(--topbar-height, 58px));
+    width: 240px;
+    height: 100vh;
+    min-height: 100vh;
     transform: translateX(-100%);
     box-shadow: 4px 0 28px rgba(0, 0, 0, 0.2);
+    z-index: 100;
   }
 
   .sidebar-aside.mobile-open {
@@ -1076,13 +1099,13 @@ kbd {
   .sidebar-backdrop {
     display: block;
     position: fixed;
-    top: var(--topbar-height, 58px);
+    top: 0;
     left: 0;
     right: 0;
     bottom: 0;
     background-color: rgba(5, 5, 5, 0.55);
     backdrop-filter: blur(4px);
-    z-index: 85;
+    z-index: 99;
   }
 
   .dashboard-kpi-grid {

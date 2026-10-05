@@ -238,7 +238,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
           alt={
             mode === 'LOGIN'
               ? 'LedgerFlow - Accounting Made Simple. Invoices, inventory, services, reports and more.'
-              : 'LedgerFlow - Built for Growing Businesses. Trusted by small businesses, built for bigger goals.'
+              : 'LedgerFlow - Built for Growing Businesses. Manage your invoices, inventory, services, reports and more.'
           }
           className="lf-auth-hero-banner-img"
         />
@@ -269,7 +269,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
           {/* Error Alert with aria-live */}
           {errorMessage && (
-            <div style={{ marginBottom: 18 }} aria-live="polite">
+            <div style={{ marginBottom: 12 }} aria-live="polite">
               <Alert variant="danger" onClose={() => setErrorMessage(null)}>
                 {errorMessage}
               </Alert>
@@ -307,8 +307,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 )}
               </div>
 
-              <div className="lf-field" style={{ marginTop: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div className="lf-field">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <label htmlFor="login-password" className="lf-field-label" style={{ margin: 0 }}>
                     Password
                   </label>
@@ -320,7 +320,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                       border: 'none',
                       padding: 0,
                       color: 'var(--color-primary, #F97316)',
-                      fontSize: '12.5px',
+                      fontSize: '12px',
                       fontWeight: 600,
                       cursor: 'pointer'
                     }}
@@ -363,7 +363,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
               </div>
 
               {/* Keep me signed in */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '16px 0 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0 14px' }}>
                 <input
                   type="checkbox"
                   id="keep-signed-in"
@@ -372,7 +372,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 />
                 <label
                   htmlFor="keep-signed-in"
-                  style={{ fontSize: 13.5, color: 'var(--color-text-secondary)', cursor: 'pointer', userSelect: 'none' }}
+                  style={{ fontSize: 13, color: 'var(--color-text-secondary)', cursor: 'pointer', userSelect: 'none' }}
                 >
                   Keep me signed in
                 </label>
@@ -389,7 +389,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 ) : (
                   <>
                     <span>Sign In</span>
-                    <ArrowRight size={17} />
+                    <ArrowRight size={16} />
                   </>
                 )}
               </button>
@@ -475,7 +475,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
               </div>
 
               {/* Email Address */}
-              <div className="lf-field" style={{ marginTop: 14 }}>
+              <div className="lf-field">
                 <label htmlFor="signup-email" className="lf-field-label">
                   Email Address
                 </label>
@@ -502,7 +502,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
               </div>
 
               {/* Password */}
-              <div className="lf-field" style={{ marginTop: 14 }}>
+              <div className="lf-field">
                 <label htmlFor="signup-password" className="lf-field-label">
                   Password
                 </label>
@@ -539,7 +539,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   </div>
                   <div className={`lf-auth-pw-item ${isUpperValid ? 'valid' : ''}`}>
                     {isUpperValid ? <CheckCircle2 className="pw-icon" size={13} /> : <Circle className="pw-icon" size={13} />}
-                    <span>One uppercase letter</span>
+                    <span>One uppercase</span>
                   </div>
                   <div className={`lf-auth-pw-item ${isNumValid ? 'valid' : ''}`}>
                     {isNumValid ? <CheckCircle2 className="pw-icon" size={13} /> : <Circle className="pw-icon" size={13} />}
@@ -555,7 +555,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
               </div>
 
               {/* Confirm Password */}
-              <div className="lf-field" style={{ marginTop: 14 }}>
+              <div className="lf-field">
                 <label htmlFor="signup-confirm-password" className="lf-field-label">
                   Confirm Password
                 </label>
@@ -591,7 +591,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
               </div>
 
               {/* Agree to Terms */}
-              <div style={{ margin: '16px 0 20px' }}>
+              <div style={{ margin: '8px 0 12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <input
                     type="checkbox"
@@ -604,7 +604,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   />
                   <label
                     htmlFor="agree-terms"
-                    style={{ fontSize: 13, color: 'var(--color-text-secondary)', cursor: 'pointer', lineHeight: 1.4 }}
+                    style={{ fontSize: 12.5, color: 'var(--color-text-secondary)', cursor: 'pointer', lineHeight: 1.4 }}
                   >
                     I agree to the{' '}
                     <button
@@ -642,7 +642,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 ) : (
                   <>
                     <span>Create Account</span>
-                    <ArrowRight size={17} />
+                    <ArrowRight size={16} />
                   </>
                 )}
               </button>
