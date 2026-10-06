@@ -713,5 +713,39 @@ export const api = {
     });
     if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
+  },
+
+  async postDraftVoucher(id: string) {
+    const res = await fetch(`${API_BASE}/vouchers/${id}/post`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({})
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to post draft voucher'));
+    return res.json();
+  },
+
+  async getSalesVouchers(fromDate?: string, toDate?: string, status?: string): Promise<any[]> {
+    const params = new URLSearchParams({ type: 'SALES' });
+    if (fromDate) params.append('fromDate', fromDate);
+    if (toDate) params.append('toDate', toDate);
+    if (status) params.append('status', status);
+    const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
+  },
+
+  async getPurchaseVouchers(fromDate?: string, toDate?: string, status?: string): Promise<any[]> {
+    const params = new URLSearchParams({ type: 'PURCHASE' });
+    if (fromDate) params.append('fromDate', fromDate);
+    if (toDate) params.append('toDate', toDate);
+    if (status) params.append('status', status);
+    const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
   }
 };

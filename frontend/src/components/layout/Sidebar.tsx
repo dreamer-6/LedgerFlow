@@ -34,6 +34,10 @@ export interface SidebarProps {
   setVoucherInitialType?: (type: string) => void;
   mastersSubTab?: string;
   setMastersSubTab?: (tab: string) => void;
+  salesViewMode?: 'dashboard' | 'create';
+  setSalesViewMode?: (mode: 'dashboard' | 'create') => void;
+  purchaseViewMode?: 'dashboard' | 'create';
+  setPurchaseViewMode?: (mode: 'dashboard' | 'create') => void;
   isOpen?: boolean;
   onClose?: () => void;
   isCollapsed?: boolean;
@@ -47,6 +51,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setReportSubTab,
   setVoucherInitialType,
   setMastersSubTab,
+  salesViewMode = 'dashboard',
+  setSalesViewMode,
+  purchaseViewMode = 'dashboard',
+  setPurchaseViewMode,
   isOpen = false,
   onClose,
   isCollapsed = false,
@@ -205,24 +213,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="nav-section-divider" />
             )}
             {renderItem(
-              'vouchers-sales',
+              'sales-module',
               'Sales',
               <ShoppingCart size={16} />,
-              activeTab === 'vouchers' && (window as any)._currentVoucherType === 'SALES',
+              activeTab === 'sales' || (activeTab === 'vouchers' && (window as any)._currentVoucherType === 'SALES'),
               () => {
-                (window as any)._currentVoucherType = 'SALES';
-                handleNav('vouchers', { voucherType: 'SALES' });
+                setActiveTab('sales');
+                if (setSalesViewMode) setSalesViewMode('dashboard');
+                if (onClose) onClose();
               },
               'Alt+S'
             )}
             {renderItem(
-              'vouchers-purchase',
+              'purchase-module',
               'Purchase',
               <ShoppingBag size={16} />,
-              activeTab === 'vouchers' && (window as any)._currentVoucherType === 'PURCHASE',
+              activeTab === 'purchase' || (activeTab === 'vouchers' && (window as any)._currentVoucherType === 'PURCHASE'),
               () => {
-                (window as any)._currentVoucherType = 'PURCHASE';
-                handleNav('vouchers', { voucherType: 'PURCHASE' });
+                setActiveTab('purchase');
+                if (setPurchaseViewMode) setPurchaseViewMode('dashboard');
+                if (onClose) onClose();
               },
               'Alt+P'
             )}

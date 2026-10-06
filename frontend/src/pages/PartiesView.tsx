@@ -1393,11 +1393,12 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(3px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1000
+            zIndex: 99999
           }}
           onClick={() => setDeleteConfirmParty(null)}
         >
@@ -1407,7 +1408,8 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
               width: '420px',
               padding: '24px',
               borderRadius: '12px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
+              background: 'var(--surface, #FFFFFF)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)'
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1718,7 +1720,7 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
       <div className="parties-main-split">
         {/* Left Side: Table Card */}
         <div className="parties-table-card">
-          <div className="parties-table-wrapper">
+          <div className="parties-table-wrapper" style={{ minHeight: '320px' }}>
             <table className="parties-table">
               <thead>
                 <tr>
@@ -1887,47 +1889,75 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                           <span className="party-badge-status-active">Active</span>
                         </td>
 
-                        <td style={{ textAlign: 'center', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            className="party-action-btn"
-                            title="More actions"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveMenuPartyId((prev) => (prev === party.party_id ? null : party.party_id));
-                            }}
-                          >
-                            <MoreVertical size={16} />
-                          </button>
-
-                          {activeMenuPartyId === party.party_id && (
-                            <div
-                              className="party-menu-dropdown"
-                              onClick={(e) => e.stopPropagation()}
-                              style={{
-                                position: 'absolute',
-                                right: '10px',
-                                top: 'calc(100% + 2px)',
-                                zIndex: 9999,
-                                background: 'var(--surface)',
-                                border: '1px solid var(--border)',
-                                borderRadius: '8px',
-                                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25)',
-                                width: '180px',
-                                padding: '4px'
+                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', position: 'relative' }}>
+                            <button
+                              type="button"
+                              className="party-action-btn"
+                              title="Edit Party"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenuPartyId(null);
+                                openEditForm(party);
                               }}
                             >
-                              <button
-                                type="button"
-                                className="party-menu-item"
-                                onClick={() => {
-                                  setActiveMenuPartyId(null);
-                                  openEditForm(party);
+                              <Edit2 size={15} />
+                            </button>
+
+                            <button
+                              type="button"
+                              className="party-action-btn"
+                              title="Delete Party"
+                              style={{ color: '#DC2626' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenuPartyId(null);
+                                setDeleteConfirmParty(party);
+                              }}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+
+                            <button
+                              type="button"
+                              className="party-action-btn"
+                              title="More actions"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenuPartyId((prev) => (prev === party.party_id ? null : party.party_id));
+                              }}
+                            >
+                              <MoreVertical size={16} />
+                            </button>
+
+                            {activeMenuPartyId === party.party_id && (
+                              <div
+                                className="party-menu-dropdown"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  position: 'absolute',
+                                  right: 0,
+                                  top: 'calc(100% + 4px)',
+                                  zIndex: 99999,
+                                  background: 'var(--surface)',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25)',
+                                  width: '180px',
+                                  padding: '4px'
                                 }}
                               >
-                                <Edit2 size={14} style={{ marginRight: '6px' }} />
-                                <span>Edit Party</span>
-                              </button>
+                                <button
+                                  type="button"
+                                  className="party-menu-item"
+                                  onClick={() => {
+                                    setActiveMenuPartyId(null);
+                                    openEditForm(party);
+                                  }}
+                                >
+                                  <Edit2 size={14} style={{ marginRight: '6px' }} />
+                                  <span>Edit Party</span>
+                                </button>
 
                               {onOpenNewVoucher && (
                                 <>
@@ -1984,7 +2014,8 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                               </button>
                             </div>
                           )}
-                        </td>
+                        </div>
+                      </td>
                       </tr>
                     );
                   })
@@ -2087,7 +2118,7 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                       position: 'absolute',
                       right: 0,
                       top: 'calc(100% + 4px)',
-                      zIndex: 9999,
+                      zIndex: 99999,
                       background: 'var(--surface)',
                       border: '1px solid var(--border)',
                       borderRadius: '8px',
@@ -2122,6 +2153,39 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Direct Action Bar matching ItemsView */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px', marginBottom: '16px' }}>
+              <button
+                type="button"
+                className="parties-filter-btn"
+                style={{ justifyContent: 'center', height: '36px', fontSize: '13px' }}
+                onClick={() => openEditForm(selectedParty)}
+              >
+                <Edit2 size={14} style={{ marginRight: '6px' }} />
+                <span>Edit Party</span>
+              </button>
+              {onOpenNewVoucher && (
+                <button
+                  type="button"
+                  className="parties-add-btn"
+                  style={{ justifyContent: 'center', height: '36px', fontSize: '13px' }}
+                  onClick={() => onOpenNewVoucher('SALES', selectedParty.party_id)}
+                >
+                  <Plus size={14} style={{ marginRight: '4px' }} />
+                  <span>Invoice</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="parties-filter-btn"
+                title="Delete Party"
+                style={{ justifyContent: 'center', height: '36px', color: '#DC2626', borderColor: 'rgba(220, 38, 38, 0.3)', padding: '0 12px' }}
+                onClick={() => setDeleteConfirmParty(selectedParty)}
+              >
+                <Trash2 size={15} />
+              </button>
             </div>
 
             {/* Sub-tabs: Overview | Addresses | Contacts | More */}
@@ -2382,21 +2446,21 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                     </div>
                     <ChevronRight size={14} color="var(--text-muted)" />
                   </button>
-
-                  <button
-                    type="button"
-                    className="party-quick-action-link"
-                    style={{ color: '#DC2626' }}
-                    onClick={() => setDeleteConfirmParty(selectedParty)}
-                  >
-                    <div className="party-quick-action-link-left">
-                      <Trash2 size={15} color="#DC2626" />
-                      <span style={{ color: '#DC2626' }}>Delete Party</span>
-                    </div>
-                    <ChevronRight size={14} color="#DC2626" />
-                  </button>
                 </>
               )}
+
+              <button
+                type="button"
+                className="party-quick-action-link"
+                style={{ color: '#DC2626' }}
+                onClick={() => setDeleteConfirmParty(selectedParty)}
+              >
+                <div className="party-quick-action-link-left">
+                  <Trash2 size={15} color="#DC2626" />
+                  <span style={{ color: '#DC2626', fontWeight: 600 }}>Delete Party</span>
+                </div>
+                <ChevronRight size={14} color="#DC2626" />
+              </button>
             </div>
           </div>
         ) : (

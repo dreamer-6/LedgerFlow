@@ -14,6 +14,10 @@ import { UtilitiesView } from './pages/UtilitiesView';
 import { SettingsView } from './pages/SettingsView';
 import { InvoicePrintModal } from './pages/InvoicePrintModal';
 import { ServiceBillView } from './pages/ServiceBillView';
+import { SalesView } from './pages/SalesView';
+import { SalesInvoiceView } from './pages/SalesInvoiceView';
+import { PurchaseView } from './pages/PurchaseView';
+import { PurchaseInvoiceView } from './pages/PurchaseInvoiceView';
 import { CreateBusinessOnboarding } from './components/CreateBusinessOnboarding';
 import { DateChangeModal } from './components/DateChangeModal';
 import { FinancialYearModal } from './components/FinancialYearModal';
@@ -81,6 +85,8 @@ export const App: React.FC = () => {
 
   // Tab & View States
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [salesViewMode, setSalesViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [purchaseViewMode, setPurchaseViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [reportSubTab, setReportSubTab] = useState<string>('daybook');
   const [voucherInitialType, setVoucherInitialType] = useState<string>('SALES');
   const [editVoucherId, setEditVoucherId] = useState<string | null>(null);
@@ -288,14 +294,14 @@ export const App: React.FC = () => {
       // Tally Prime Function Key Navigation (F4-F9)
       if (e.key === 'F8') {
         e.preventDefault();
-        setVoucherInitialType('SALES');
-        setActiveTab('vouchers');
+        setSalesViewMode('create');
+        setActiveTab('sales');
         return;
       }
       if (e.key === 'F9') {
         e.preventDefault();
-        setVoucherInitialType('PURCHASE');
-        setActiveTab('vouchers');
+        setPurchaseViewMode('create');
+        setActiveTab('purchase');
         return;
       }
       if (e.key === 'F6') {
@@ -349,12 +355,12 @@ export const App: React.FC = () => {
           setActiveTab('service_bill');
         } else if (k === 's') {
           e.preventDefault();
-          setVoucherInitialType('SALES');
-          setActiveTab('vouchers');
+          setSalesViewMode('dashboard');
+          setActiveTab('sales');
         } else if (k === 'p') {
           e.preventDefault();
-          setVoucherInitialType('PURCHASE');
-          setActiveTab('vouchers');
+          setPurchaseViewMode('dashboard');
+          setActiveTab('purchase');
         } else if (k === 'r') {
           e.preventDefault();
           setVoucherInitialType('RECEIPT');
@@ -372,6 +378,22 @@ export const App: React.FC = () => {
   }, [showSearchModal, activePrintVoucherId]);
 
   const handleOpenNewVoucher = (type: string = 'SALES', partyId?: string) => {
+    if (type === 'SALES') {
+      if (partyId) {
+        (window as any)._preselectedPartyId = partyId;
+      }
+      setSalesViewMode('create');
+      setActiveTab('sales');
+      return;
+    }
+    if (type === 'PURCHASE') {
+      if (partyId) {
+        (window as any)._preselectedPartyId = partyId;
+      }
+      setPurchaseViewMode('create');
+      setActiveTab('purchase');
+      return;
+    }
     setVoucherInitialType(type);
     if (partyId) {
       (window as any)._preselectedPartyId = partyId;
@@ -386,9 +408,13 @@ export const App: React.FC = () => {
   // Quick navigation items for search palette
   const searchNavItems = [
     { label: 'Dashboard', tab: 'dashboard', category: 'Module', icon: <LayoutDashboard size={14} />, hotkey: 'Alt+1' },
-    { label: 'Sales Invoice Voucher', tab: 'vouchers', vType: 'SALES', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+S' },
+    { label: 'Sales Dashboard', tab: 'sales', category: 'Module', icon: <ShoppingCart size={14} />, hotkey: 'Alt+S' },
+    { label: 'Create Sales Invoice', tab: 'sales_create', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'F8' },
+    { label: 'Sales Invoice Voucher (Classic)', tab: 'vouchers', vType: 'SALES', category: 'Voucher', icon: <ReceiptText size={14} /> },
+    { label: 'Purchase Dashboard', tab: 'purchase', category: 'Module', icon: <ShoppingBag size={14} />, hotkey: 'Alt+P' },
+    { label: 'Create Purchase Invoice', tab: 'purchase_create', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'F9' },
+    { label: 'Purchase Voucher (Classic)', tab: 'vouchers', vType: 'PURCHASE', category: 'Voucher', icon: <ReceiptText size={14} /> },
     { label: 'Service Bill Entry (OS / Software / Servicing)', tab: 'service_bill', category: 'Voucher', icon: <Wrench size={14} />, hotkey: 'Alt+W' },
-    { label: 'Purchase Voucher', tab: 'vouchers', vType: 'PURCHASE', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+P' },
     { label: 'Receipt Voucher', tab: 'vouchers', vType: 'RECEIPT', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+R' },
     { label: 'Payment Voucher', tab: 'vouchers', vType: 'PAYMENT', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+Y' },
     { label: 'Parties (Customers & Suppliers)', tab: 'parties', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+3' },
@@ -412,6 +438,34 @@ export const App: React.FC = () => {
   );
 
   const handleSelectSearchItem = (item: any) => {
+    if (item.tab === 'sales_create') {
+      setSalesViewMode('create');
+      setActiveTab('sales');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'sales') {
+      setSalesViewMode('dashboard');
+      setActiveTab('sales');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'purchase_create') {
+      setPurchaseViewMode('create');
+      setActiveTab('purchase');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'purchase') {
+      setPurchaseViewMode('dashboard');
+      setActiveTab('purchase');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
     if (item.vType) {
       setVoucherInitialType(item.vType);
     }
@@ -495,6 +549,10 @@ export const App: React.FC = () => {
         setReportSubTab={setReportSubTab}
         voucherInitialType={voucherInitialType}
         setVoucherInitialType={setVoucherInitialType}
+        salesViewMode={salesViewMode}
+        setSalesViewMode={setSalesViewMode}
+        purchaseViewMode={purchaseViewMode}
+        setPurchaseViewMode={setPurchaseViewMode}
         onOpenBusinessSwitcher={() => setShowBusinessSwitcher(true)}
         onOpenFyModal={() => setShowFyModal(true)}
         onOpenSearch={() => setShowSearchModal(true)}
@@ -520,6 +578,64 @@ export const App: React.FC = () => {
                   if (sub) setReportSubTab(sub);
                 }}
               />
+            </div>
+          )}
+
+          {/* 1.1 Sales Module (UI-006) — Sales Dashboard & Sales Invoice Creation */}
+          {activeTab === 'sales' && (
+            <div key="sales" className="view-container-animated">
+              {salesViewMode === 'dashboard' ? (
+                <SalesView
+                  company={company}
+                  activeFy={activeFy}
+                  onCreateInvoice={() => setSalesViewMode('create')}
+                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                  onNavigateTab={(tab, sub) => {
+                    setActiveTab(tab);
+                    if (sub) setReportSubTab(sub);
+                  }}
+                />
+              ) : (
+                <SalesInvoiceView
+                  company={company}
+                  activeFy={activeFy}
+                  currentDate={currentDate}
+                  onBack={() => setSalesViewMode('dashboard')}
+                  onPostSuccess={(voucherId) => {
+                    setActivePrintVoucherId(voucherId);
+                    setSalesViewMode('dashboard');
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* 1.2 Purchase Module (UI-007) — Purchase Dashboard & Purchase Invoice Creation */}
+          {activeTab === 'purchase' && (
+            <div key="purchase" className="view-container-animated">
+              {purchaseViewMode === 'dashboard' ? (
+                <PurchaseView
+                  company={company}
+                  activeFy={activeFy}
+                  onCreateInvoice={() => setPurchaseViewMode('create')}
+                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                  onNavigateTab={(tab, sub) => {
+                    setActiveTab(tab);
+                    if (sub) setReportSubTab(sub);
+                  }}
+                />
+              ) : (
+                <PurchaseInvoiceView
+                  company={company}
+                  activeFy={activeFy}
+                  currentDate={currentDate}
+                  onBack={() => setPurchaseViewMode('dashboard')}
+                  onPostSuccess={(voucherId) => {
+                    setActivePrintVoucherId(voucherId);
+                    setPurchaseViewMode('dashboard');
+                  }}
+                />
+              )}
             </div>
           )}
 

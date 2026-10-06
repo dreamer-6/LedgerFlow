@@ -15,6 +15,10 @@ export interface AppShellProps {
   setVoucherInitialType?: (type: string) => void;
   mastersSubTab?: string;
   setMastersSubTab?: (tab: string) => void;
+  salesViewMode?: 'dashboard' | 'create';
+  setSalesViewMode?: (mode: 'dashboard' | 'create') => void;
+  purchaseViewMode?: 'dashboard' | 'create';
+  setPurchaseViewMode?: (mode: 'dashboard' | 'create') => void;
   onOpenBusinessSwitcher: () => void;
   onOpenFyModal: () => void;
   onOpenSearch: () => void;
@@ -34,6 +38,10 @@ export const AppShell: React.FC<AppShellProps> = ({
   setVoucherInitialType,
   mastersSubTab,
   setMastersSubTab,
+  salesViewMode,
+  setSalesViewMode,
+  purchaseViewMode,
+  setPurchaseViewMode,
   onOpenBusinessSwitcher,
   onOpenFyModal,
   onOpenSearch,
@@ -69,6 +77,10 @@ export const AppShell: React.FC<AppShellProps> = ({
         setVoucherInitialType={setVoucherInitialType}
         mastersSubTab={mastersSubTab}
         setMastersSubTab={setMastersSubTab}
+        salesViewMode={salesViewMode}
+        setSalesViewMode={setSalesViewMode}
+        purchaseViewMode={purchaseViewMode}
+        setPurchaseViewMode={setPurchaseViewMode}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         isCollapsed={sidebarCollapsed}
