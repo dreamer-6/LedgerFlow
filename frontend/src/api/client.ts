@@ -747,5 +747,41 @@ export const api = {
     });
     if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
     return res.json();
+  },
+
+  async getReceiptVouchers(fromDate?: string, toDate?: string, status?: string): Promise<any[]> {
+    const params = new URLSearchParams({ type: 'RECEIPT' });
+    if (fromDate) params.append('fromDate', fromDate);
+    if (toDate) params.append('toDate', toDate);
+    if (status) params.append('status', status);
+    const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
+  },
+
+  async getPaymentVouchers(fromDate?: string, toDate?: string, status?: string): Promise<any[]> {
+    const params = new URLSearchParams({ type: 'PAYMENT' });
+    if (fromDate) params.append('fromDate', fromDate);
+    if (toDate) params.append('toDate', toDate);
+    if (status) params.append('status', status);
+    const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
+  },
+
+  async getJournalVouchers(fromDate?: string, toDate?: string, status?: string): Promise<any[]> {
+    const params = new URLSearchParams({ type: 'JOURNAL' });
+    if (fromDate) params.append('fromDate', fromDate);
+    if (toDate) params.append('toDate', toDate);
+    if (status) params.append('status', status);
+    const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
   }
 };

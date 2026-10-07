@@ -19,6 +19,12 @@ export interface AppShellProps {
   setSalesViewMode?: (mode: 'dashboard' | 'create') => void;
   purchaseViewMode?: 'dashboard' | 'create';
   setPurchaseViewMode?: (mode: 'dashboard' | 'create') => void;
+  receiptViewMode?: 'dashboard' | 'create';
+  setReceiptViewMode?: (mode: 'dashboard' | 'create') => void;
+  paymentViewMode?: 'dashboard' | 'create';
+  setPaymentViewMode?: (mode: 'dashboard' | 'create') => void;
+  journalViewMode?: 'dashboard' | 'create';
+  setJournalViewMode?: (mode: 'dashboard' | 'create') => void;
   onOpenBusinessSwitcher: () => void;
   onOpenFyModal: () => void;
   onOpenSearch: () => void;
@@ -42,6 +48,12 @@ export const AppShell: React.FC<AppShellProps> = ({
   setSalesViewMode,
   purchaseViewMode,
   setPurchaseViewMode,
+  receiptViewMode,
+  setReceiptViewMode,
+  paymentViewMode,
+  setPaymentViewMode,
+  journalViewMode,
+  setJournalViewMode,
   onOpenBusinessSwitcher,
   onOpenFyModal,
   onOpenSearch,
@@ -81,6 +93,12 @@ export const AppShell: React.FC<AppShellProps> = ({
         setSalesViewMode={setSalesViewMode}
         purchaseViewMode={purchaseViewMode}
         setPurchaseViewMode={setPurchaseViewMode}
+        receiptViewMode={receiptViewMode}
+        setReceiptViewMode={setReceiptViewMode}
+        paymentViewMode={paymentViewMode}
+        setPaymentViewMode={setPaymentViewMode}
+        journalViewMode={journalViewMode}
+        setJournalViewMode={setJournalViewMode}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         isCollapsed={sidebarCollapsed}

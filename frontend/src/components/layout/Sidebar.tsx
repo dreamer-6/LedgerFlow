@@ -38,6 +38,12 @@ export interface SidebarProps {
   setSalesViewMode?: (mode: 'dashboard' | 'create') => void;
   purchaseViewMode?: 'dashboard' | 'create';
   setPurchaseViewMode?: (mode: 'dashboard' | 'create') => void;
+  receiptViewMode?: 'dashboard' | 'create';
+  setReceiptViewMode?: (mode: 'dashboard' | 'create') => void;
+  paymentViewMode?: 'dashboard' | 'create';
+  setPaymentViewMode?: (mode: 'dashboard' | 'create') => void;
+  journalViewMode?: 'dashboard' | 'create';
+  setJournalViewMode?: (mode: 'dashboard' | 'create') => void;
   isOpen?: boolean;
   onClose?: () => void;
   isCollapsed?: boolean;
@@ -55,6 +61,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setSalesViewMode,
   purchaseViewMode = 'dashboard',
   setPurchaseViewMode,
+  receiptViewMode = 'dashboard',
+  setReceiptViewMode,
+  paymentViewMode = 'dashboard',
+  setPaymentViewMode,
+  journalViewMode = 'dashboard',
+  setJournalViewMode,
   isOpen = false,
   onClose,
   isCollapsed = false,
@@ -237,35 +249,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'Alt+P'
             )}
             {renderItem(
-              'vouchers-receipt',
+              'receipts-module',
               'Receipts',
               <ArrowDownToLine size={16} />,
-              activeTab === 'vouchers' && (window as any)._currentVoucherType === 'RECEIPT',
+              activeTab === 'receipts' || (activeTab === 'vouchers' && (window as any)._currentVoucherType === 'RECEIPT'),
               () => {
-                (window as any)._currentVoucherType = 'RECEIPT';
-                handleNav('vouchers', { voucherType: 'RECEIPT' });
+                setActiveTab('receipts');
+                if (setReceiptViewMode) setReceiptViewMode('dashboard');
+                if (onClose) onClose();
               },
               'Alt+R'
             )}
             {renderItem(
-              'vouchers-payment',
+              'payments-module',
               'Payments',
               <ArrowLeftRight size={16} />,
-              activeTab === 'vouchers' && (window as any)._currentVoucherType === 'PAYMENT',
+              activeTab === 'payments' || (activeTab === 'vouchers' && (window as any)._currentVoucherType === 'PAYMENT'),
               () => {
-                (window as any)._currentVoucherType = 'PAYMENT';
-                handleNav('vouchers', { voucherType: 'PAYMENT' });
+                setActiveTab('payments');
+                if (setPaymentViewMode) setPaymentViewMode('dashboard');
+                if (onClose) onClose();
               },
               'Alt+M'
             )}
             {renderItem(
-              'vouchers-journal',
+              'journal-module',
               'Journal',
               <BookText size={16} />,
-              activeTab === 'vouchers' && (window as any)._currentVoucherType === 'JOURNAL',
+              activeTab === 'journal' || (activeTab === 'vouchers' && (window as any)._currentVoucherType === 'JOURNAL'),
               () => {
-                (window as any)._currentVoucherType = 'JOURNAL';
-                handleNav('vouchers', { voucherType: 'JOURNAL' });
+                setActiveTab('journal');
+                if (setJournalViewMode) setJournalViewMode('dashboard');
+                if (onClose) onClose();
               },
               'Alt+J'
             )}

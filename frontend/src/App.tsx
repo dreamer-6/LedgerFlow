@@ -18,6 +18,12 @@ import { SalesView } from './pages/SalesView';
 import { SalesInvoiceView } from './pages/SalesInvoiceView';
 import { PurchaseView } from './pages/PurchaseView';
 import { PurchaseInvoiceView } from './pages/PurchaseInvoiceView';
+import { ReceiptsView } from './pages/ReceiptsView';
+import { ReceiptCreationView } from './pages/ReceiptCreationView';
+import { PaymentsView } from './pages/PaymentsView';
+import { PaymentCreationView } from './pages/PaymentCreationView';
+import { JournalView } from './pages/JournalView';
+import { JournalCreationView } from './pages/JournalCreationView';
 import { CreateBusinessOnboarding } from './components/CreateBusinessOnboarding';
 import { DateChangeModal } from './components/DateChangeModal';
 import { FinancialYearModal } from './components/FinancialYearModal';
@@ -35,6 +41,9 @@ import {
   Percent,
   ShoppingCart,
   ShoppingBag,
+  ArrowDownToLine,
+  ArrowLeftRight,
+  BookText,
   Wrench,
   X
 } from 'lucide-react';
@@ -87,6 +96,9 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [salesViewMode, setSalesViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [purchaseViewMode, setPurchaseViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [receiptViewMode, setReceiptViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [paymentViewMode, setPaymentViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [journalViewMode, setJournalViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [reportSubTab, setReportSubTab] = useState<string>('daybook');
   const [voucherInitialType, setVoucherInitialType] = useState<string>('SALES');
   const [editVoucherId, setEditVoucherId] = useState<string | null>(null);
@@ -306,14 +318,14 @@ export const App: React.FC = () => {
       }
       if (e.key === 'F6') {
         e.preventDefault();
-        setVoucherInitialType('RECEIPT');
-        setActiveTab('vouchers');
+        setReceiptViewMode('create');
+        setActiveTab('receipts');
         return;
       }
       if (e.key === 'F5') {
         e.preventDefault();
-        setVoucherInitialType('PAYMENT');
-        setActiveTab('vouchers');
+        setPaymentViewMode('create');
+        setActiveTab('payments');
         return;
       }
       if (e.key === 'F4') {
@@ -324,8 +336,8 @@ export const App: React.FC = () => {
       }
       if (e.key === 'F7') {
         e.preventDefault();
-        setVoucherInitialType('JOURNAL');
-        setActiveTab('vouchers');
+        setJournalViewMode('create');
+        setActiveTab('journal');
         return;
       }
 
@@ -363,12 +375,16 @@ export const App: React.FC = () => {
           setActiveTab('purchase');
         } else if (k === 'r') {
           e.preventDefault();
-          setVoucherInitialType('RECEIPT');
-          setActiveTab('vouchers');
-        } else if (k === 'y') {
+          setReceiptViewMode('dashboard');
+          setActiveTab('receipts');
+        } else if (k === 'y' || k === 'm') {
           e.preventDefault();
-          setVoucherInitialType('PAYMENT');
-          setActiveTab('vouchers');
+          setPaymentViewMode('dashboard');
+          setActiveTab('payments');
+        } else if (k === 'j') {
+          e.preventDefault();
+          setJournalViewMode('dashboard');
+          setActiveTab('journal');
         }
       }
     };
@@ -394,6 +410,27 @@ export const App: React.FC = () => {
       setActiveTab('purchase');
       return;
     }
+    if (type === 'RECEIPT') {
+      if (partyId) {
+        (window as any)._preselectedPartyId = partyId;
+      }
+      setReceiptViewMode('create');
+      setActiveTab('receipts');
+      return;
+    }
+    if (type === 'PAYMENT') {
+      if (partyId) {
+        (window as any)._preselectedPartyId = partyId;
+      }
+      setPaymentViewMode('create');
+      setActiveTab('payments');
+      return;
+    }
+    if (type === 'JOURNAL') {
+      setJournalViewMode('create');
+      setActiveTab('journal');
+      return;
+    }
     setVoucherInitialType(type);
     if (partyId) {
       (window as any)._preselectedPartyId = partyId;
@@ -410,13 +447,15 @@ export const App: React.FC = () => {
     { label: 'Dashboard', tab: 'dashboard', category: 'Module', icon: <LayoutDashboard size={14} />, hotkey: 'Alt+1' },
     { label: 'Sales Dashboard', tab: 'sales', category: 'Module', icon: <ShoppingCart size={14} />, hotkey: 'Alt+S' },
     { label: 'Create Sales Invoice', tab: 'sales_create', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'F8' },
-    { label: 'Sales Invoice Voucher (Classic)', tab: 'vouchers', vType: 'SALES', category: 'Voucher', icon: <ReceiptText size={14} /> },
     { label: 'Purchase Dashboard', tab: 'purchase', category: 'Module', icon: <ShoppingBag size={14} />, hotkey: 'Alt+P' },
     { label: 'Create Purchase Invoice', tab: 'purchase_create', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'F9' },
-    { label: 'Purchase Voucher (Classic)', tab: 'vouchers', vType: 'PURCHASE', category: 'Voucher', icon: <ReceiptText size={14} /> },
+    { label: 'Receipts Dashboard', tab: 'receipts', category: 'Module', icon: <ArrowDownToLine size={14} />, hotkey: 'Alt+R' },
+    { label: 'Create Customer Receipt', tab: 'receipts_create', category: 'Voucher', icon: <ArrowDownToLine size={14} />, hotkey: 'F6' },
+    { label: 'Payments Dashboard', tab: 'payments', category: 'Module', icon: <ArrowLeftRight size={14} />, hotkey: 'Alt+M' },
+    { label: 'Create Payment', tab: 'payments_create', category: 'Voucher', icon: <ArrowLeftRight size={14} />, hotkey: 'F5' },
+    { label: 'Journal Dashboard', tab: 'journal', category: 'Module', icon: <BookText size={14} />, hotkey: 'Alt+J' },
+    { label: 'Create Journal Entry', tab: 'journal_create', category: 'Voucher', icon: <BookText size={14} />, hotkey: 'F7' },
     { label: 'Service Bill Entry (OS / Software / Servicing)', tab: 'service_bill', category: 'Voucher', icon: <Wrench size={14} />, hotkey: 'Alt+W' },
-    { label: 'Receipt Voucher', tab: 'vouchers', vType: 'RECEIPT', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+R' },
-    { label: 'Payment Voucher', tab: 'vouchers', vType: 'PAYMENT', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'Alt+Y' },
     { label: 'Parties (Customers & Suppliers)', tab: 'parties', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+3' },
     { label: 'Stock Items & Inventory', tab: 'items', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+I' },
     { label: 'Day Book Report', tab: 'reports', subTab: 'daybook', category: 'Report', icon: <Clock size={14} /> },
@@ -462,6 +501,48 @@ export const App: React.FC = () => {
     if (item.tab === 'purchase') {
       setPurchaseViewMode('dashboard');
       setActiveTab('purchase');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'receipts_create') {
+      setReceiptViewMode('create');
+      setActiveTab('receipts');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'receipts') {
+      setReceiptViewMode('dashboard');
+      setActiveTab('receipts');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'payments_create') {
+      setPaymentViewMode('create');
+      setActiveTab('payments');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'payments') {
+      setPaymentViewMode('dashboard');
+      setActiveTab('payments');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'journal_create') {
+      setJournalViewMode('create');
+      setActiveTab('journal');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'journal') {
+      setJournalViewMode('dashboard');
+      setActiveTab('journal');
       setShowSearchModal(false);
       setSearchQuery('');
       return;
@@ -553,6 +634,12 @@ export const App: React.FC = () => {
         setSalesViewMode={setSalesViewMode}
         purchaseViewMode={purchaseViewMode}
         setPurchaseViewMode={setPurchaseViewMode}
+        receiptViewMode={receiptViewMode}
+        setReceiptViewMode={setReceiptViewMode}
+        paymentViewMode={paymentViewMode}
+        setPaymentViewMode={setPaymentViewMode}
+        journalViewMode={journalViewMode}
+        setJournalViewMode={setJournalViewMode}
         onOpenBusinessSwitcher={() => setShowBusinessSwitcher(true)}
         onOpenFyModal={() => setShowFyModal(true)}
         onOpenSearch={() => setShowSearchModal(true)}
@@ -633,6 +720,93 @@ export const App: React.FC = () => {
                   onPostSuccess={(voucherId) => {
                     setActivePrintVoucherId(voucherId);
                     setPurchaseViewMode('dashboard');
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* 1.3 Receipts Module (UI-008) — Receipts Dashboard & New Receipt */}
+          {activeTab === 'receipts' && (
+            <div key="receipts" className="view-container-animated">
+              {receiptViewMode === 'dashboard' ? (
+                <ReceiptsView
+                  company={company}
+                  activeFy={activeFy}
+                  onCreateReceipt={() => setReceiptViewMode('create')}
+                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                  onNavigateTab={(tab, sub) => {
+                    setActiveTab(tab);
+                    if (sub) setReportSubTab(sub);
+                  }}
+                />
+              ) : (
+                <ReceiptCreationView
+                  company={company}
+                  activeFy={activeFy}
+                  currentDate={currentDate}
+                  onBack={() => setReceiptViewMode('dashboard')}
+                  onPostSuccess={(voucherId) => {
+                    setActivePrintVoucherId(voucherId);
+                    setReceiptViewMode('dashboard');
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* 1.4 Payments Module (UI-008) — Payments Dashboard & New Payment */}
+          {activeTab === 'payments' && (
+            <div key="payments" className="view-container-animated">
+              {paymentViewMode === 'dashboard' ? (
+                <PaymentsView
+                  company={company}
+                  activeFy={activeFy}
+                  onCreatePayment={() => setPaymentViewMode('create')}
+                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                  onNavigateTab={(tab, sub) => {
+                    setActiveTab(tab);
+                    if (sub) setReportSubTab(sub);
+                  }}
+                />
+              ) : (
+                <PaymentCreationView
+                  company={company}
+                  activeFy={activeFy}
+                  currentDate={currentDate}
+                  onBack={() => setPaymentViewMode('dashboard')}
+                  onPostSuccess={(voucherId) => {
+                    setActivePrintVoucherId(voucherId);
+                    setPaymentViewMode('dashboard');
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* 1.5 Journal Module (UI-008) — Journal Dashboard & New Journal Entry */}
+          {activeTab === 'journal' && (
+            <div key="journal" className="view-container-animated">
+              {journalViewMode === 'dashboard' ? (
+                <JournalView
+                  company={company}
+                  activeFy={activeFy}
+                  onCreateJournal={() => setJournalViewMode('create')}
+                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                  onNavigateTab={(tab, sub) => {
+                    setActiveTab(tab);
+                    if (sub) setReportSubTab(sub);
+                  }}
+                />
+              ) : (
+                <JournalCreationView
+                  company={company}
+                  activeFy={activeFy}
+                  currentDate={currentDate}
+                  onBack={() => setJournalViewMode('dashboard')}
+                  onPostSuccess={(voucherId) => {
+                    setActivePrintVoucherId(voucherId);
+                    setJournalViewMode('dashboard');
                   }}
                 />
               )}
