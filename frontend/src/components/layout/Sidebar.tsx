@@ -406,7 +406,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'Ledger',
               <BookOpen size={16} />,
               activeTab === 'reports' && reportSubTab === 'ledger',
-              () => handleNav('reports', { reportId: 'ledger' })
+              () => handleNav('reports', { reportId: 'ledger' }),
+              'Alt+E'
             )}
             {renderItem(
               'reports-trial',
@@ -421,7 +422,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'Profit & Loss',
               <TrendingUp size={16} />,
               activeTab === 'reports' && reportSubTab === 'pnl',
-              () => handleNav('reports', { reportId: 'pnl' })
+              () => handleNav('reports', { reportId: 'pnl' }),
+              'Alt+P'
             )}
             {renderItem(
               'reports-balance',

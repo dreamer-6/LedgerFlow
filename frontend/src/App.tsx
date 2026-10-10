@@ -11,6 +11,8 @@ import { VoucherEntryView } from './pages/VoucherEntryView';
 import { ReportsView } from './pages/ReportsView';
 import { DayBookView } from './pages/DayBookView';
 import { TrialBalanceView } from './pages/TrialBalanceView';
+import { LedgerReportView } from './pages/LedgerReportView';
+import { ProfitAndLossView } from './pages/ProfitAndLossView';
 import { MastersView } from './pages/MastersView';
 import { LedgersView } from './pages/LedgersView';
 import { UnitsView } from './pages/UnitsView';
@@ -503,9 +505,9 @@ export const App: React.FC = () => {
     { label: 'Day Book Report', tab: 'reports', subTab: 'daybook', category: 'Report', icon: <Clock size={14} />, hotkey: 'Alt+D' },
     { label: 'Sales Register (Display Sales Entries)', tab: 'reports', subTab: 'sales_register', category: 'Report', icon: <ShoppingCart size={14} /> },
     { label: 'Purchase Register (Display Purchase Entries)', tab: 'reports', subTab: 'purchase_register', category: 'Report', icon: <ShoppingBag size={14} /> },
-    { label: 'Ledger Statement', tab: 'reports', subTab: 'ledger', category: 'Report', icon: <BookOpen size={14} /> },
+    { label: 'Ledger Report (Statement)', tab: 'reports', subTab: 'ledger', category: 'Report', icon: <BookOpen size={14} />, hotkey: 'Alt+E' },
     { label: 'Trial Balance', tab: 'reports', subTab: 'trial_balance', category: 'Report', icon: <Scale size={14} />, hotkey: 'Alt+B' },
-    { label: 'Profit & Loss Statement', tab: 'reports', subTab: 'pnl', category: 'Report', icon: <TrendingUp size={14} /> },
+    { label: 'Profit & Loss Statement', tab: 'reports', subTab: 'pnl', category: 'Report', icon: <TrendingUp size={14} />, hotkey: 'Alt+P' },
     { label: 'Balance Sheet', tab: 'reports', subTab: 'balance_sheet', category: 'Report', icon: <FileSpreadsheet size={14} /> },
     { label: 'Stock Summary Report', tab: 'reports', subTab: 'stock_summary', category: 'Report', icon: <Layers size={14} /> },
     { label: 'GST Tax Returns Summary', tab: 'reports', subTab: 'gst', category: 'Report', icon: <Percent size={14} /> },
@@ -1107,6 +1109,40 @@ export const App: React.FC = () => {
             </div>
           )}
 
+          {/* Ledger Report Direct Route (UI-013) */}
+          {activeTab === 'ledger' && (
+            <div key="ledger" className="view-container-animated">
+              <LedgerReportView
+                company={company}
+                activeFy={activeFy}
+                onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                onNavigateReports={(sub) => {
+                  setReportSubTab(sub);
+                  setActiveTab('reports');
+                }}
+              />
+            </div>
+          )}
+
+          {/* Profit & Loss Direct Route (UI-014) */}
+          {activeTab === 'pnl' && (
+            <div key="pnl" className="view-container-animated">
+              <ProfitAndLossView
+                company={company}
+                activeFy={activeFy}
+                onViewLedger={(ledgerId) => {
+                  (window as any)._preselectedLedgerId = ledgerId;
+                  setReportSubTab('ledger');
+                  setActiveTab('reports');
+                }}
+                onNavigateReports={(sub) => {
+                  setReportSubTab(sub);
+                  setActiveTab('reports');
+                }}
+              />
+            </div>
+          )}
+
           {/* 4. Reports View */}
           {activeTab === 'reports' && (
             <div key="reports" className="view-container-animated">
@@ -1127,6 +1163,30 @@ export const App: React.FC = () => {
                 />
               ) : reportSubTab === 'trial_balance' ? (
                 <TrialBalanceView
+                  company={company}
+                  activeFy={activeFy}
+                  onViewLedger={(ledgerId) => {
+                    (window as any)._preselectedLedgerId = ledgerId;
+                    setReportSubTab('ledger');
+                    setActiveTab('reports');
+                  }}
+                  onNavigateReports={(sub) => {
+                    setReportSubTab(sub);
+                    setActiveTab('reports');
+                  }}
+                />
+              ) : reportSubTab === 'ledger' ? (
+                <LedgerReportView
+                  company={company}
+                  activeFy={activeFy}
+                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                  onNavigateReports={(sub) => {
+                    setReportSubTab(sub);
+                    setActiveTab('reports');
+                  }}
+                />
+              ) : reportSubTab === 'pnl' ? (
+                <ProfitAndLossView
                   company={company}
                   activeFy={activeFy}
                   onViewLedger={(ledgerId) => {
