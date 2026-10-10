@@ -925,10 +925,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       </div>
                     </td>
                     <td style={{ textAlign: 'right', padding: '12px 14px', color: 'var(--primary-accent)' }} className="tabular-nums">
-                      ₹{formatPaise(reportData?.totalDebitPaise || 5772000)}
+                      ₹{formatPaise(reportData?.totalDebitPaise || 0)}
                     </td>
                     <td style={{ textAlign: 'right', padding: '12px 14px', color: 'var(--primary-accent)' }} className="tabular-nums">
-                      ₹{formatPaise(reportData?.totalCreditPaise || 5772000)}
+                      ₹{formatPaise(reportData?.totalCreditPaise || 0)}
                     </td>
                   </tr>
                 </tfoot>

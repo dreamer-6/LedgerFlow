@@ -413,7 +413,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'Trial Balance',
               <Scale size={16} />,
               activeTab === 'reports' && reportSubTab === 'trial_balance',
-              () => handleNav('reports', { reportId: 'trial_balance' })
+              () => handleNav('reports', { reportId: 'trial_balance' }),
+              'Alt+B'
             )}
             {renderItem(
               'reports-pnl',
