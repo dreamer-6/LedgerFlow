@@ -18,6 +18,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { api, Company, FinancialYear } from '../api/client';
 import { InvoicePrintModal } from './InvoicePrintModal';
+import { QuickCustomerModal, QuickItemModal } from '../components/accounting';
 import {
   ArrowLeft,
   Plus,
@@ -196,8 +197,10 @@ const Combobox: React.FC<{
   placeholder?: string;
   onSelect: (id: string) => void;
   onClear?: () => void;
+  onAddNew?: () => void;
+  addNewLabel?: string;
   style?: React.CSSProperties;
-}> = ({ value, items, placeholder = 'Search…', onSelect, onClear, style }) => {
+}> = ({ value, items, placeholder = 'Search…', onSelect, onClear, onAddNew, addNewLabel, style }) => {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const ref = useRef<HTMLDivElement>(null);
@@ -295,33 +298,59 @@ const Combobox: React.FC<{
             marginTop: '3px'
           }}
         >
-          {filtered.length === 0 ? (
+          {filtered.length === 0 && !onAddNew ? (
             <div style={{ padding: '12px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center' }}>
               No results found
             </div>
           ) : (
-            filtered.slice(0, 30).map(item => (
-              <div
-                key={item.id}
-                onClick={() => {
-                  onSelect(item.id);
-                  setOpen(false);
-                  setQ('');
-                }}
-                style={{
-                  padding: '9px 12px',
-                  cursor: 'pointer',
-                  fontSize: '12.5px',
-                  color: 'var(--text-primary)',
-                  borderBottom: '1px solid var(--border-subtle, #F1F5F9)'
-                }}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, #F8FAFC)')}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
-              >
-                <div style={{ fontWeight: 600 }}>{item.label}</div>
-                {item.sub && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{item.sub}</div>}
-              </div>
-            ))
+            <>
+              {filtered.slice(0, 30).map(item => (
+                <div
+                  key={item.id}
+                  onClick={() => {
+                    onSelect(item.id);
+                    setOpen(false);
+                    setQ('');
+                  }}
+                  style={{
+                    padding: '9px 12px',
+                    cursor: 'pointer',
+                    fontSize: '12.5px',
+                    color: 'var(--text-primary)',
+                    borderBottom: '1px solid var(--border-subtle, #F1F5F9)'
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, #F8FAFC)')}
+                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
+                >
+                  <div style={{ fontWeight: 600 }}>{item.label}</div>
+                  {item.sub && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{item.sub}</div>}
+                </div>
+              ))}
+              {onAddNew && (
+                <div
+                  onClick={() => {
+                    setOpen(false);
+                    onAddNew();
+                  }}
+                  style={{
+                    padding: '9px 12px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    color: '#FF641F',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    backgroundColor: 'var(--bg-subtle, #F8FAFC)',
+                    borderTop: '1px solid var(--border-subtle, #E2E8F0)'
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#FFF7ED')}
+                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'var(--bg-subtle, #F8FAFC)')}
+                >
+                  <Plus size={13} /> {addNewLabel || '+ Add New'}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -336,6 +365,7 @@ export interface SalesInvoiceViewProps {
   company: Company | null;
   activeFy: FinancialYear | null;
   currentDate?: string;
+  initialQuotation?: any;
   onBack: () => void;
   onPostSuccess: (voucherId: string) => void;
 }
@@ -344,6 +374,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
   company,
   activeFy,
   currentDate,
+  initialQuotation,
   onBack,
   onPostSuccess
 }) => {
@@ -389,6 +420,11 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [printVoucherId, setPrintVoucherId] = useState<string | null>(null);
+
+  /* ── Quick Master Modals ── */
+  const [showQuickCustomerModal, setShowQuickCustomerModal] = useState(false);
+  const [showQuickItemModal, setShowQuickItemModal] = useState(false);
+  const [activeItemRowIdx, setActiveItemRowIdx] = useState<number | null>(null);
 
   const selectedParty = parties.find(p => p.party_id === partyId);
 
@@ -444,6 +480,41 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     };
     fetchNext();
   }, [company, activeFy]);
+
+  /* ── Prepopulate from Initial Quotation (UI-010 Conversion) ── */
+  useEffect(() => {
+    if (initialQuotation) {
+      if (initialQuotation.customerId) {
+        setPartyId(initialQuotation.customerId);
+      }
+      if (initialQuotation.quotationNumber) {
+        setReferenceNo(initialQuotation.quotationNumber);
+        setNarration(`Converted from Quotation ${initialQuotation.quotationNumber}`);
+      }
+      if (initialQuotation.termsConditions) {
+        setTermsAndCond(initialQuotation.termsConditions);
+      }
+      if (initialQuotation.taxMode) {
+        setTaxMode(initialQuotation.taxMode);
+      }
+      if (initialQuotation.items && initialQuotation.items.length > 0) {
+        setLines(initialQuotation.items.map((it: any) => ({
+          itemId: it.itemId || '',
+          description: it.description || '',
+          subtext: it.subtext || '',
+          hsnSac: it.hsnSac || '',
+          quantity: it.quantity || 1,
+          unit: it.unit || 'NOS',
+          rate: it.rate || 0,
+          discountPercent: it.discountPercent || 0,
+          gstRate: it.gstRate || 18,
+          godownId: '',
+          serialNumber: '',
+          isService: it.isService || false
+        })));
+      }
+    }
+  }, [initialQuotation]);
 
   /* ── Update payment terms & due date ── */
   const handlePaymentTermsChange = (days: string) => {
@@ -778,27 +849,19 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                   <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>Customer Details</span>
                 </div>
                 <button
+                  type="button"
                   style={{
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
-                    color: '#FF6B2B',
+                    color: '#FF641F',
                     fontSize: '12px',
                     fontWeight: 600,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '4px'
                   }}
-                  onClick={() => {
-                    const name = prompt('Quick Add Customer: Enter Customer Name:');
-                    if (name && name.trim()) {
-                      api.createParty({ partyName: name.trim(), partyType: 'CUSTOMER' }).then((p: any) => {
-                        setParties(prev => [...prev, p]);
-                        if (p?.party_id) setPartyId(p.party_id);
-                        showToast(`Customer '${name}' added!`);
-                      }).catch((err: any) => alert(err?.message || 'Failed to add customer'));
-                    }
-                  }}
+                  onClick={() => setShowQuickCustomerModal(true)}
                 >
                   <Plus size={12} /> New Customer
                 </button>
@@ -1036,14 +1099,41 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                           {idx + 1}
                         </td>
                         <td style={{ padding: '6px 8px' }}>
-                          <Combobox
-                            value={line.itemId}
-                            items={itemComboItems}
-                            placeholder="Search item or type to add new…"
-                            onSelect={id => selectItem(idx, id)}
-                            onClear={() => updateLine(idx, 'itemId', '')}
-                            style={{ minWidth: '210px' }}
-                          />
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Combobox
+                              value={line.itemId}
+                              items={itemComboItems}
+                              placeholder="Search item or type to add new…"
+                              onSelect={id => selectItem(idx, id)}
+                              onClear={() => updateLine(idx, 'itemId', '')}
+                              onAddNew={() => {
+                                setActiveItemRowIdx(idx);
+                                setShowQuickItemModal(true);
+                              }}
+                              addNewLabel="+ Quick Add Item"
+                              style={{ minWidth: '190px' }}
+                            />
+                            <button
+                              type="button"
+                              title="Create New Item"
+                              onClick={() => {
+                                setActiveItemRowIdx(idx);
+                                setShowQuickItemModal(true);
+                              }}
+                              style={{
+                                background: 'transparent',
+                                border: '1px solid #FF641F',
+                                color: '#FF641F',
+                                borderRadius: '4px',
+                                padding: '5px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                            >
+                              <Plus size={12} />
+                            </button>
+                          </div>
                           {line.description && (
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', padding: '2px 4px', fontStyle: 'normal' }}>
                               {line.subtext || (line.isService ? 'Service' : 'Product')}
@@ -1363,6 +1453,37 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Quick Customer Creation Modal */}
+      <QuickCustomerModal
+        isOpen={showQuickCustomerModal}
+        partyType="CUSTOMER"
+        company={company}
+        onClose={() => setShowQuickCustomerModal(false)}
+        onSuccess={(newParty) => {
+          setParties(prev => [...prev, newParty]);
+          setPartyId(newParty.party_id);
+          if (newParty.state_code) setPlaceOfSupply(newParty.state_code);
+          showToast(`Customer '${newParty.party_name}' created and selected!`);
+        }}
+      />
+
+      {/* Quick Item Creation Modal */}
+      <QuickItemModal
+        isOpen={showQuickItemModal}
+        initialType="Stock Item"
+        onClose={() => {
+          setShowQuickItemModal(false);
+          setActiveItemRowIdx(null);
+        }}
+        onSuccess={(newItem) => {
+          setStockItems(prev => [...prev, newItem]);
+          if (activeItemRowIdx !== null && activeItemRowIdx < lines.length) {
+            selectItem(activeItemRowIdx, newItem.item_id);
+          }
+          showToast(`Item '${newItem.item_name}' created and selected!`);
+        }}
+      />
     </div>
   );
 };

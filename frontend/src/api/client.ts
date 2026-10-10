@@ -142,6 +142,40 @@ export interface GodownMaster {
   is_default: number;
 }
 
+export interface LedgerMaster {
+  ledger_id: string;
+  company_id: string;
+  group_id: string;
+  ledger_name: string;
+  code?: string | null;
+  opening_balance_paise: number;
+  opening_balance_type: 'DR' | 'CR';
+  is_party: number;
+  is_active: number;
+  created_at?: string;
+  group_name: string;
+  nature: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE';
+  parent_group_name?: string;
+  current_balance_paise?: number;
+}
+
+export interface LedgerGroup {
+  group_id: string;
+  company_id: string | null;
+  parent_group_id: string | null;
+  group_name: string;
+  nature: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE';
+  affects_gross_profit: number;
+}
+
+export interface CreateLedgerPayload {
+  groupId: string;
+  ledgerName: string;
+  code?: string;
+  openingBalancePaise?: number;
+  openingBalanceType?: 'DR' | 'CR';
+}
+
 export interface StockSummaryItem {
   itemId: string;
   item_id: string;
@@ -428,11 +462,31 @@ export const api = {
     return res.json();
   },
 
-  async getLedgers() {
+  async getLedgers(): Promise<LedgerMaster[]> {
     const res = await fetch(`${API_BASE}/masters/ledgers`, {
       headers: getHeaders()
     });
     if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
+  },
+
+  async getLedgerGroups(): Promise<LedgerGroup[]> {
+    const res = await fetch(`${API_BASE}/masters/groups`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
+  },
+
+  async createLedger(payload: CreateLedgerPayload): Promise<{ ledgerId: string; ledgerName: string }> {
+    const res = await fetch(`${API_BASE}/masters/ledgers`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      throw new Error(await extractErrorMessage(res, 'Failed to create ledger'));
+    }
     return res.json();
   },
 

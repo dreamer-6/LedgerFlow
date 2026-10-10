@@ -236,29 +236,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           </span>
         </div>
 
-        {/* Theme Switch Icon (Sun / Moon) */}
+        {/* Appearance (Theme Switch) */}
         <button
           type="button"
-          className="topbar-bell-btn"
+          className="topbar-bell-btn lf-theme-switch-btn"
           onClick={toggleTheme}
-          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-          aria-label="Toggle theme"
-          style={{
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '6px',
-            borderRadius: '8px',
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-secondary)'
-          }}
+          title={`Appearance: ${theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}`}
+          aria-label="Appearance theme switch"
+          style={{ marginRight: '6px' }}
         >
           {theme === 'dark' ? (
-            <Sun size={18} strokeWidth={1.8} style={{ color: '#FFB800' }} />
+            <Sun size={18} strokeWidth={1.8} style={{ color: '#FF641F' }} />
           ) : (
-            <Moon size={18} strokeWidth={1.8} style={{ color: 'var(--text-secondary)' }} />
+            <Moon size={18} strokeWidth={1.8} />
           )}
         </button>
 

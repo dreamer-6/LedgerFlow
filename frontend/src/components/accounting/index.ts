@@ -6,3 +6,5 @@ export * from './PartySelector';
 export * from './ItemSelector';
 export * from './LineItemTable';
 export * from './FinancialMetricCard';
+export * from './QuickCustomerModal';
+export * from './QuickItemModal';

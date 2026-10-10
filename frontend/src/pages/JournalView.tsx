@@ -303,8 +303,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
       }}>
         {/* Card 1: Total Journal Entries */}
         <div style={{
-          background: 'var(--surface-card, #151515)',
-          border: '1px solid var(--border, #292929)',
+          background: 'var(--surface-card, #FFFFFF)',
+          border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px',
           padding: '20px',
           display: 'flex',
@@ -330,8 +330,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
         {/* Card 2: Adjustment Entries */}
         <div style={{
-          background: 'var(--surface-card, #151515)',
-          border: '1px solid var(--border, #292929)',
+          background: 'var(--surface-card, #FFFFFF)',
+          border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px',
           padding: '20px',
           display: 'flex',
@@ -357,8 +357,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
         {/* Card 3: Reversing Entries */}
         <div style={{
-          background: 'var(--surface-card, #151515)',
-          border: '1px solid var(--border, #292929)',
+          background: 'var(--surface-card, #FFFFFF)',
+          border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px',
           padding: '20px',
           display: 'flex',
@@ -384,8 +384,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
         {/* Card 4: Posted Entries (CRITICAL: NOT 'Active / Posted Entries') */}
         <div style={{
-          background: 'var(--surface-card, #151515)',
-          border: '1px solid var(--border, #292929)',
+          background: 'var(--surface-card, #FFFFFF)',
+          border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px',
           padding: '20px',
           display: 'flex',
@@ -412,8 +412,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
       {/* Filter and Search Bar */}
       <div style={{
-        background: 'var(--surface-card, #151515)',
-        border: '1px solid var(--border, #292929)',
+        background: 'var(--surface-card, #FFFFFF)',
+        border: '1px solid var(--border, #E5E7EB)',
         borderRadius: '12px',
         padding: '14px 18px',
         display: 'flex',
@@ -426,7 +426,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
         {/* Search */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: '8px',
-          background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+          background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '8px', padding: '7px 12px', minWidth: '320px', flex: '1 1 320px'
         }}>
           <Search size={15} color="var(--text-secondary)" />
@@ -450,7 +450,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
             value={dateRangeFilter}
             onChange={e => setDateRangeFilter(e.target.value)}
             style={{
-              background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+              background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
               color: 'var(--text-primary)', borderRadius: '8px', padding: '7px 12px', fontSize: '13px',
               cursor: 'pointer', outline: 'none'
             }}
@@ -466,7 +466,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
             value={typeFilter}
             onChange={e => { setTypeFilter(e.target.value); setCurrentPage(1); }}
             style={{
-              background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+              background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
               color: 'var(--text-primary)', borderRadius: '8px', padding: '7px 12px', fontSize: '13px',
               cursor: 'pointer', outline: 'none'
             }}
@@ -481,7 +481,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
             value={statusFilter}
             onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
             style={{
-              background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+              background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
               color: 'var(--text-primary)', borderRadius: '8px', padding: '7px 12px', fontSize: '13px',
               cursor: 'pointer', outline: 'none'
             }}
@@ -497,7 +497,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
             type="button"
             style={{
               display: 'flex', alignItems: 'center', gap: '6px',
-              background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+              background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
               borderRadius: '8px', padding: '7px 12px', color: 'var(--text-primary)',
               fontSize: '13px', cursor: 'pointer'
             }}
@@ -512,7 +512,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
             onClick={handleExportCSV}
             style={{
               display: 'flex', alignItems: 'center', gap: '6px',
-              background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+              background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
               borderRadius: '8px', padding: '7px 12px', color: 'var(--text-primary)',
               fontSize: '13px', cursor: 'pointer'
             }}
@@ -525,8 +525,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
 
       {/* Table Section */}
       <div style={{
-        background: 'var(--surface-card, #151515)',
-        border: '1px solid var(--border, #292929)',
+        background: 'var(--surface-card, #FFFFFF)',
+        border: '1px solid var(--border, #E5E7EB)',
         borderRadius: '12px',
         overflow: 'hidden'
       }}>
@@ -534,8 +534,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
             <thead>
               <tr style={{
-                background: 'var(--surface-inner, #191919)',
-                borderBottom: '1px solid var(--border, #292929)',
+                background: 'var(--surface-inner, #F8F7F4)',
+                borderBottom: '1px solid var(--border, #E5E7EB)',
                 color: 'var(--text-secondary)',
                 fontWeight: 600,
                 fontSize: '12px'
@@ -596,7 +596,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                     <tr
                       key={v.voucher_id}
                       style={{
-                        borderBottom: '1px solid var(--border, #292929)',
+                        borderBottom: '1px solid var(--border, #E5E7EB)',
                         background: isChecked ? 'rgba(255, 100, 31, 0.05)' : 'transparent',
                         opacity: isCancelled ? 0.65 : 1,
                         transition: 'background 0.15s ease'
@@ -712,7 +712,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                         {openActionId === v.voucher_id && (
                           <div style={{
                             position: 'absolute', right: '14px', top: '38px', zIndex: 100,
-                            background: 'var(--surface-elevated, #1D1D1D)', border: '1px solid var(--border, #292929)',
+                            background: 'var(--surface-elevated, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
                             borderRadius: '8px', boxShadow: 'var(--modal-shadow)', width: '140px',
                             padding: '4px 0', textAlign: 'left'
                           }}>
@@ -761,8 +761,8 @@ export const JournalView: React.FC<JournalViewProps> = ({
         {/* Pagination Bar */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '12px 18px', borderTop: '1px solid var(--border, #292929)',
-          fontSize: '12.5px', color: 'var(--text-secondary)', background: 'var(--surface-card, #151515)'
+          padding: '12px 18px', borderTop: '1px solid var(--border, #E5E7EB)',
+          fontSize: '12.5px', color: 'var(--text-secondary)', background: 'var(--surface-card, #FFFFFF)'
         }}>
           <div>
             Showing {filteredVouchers.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{' '}
@@ -775,7 +775,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
               disabled={currentPage <= 1}
               onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
               style={{
-                background: 'transparent', border: '1px solid var(--border, #292929)',
+                background: 'transparent', border: '1px solid var(--border, #E5E7EB)',
                 color: 'var(--text-primary)', borderRadius: '6px', padding: '4px 8px',
                 cursor: currentPage <= 1 ? 'not-allowed' : 'pointer', opacity: currentPage <= 1 ? 0.5 : 1
               }}
@@ -794,7 +794,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                   style={{
                     background: isActive ? '#FF641F' : 'transparent',
                     border: '1px solid',
-                    borderColor: isActive ? '#FF641F' : 'var(--border, #292929)',
+                    borderColor: isActive ? '#FF641F' : 'var(--border, #E5E7EB)',
                     color: isActive ? '#FFFFFF' : 'var(--text-primary)',
                     borderRadius: '6px', width: '28px', height: '28px',
                     fontSize: '12px', fontWeight: isActive ? 700 : 500,
@@ -811,7 +811,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
               disabled={currentPage >= totalPages}
               onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
               style={{
-                background: 'transparent', border: '1px solid var(--border, #292929)',
+                background: 'transparent', border: '1px solid var(--border, #E5E7EB)',
                 color: 'var(--text-primary)', borderRadius: '6px', padding: '4px 8px',
                 cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer', opacity: currentPage >= totalPages ? 0.5 : 1
               }}
@@ -830,7 +830,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           <div style={{
-            background: 'var(--surface-elevated, #1D1D1D)', border: '1px solid var(--border, #292929)',
+            background: 'var(--surface-elevated, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
             borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '440px',
             boxShadow: 'var(--modal-shadow)', color: 'var(--text-primary)'
           }}>
@@ -861,7 +861,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 rows={3}
                 style={{
                   width: '100%', boxSizing: 'border-box',
-                  background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                  background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                   borderRadius: '6px', padding: '8px 10px', color: 'var(--text-primary)',
                   fontSize: '13px', outline: 'none', resize: 'vertical'
                 }}
@@ -873,7 +873,7 @@ export const JournalView: React.FC<JournalViewProps> = ({
                 type="button"
                 onClick={() => { setCancellingVoucherId(null); setCancellationReason(''); }}
                 style={{
-                  background: 'transparent', border: '1px solid var(--border, #292929)',
+                  background: 'transparent', border: '1px solid var(--border, #E5E7EB)',
                   color: 'var(--text-primary)', padding: '8px 16px', borderRadius: '6px',
                   fontSize: '13px', cursor: 'pointer'
                 }}

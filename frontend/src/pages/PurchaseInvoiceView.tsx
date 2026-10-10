@@ -18,6 +18,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { api, Company, FinancialYear, Party, StockItem, GodownMaster } from '../api/client';
 import { InvoicePrintModal } from './InvoicePrintModal';
+import { QuickCustomerModal, QuickItemModal } from '../components/accounting';
 import {
   ArrowLeft,
   Plus,
@@ -174,6 +175,8 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
   const [newSupplierAddress, setNewSupplierAddress] = useState('');
   const [newSupplierState, setNewSupplierState] = useState('33');
   const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
+  const [showQuickItemModal, setShowQuickItemModal] = useState(false);
+  const [activeItemRowId, setActiveItemRowId] = useState<string | null>(null);
 
   // Invoice Details
   const [voucherNumber, setVoucherNumber] = useState('');
@@ -1239,14 +1242,27 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
                   </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleAddRow}
-                  className="lf-btn lf-btn-secondary"
-                  style={{ fontSize: '12px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                >
-                  <Plus size={13} /> Add Row
-                </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveItemRowId(null);
+                      setShowQuickItemModal(true);
+                    }}
+                    className="lf-btn lf-btn-secondary"
+                    style={{ fontSize: '12px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px', borderColor: '#FF641F', color: '#FF641F' }}
+                  >
+                    <Plus size={13} /> New Item
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddRow}
+                    className="lf-btn lf-btn-secondary"
+                    style={{ fontSize: '12px', padding: '5px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Plus size={13} /> Add Row
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1281,28 +1297,49 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
                           {index + 1}
                         </td>
                         <td style={{ padding: '8px 10px' }}>
-                          {/* Item Dropdown */}
-                          <select
-                            value={line.itemId}
-                            onChange={e => handleLineChange(line.id, 'itemId', e.target.value)}
-                            style={{
-                              width: '100%',
-                              padding: '6px 8px',
-                              borderRadius: '4px',
-                              border: '1px solid var(--border-subtle, #CBD5E1)',
-                              fontSize: '12.5px',
-                              fontWeight: 600,
-                              backgroundColor: 'var(--bg-card)',
-                              marginBottom: '4px'
-                            }}
-                          >
-                            <option value="">Select stock item / service…</option>
-                            {items.map(it => (
-                              <option key={it.item_id} value={it.item_id}>
-                                {it.item_name} {it.hsn_sac ? `(HSN: ${it.hsn_sac})` : ''}
-                              </option>
-                            ))}
-                          </select>
+                          {/* Item Dropdown + Quick Add Item */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                            <select
+                              value={line.itemId}
+                              onChange={e => handleLineChange(line.id, 'itemId', e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                borderRadius: '4px',
+                                border: '1px solid var(--border-subtle, #CBD5E1)',
+                                fontSize: '12.5px',
+                                fontWeight: 600,
+                                backgroundColor: 'var(--bg-card)'
+                              }}
+                            >
+                              <option value="">Select stock item / service…</option>
+                              {items.map(it => (
+                                <option key={it.item_id} value={it.item_id}>
+                                  {it.item_name} {it.hsn_sac ? `(HSN: ${it.hsn_sac})` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              title="Create New Item"
+                              onClick={() => {
+                                setActiveItemRowId(line.id);
+                                setShowQuickItemModal(true);
+                              }}
+                              style={{
+                                background: 'transparent',
+                                border: '1px solid #FF641F',
+                                color: '#FF641F',
+                                borderRadius: '4px',
+                                padding: '5px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center'
+                              }}
+                            >
+                              <Plus size={12} />
+                            </button>
+                          </div>
 
                           {/* Optional Serial / Description */}
                           <input
@@ -1864,149 +1901,36 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
         </div>
       </div>
 
-      {/* ─────────────────────────────────────────────
-          Quick Create Supplier Modal
-      ────────────────────────────────────────────── */}
-      {showNewSupplierModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15,23,42,0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000
-          }}
-          onClick={() => !isCreatingSupplier && setShowNewSupplierModal(false)}
-        >
-          <div
-            className="ledger-card"
-            style={{ width: '480px', padding: '24px', borderRadius: '12px' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <UserPlus size={18} color="#F97316" />
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Add New Supplier</h3>
-              </div>
-              <button
-                onClick={() => setShowNewSupplierModal(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
-              >
-                <X size={16} />
-              </button>
-            </div>
+      {/* Reusable Quick Customer Modal in Supplier Mode */}
+      <QuickCustomerModal
+        isOpen={showNewSupplierModal}
+        partyType="SUPPLIER"
+        company={company}
+        onClose={() => setShowNewSupplierModal(false)}
+        onSuccess={(newSup) => {
+          setSuppliers(prev => [...prev, newSup]);
+          setPartyId(newSup.party_id);
+          if (newSup.state_code) setPlaceOfSupply(newSup.state_code);
+          showToast(`Supplier '${newSup.party_name}' added successfully!`);
+        }}
+      />
 
-            <form onSubmit={handleCreateSupplier}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12.5px', marginBottom: '18px' }}>
-                <div>
-                  <label style={{ display: 'block', fontWeight: 600, marginBottom: '4px' }}>
-                    Supplier Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newSupplierName}
-                    onChange={e => setNewSupplierName(e.target.value)}
-                    placeholder="e.g. Acme Tech Distributors"
-                    style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', fontSize: '13px' }}
-                  />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 600, marginBottom: '4px' }}>
-                      GSTIN (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={newSupplierGstin}
-                      onChange={e => setNewSupplierGstin(e.target.value.toUpperCase())}
-                      placeholder="e.g. 33ABCDE1234F1Z5"
-                      style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', fontSize: '12.5px', fontFamily: 'var(--font-mono)' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 600, marginBottom: '4px' }}>
-                      State
-                    </label>
-                    <select
-                      value={newSupplierState}
-                      onChange={e => setNewSupplierState(e.target.value)}
-                      style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', fontSize: '12.5px', backgroundColor: 'var(--bg-card)' }}
-                    >
-                      {INDIAN_STATES.map(s => (
-                        <option key={s.code} value={s.code}>{s.name} ({s.code})</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 600, marginBottom: '4px' }}>
-                      Phone
-                    </label>
-                    <input
-                      type="text"
-                      value={newSupplierPhone}
-                      onChange={e => setNewSupplierPhone(e.target.value)}
-                      placeholder="+91 98765 43210"
-                      style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', fontSize: '12.5px' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontWeight: 600, marginBottom: '4px' }}>
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      value={newSupplierEmail}
-                      onChange={e => setNewSupplierEmail(e.target.value)}
-                      placeholder="supplier@example.com"
-                      style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', fontSize: '12.5px' }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontWeight: 600, marginBottom: '4px' }}>
-                    Address
-                  </label>
-                  <input
-                    type="text"
-                    value={newSupplierAddress}
-                    onChange={e => setNewSupplierAddress(e.target.value)}
-                    placeholder="Street, City, Pincode"
-                    style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', fontSize: '12.5px' }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button
-                  type="button"
-                  className="lf-btn lf-btn-secondary"
-                  onClick={() => setShowNewSupplierModal(false)}
-                  disabled={isCreatingSupplier}
-                  style={{ fontSize: '12.5px', padding: '7px 14px' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="lf-btn lf-btn-primary"
-                  disabled={isCreatingSupplier || !newSupplierName.trim()}
-                  style={{ fontSize: '12.5px', padding: '7px 16px' }}
-                >
-                  {isCreatingSupplier ? 'Saving…' : 'Save Supplier'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Reusable Quick Item Modal */}
+      <QuickItemModal
+        isOpen={showQuickItemModal}
+        initialType="Stock Item"
+        onClose={() => {
+          setShowQuickItemModal(false);
+          setActiveItemRowId(null);
+        }}
+        onSuccess={(newItem) => {
+          setItems(prev => [...prev, newItem]);
+          if (activeItemRowId) {
+            handleLineChange(activeItemRowId, 'itemId', newItem.item_id);
+          }
+          showToast(`Item '${newItem.item_name}' added successfully!`);
+        }}
+      />
     </div>
   );
 };

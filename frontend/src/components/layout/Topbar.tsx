@@ -61,6 +61,12 @@ export const Topbar: React.FC<TopbarProps> = ({
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [showNotifications, showUserMenu]);
 
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    const meta = document.querySelector('meta[name="color-scheme"]');
+    if (meta) meta.setAttribute('content', theme);
+  }, [theme]);
+
   const toggleTheme = (newTheme: 'light' | 'dark') => {
     setTheme(newTheme);
     localStorage.setItem('ledgerflow-theme', newTheme);
@@ -135,6 +141,21 @@ export const Topbar: React.FC<TopbarProps> = ({
       </div>
 
       <div style={{ flex: 1 }} />
+
+      {/* Theme Switch Icon (Appearance) in Navbar */}
+      <button
+        type="button"
+        className="lf-topbar-icon-btn lf-theme-switch-btn"
+        onClick={() => toggleTheme(theme === 'dark' ? 'light' : 'dark')}
+        title={`Appearance: ${theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}`}
+        aria-label="Appearance theme switch"
+      >
+        {theme === 'dark' ? (
+          <Sun size={18} style={{ color: 'var(--color-primary, #FF641F)' }} />
+        ) : (
+          <Moon size={18} />
+        )}
+      </button>
 
       {/* 4. Notification Bell */}
       <div ref={notifRef} className="relative">

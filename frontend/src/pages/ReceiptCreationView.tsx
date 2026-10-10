@@ -440,7 +440,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
             type="button"
             onClick={onBack}
             style={{
-              padding: '9px 16px', borderRadius: '8px', border: '1px solid var(--border, #292929)',
+              padding: '9px 16px', borderRadius: '8px', border: '1px solid var(--border, #E5E7EB)',
               background: 'transparent', color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600,
               cursor: 'pointer'
             }}
@@ -452,8 +452,8 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
             disabled={isSaving}
             onClick={() => handleSubmit(true)}
             style={{
-              padding: '9px 18px', borderRadius: '8px', border: '1px solid var(--border, #292929)',
-              background: 'var(--surface-hover, #202020)', color: 'var(--text-primary)',
+              padding: '9px 18px', borderRadius: '8px', border: '1px solid var(--border, #E5E7EB)',
+              background: 'var(--surface-hover, #F3F4F6)', color: 'var(--text-primary)',
               fontSize: '13px', fontWeight: 600, cursor: isSaving ? 'not-allowed' : 'pointer'
             }}
           >
@@ -491,7 +491,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* Card 1: Voucher Details */}
           <div style={{
-            background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+            background: 'var(--surface-card, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
             borderRadius: '12px', padding: '20px', boxShadow: 'var(--shadow-sm)'
           }}>
             <h2 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--text-primary)' }}>
@@ -509,7 +509,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                   value={voucherNumber || 'Auto-generated'}
                   style={{
                     width: '100%', padding: '8px 12px', borderRadius: '6px',
-                    border: '1px solid var(--border, #292929)', background: 'var(--surface-secondary, #191919)',
+                    border: '1px solid var(--border, #E5E7EB)', background: 'var(--surface-inner, #F8F7F4)',
                     color: 'var(--text-primary)', fontSize: '13px', fontFamily: 'monospace'
                   }}
                 />
@@ -525,7 +525,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                   onChange={e => setVoucherDate(e.target.value)}
                   style={{
                     width: '100%', padding: '8px 12px', borderRadius: '6px',
-                    border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                    border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                     color: 'var(--text-primary)', fontSize: '13px'
                   }}
                 />
@@ -542,7 +542,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                   onChange={e => setReferenceNo(e.target.value)}
                   style={{
                     width: '100%', padding: '8px 12px', borderRadius: '6px',
-                    border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                    border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                     color: 'var(--text-primary)', fontSize: '13px'
                   }}
                 />
@@ -558,7 +558,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                   onChange={e => setReferenceDate(e.target.value)}
                   style={{
                     width: '100%', padding: '8px 12px', borderRadius: '6px',
-                    border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                    border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                     color: 'var(--text-primary)', fontSize: '13px'
                   }}
                 />
@@ -576,7 +576,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                 onChange={e => setNarration(e.target.value)}
                 style={{
                   width: '100%', padding: '8px 12px', borderRadius: '6px',
-                  border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                  border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                   color: 'var(--text-primary)', fontSize: '13px'
                 }}
               />
@@ -585,7 +585,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
 
           {/* Card 2: Customer & Ledger */}
           <div style={{
-            background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+            background: 'var(--surface-card, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
             borderRadius: '12px', padding: '20px', boxShadow: 'var(--shadow-sm)'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -616,7 +616,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                   onChange={e => setPartyId(e.target.value)}
                   style={{
                     width: '100%', padding: '8px 12px', borderRadius: '6px',
-                    border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                    border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                     color: 'var(--text-primary)', fontSize: '13px', outline: 'none'
                   }}
                 >
@@ -637,7 +637,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                   onChange={e => setAgainstLedgerId(e.target.value)}
                   style={{
                     width: '100%', padding: '8px 12px', borderRadius: '6px',
-                    border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                    border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                     color: 'var(--text-primary)', fontSize: '13px', outline: 'none'
                   }}
                 >
@@ -661,7 +661,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                   onChange={e => setReceivedIntoLedgerId(e.target.value)}
                   style={{
                     width: '100%', padding: '8px 12px', borderRadius: '6px',
-                    border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                    border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                     color: 'var(--text-primary)', fontSize: '13px', outline: 'none'
                   }}
                 >
@@ -682,7 +682,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                   onChange={e => setPaymentMode(e.target.value)}
                   style={{
                     width: '100%', padding: '8px 12px', borderRadius: '6px',
-                    border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                    border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                     color: 'var(--text-primary)', fontSize: '13px', outline: 'none'
                   }}
                 >
@@ -708,7 +708,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                   onChange={e => setReceiptAmount(e.target.value)}
                   style={{
                     width: '100%', padding: '8px 12px', borderRadius: '6px',
-                    border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                    border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                     color: 'var(--text-primary)', fontSize: '14px', fontWeight: 700, fontFamily: 'monospace'
                   }}
                 />
@@ -719,7 +719,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
             {selectedCustomer && (
               <div style={{
                 marginTop: '16px', padding: '12px 14px', borderRadius: '8px',
-                background: 'var(--surface-secondary, #191919)', border: '1px solid var(--border, #292929)',
+                background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px',
                 fontSize: '12px'
               }}>
@@ -737,7 +737,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
 
           {/* Card 3: Adjust Against Invoices */}
           <div style={{
-            background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+            background: 'var(--surface-card, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
             borderRadius: '12px', padding: '20px', boxShadow: 'var(--shadow-sm)'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
@@ -757,8 +757,8 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: '6px',
                     padding: '6px 12px', borderRadius: '6px',
-                    border: isOnAccount ? '1px solid #FF641F' : '1px solid var(--border, #292929)',
-                    background: isOnAccount ? 'rgba(255,100,31,0.1)' : 'var(--surface-hover, #202020)',
+                    border: isOnAccount ? '1px solid #FF641F' : '1px solid var(--border, #E5E7EB)',
+                    background: isOnAccount ? 'rgba(255,100,31,0.1)' : 'var(--surface-hover, #F3F4F6)',
                     color: isOnAccount ? '#FF641F' : 'var(--text-primary)',
                     fontSize: '12px', fontWeight: 600, cursor: 'pointer'
                   }}
@@ -769,10 +769,10 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
             </div>
 
             {/* Invoices Table */}
-            <div style={{ border: '1px solid var(--border, #292929)', borderRadius: '8px', overflow: 'hidden' }}>
+            <div style={{ border: '1px solid var(--border, #E5E7EB)', borderRadius: '8px', overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px', textAlign: 'left' }}>
                 <thead>
-                  <tr style={{ background: 'var(--table-header-bg, #101010)', borderBottom: '1px solid var(--border, #292929)', color: 'var(--text-secondary)' }}>
+                  <tr style={{ background: 'var(--table-header-bg, #F9FAFB)', borderBottom: '1px solid var(--border, #E5E7EB)', color: 'var(--text-secondary)' }}>
                     <th style={{ width: '40px', padding: '10px 12px' }}></th>
                     <th style={{ padding: '10px 12px', fontWeight: 600 }}>Invoice No.</th>
                     <th style={{ padding: '10px 12px', fontWeight: 600 }}>Date</th>
@@ -799,7 +799,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                         <tr
                           key={bill.voucherId}
                           style={{
-                            borderBottom: '1px solid var(--border, #292929)',
+                            borderBottom: '1px solid var(--border, #E5E7EB)',
                             background: isChecked ? 'var(--bg-selected, rgba(255,100,31,0.06))' : 'transparent'
                           }}
                         >
@@ -832,7 +832,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                               onChange={e => handleAllocationChange(bill.voucherId, e.target.value)}
                               style={{
                                 width: '100%', padding: '4px 8px', borderRadius: '4px',
-                                border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                                border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                                 color: 'var(--text-primary)', fontSize: '12px', textAlign: 'right',
                                 fontFamily: 'monospace', outline: 'none'
                               }}
@@ -871,7 +871,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {/* Card: Amount Summary */}
           <div style={{
-            background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+            background: 'var(--surface-card, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
             borderRadius: '12px', padding: '20px', boxShadow: 'var(--shadow-sm)'
           }}>
             <h3 style={{ fontSize: '14px', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--text-primary)' }}>
@@ -900,7 +900,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                 </span>
               </div>
 
-              <div style={{ height: '1px', background: 'var(--border, #292929)', margin: '4px 0' }} />
+              <div style={{ height: '1px', background: 'var(--border, #E5E7EB)', margin: '4px 0' }} />
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>Receipt Amount</span>
@@ -913,7 +913,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
 
           {/* Card: Party Outstanding */}
           <div style={{
-            background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+            background: 'var(--surface-card, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
             borderRadius: '12px', padding: '20px', boxShadow: 'var(--shadow-sm)'
           }}>
             <h3 style={{ fontSize: '14px', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--text-primary)' }}>
@@ -935,7 +935,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                 </span>
               </div>
 
-              <div style={{ height: '1px', background: 'var(--border, #292929)', margin: '4px 0' }} />
+              <div style={{ height: '1px', background: 'var(--border, #E5E7EB)', margin: '4px 0' }} />
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Remaining Receivable</span>
@@ -951,7 +951,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
 
           {/* Card: Additional Details */}
           <div style={{
-            background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+            background: 'var(--surface-card, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
             borderRadius: '12px', padding: '20px', boxShadow: 'var(--shadow-sm)'
           }}>
             <h3 style={{ fontSize: '14px', fontWeight: 700, margin: '0 0 12px 0', color: 'var(--text-primary)' }}>
@@ -969,7 +969,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                 onChange={e => setRemarks(e.target.value)}
                 style={{
                   width: '100%', padding: '8px 12px', borderRadius: '6px',
-                  border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                  border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                   color: 'var(--text-primary)', fontSize: '12.5px', outline: 'none', resize: 'vertical'
                 }}
               />
@@ -990,14 +990,13 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
         </div>
       </div>
 
-      {/* Quick New Customer Modal */}
       {showNewCustomerModal && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 1100, backgroundColor: 'rgba(0,0,0,0.7)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
         }}>
           <div style={{
-            background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+            background: 'var(--surface-card, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
             borderRadius: '12px', width: '100%', maxWidth: '460px', padding: '24px',
             boxShadow: 'var(--modal-shadow)'
           }}>
@@ -1019,7 +1018,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                     onChange={e => setNewCustName(e.target.value)}
                     style={{
                       width: '100%', padding: '8px 12px', borderRadius: '6px',
-                      border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                      border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                       color: 'var(--text-primary)', fontSize: '13px'
                     }}
                   />
@@ -1036,7 +1035,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                     onChange={e => setNewCustGstin(e.target.value)}
                     style={{
                       width: '100%', padding: '8px 12px', borderRadius: '6px',
-                      border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                      border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                       color: 'var(--text-primary)', fontSize: '13px'
                     }}
                   />
@@ -1053,7 +1052,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                     onChange={e => setNewCustPhone(e.target.value)}
                     style={{
                       width: '100%', padding: '8px 12px', borderRadius: '6px',
-                      border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                      border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                       color: 'var(--text-primary)', fontSize: '13px'
                     }}
                   />
@@ -1070,7 +1069,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                     onChange={e => setNewCustAddress(e.target.value)}
                     style={{
                       width: '100%', padding: '8px 12px', borderRadius: '6px',
-                      border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                      border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                       color: 'var(--text-primary)', fontSize: '13px'
                     }}
                   />
@@ -1082,7 +1081,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
                   type="button"
                   onClick={() => setShowNewCustomerModal(false)}
                   style={{
-                    padding: '8px 16px', borderRadius: '6px', border: '1px solid var(--border, #292929)',
+                    padding: '8px 16px', borderRadius: '6px', border: '1px solid var(--border, #E5E7EB)',
                     background: 'transparent', color: 'var(--text-primary)', fontSize: '13px', cursor: 'pointer'
                   }}
                 >

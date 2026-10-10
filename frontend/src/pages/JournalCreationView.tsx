@@ -333,7 +333,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
             type="button"
             onClick={onBack}
             style={{
-              padding: '9px 16px', borderRadius: '8px', border: '1px solid var(--border, #292929)',
+              padding: '9px 16px', borderRadius: '8px', border: '1px solid var(--border, #E5E7EB)',
               background: 'transparent', color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600,
               cursor: 'pointer'
             }}
@@ -346,8 +346,8 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
             onClick={() => handleSaveJournal(true)}
             style={{
               display: 'flex', alignItems: 'center', gap: '6px',
-              padding: '9px 16px', borderRadius: '8px', border: '1px solid var(--border, #292929)',
-              background: 'var(--surface-inner, #191919)', color: 'var(--text-primary)',
+              padding: '9px 16px', borderRadius: '8px', border: '1px solid var(--border, #E5E7EB)',
+              background: 'var(--surface-inner, #F8F7F4)', color: 'var(--text-primary)',
               fontSize: '13px', fontWeight: 600, cursor: isSaving ? 'not-allowed' : 'pointer'
             }}
           >
@@ -397,8 +397,8 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
       }}>
         {/* Card 1: Journal Details */}
         <div style={{
-          background: 'var(--surface-card, #151515)',
-          border: '1px solid var(--border, #292929)',
+          background: 'var(--surface-card, #FFFFFF)',
+          border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px',
           padding: '20px'
         }}>
@@ -417,7 +417,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
                 readOnly
                 style={{
                   width: '100%', boxSizing: 'border-box',
-                  background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                  background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                   borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: 'var(--text-secondary)',
                   outline: 'none', cursor: 'not-allowed'
                 }}
@@ -434,7 +434,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
                 onChange={e => setVoucherDate(e.target.value)}
                 style={{
                   width: '100%', boxSizing: 'border-box',
-                  background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                  background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                   borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: 'var(--text-primary)',
                   outline: 'none'
                 }}
@@ -450,7 +450,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
                 onChange={e => setJournalType(e.target.value as any)}
                 style={{
                   width: '100%', boxSizing: 'border-box',
-                  background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                  background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                   borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: 'var(--text-primary)',
                   outline: 'none', cursor: 'pointer'
                 }}
@@ -473,7 +473,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
                 onChange={e => setReferenceNo(e.target.value)}
                 style={{
                   width: '100%', boxSizing: 'border-box',
-                  background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                  background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                   borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: 'var(--text-primary)',
                   outline: 'none'
                 }}
@@ -490,7 +490,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
                 onChange={e => setReferenceDate(e.target.value)}
                 style={{
                   width: '100%', boxSizing: 'border-box',
-                  background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                  background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                   borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: 'var(--text-primary)',
                   outline: 'none'
                 }}
@@ -509,7 +509,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
               onChange={e => setNarration(e.target.value)}
               style={{
                 width: '100%', boxSizing: 'border-box',
-                background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                 borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: 'var(--text-primary)',
                 outline: 'none', resize: 'vertical'
               }}
@@ -519,8 +519,8 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
 
         {/* Card 2: Additional Details (Optional) */}
         <div style={{
-          background: 'var(--surface-card, #151515)',
-          border: '1px solid var(--border, #292929)',
+          background: 'var(--surface-card, #FFFFFF)',
+          border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px',
           padding: '20px'
         }}>
@@ -540,7 +540,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
                 onChange={e => setCostCentre(e.target.value)}
                 style={{
                   width: '100%', boxSizing: 'border-box',
-                  background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                  background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                   borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: 'var(--text-primary)',
                   outline: 'none'
                 }}
@@ -558,7 +558,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
                 onChange={e => setProject(e.target.value)}
                 style={{
                   width: '100%', boxSizing: 'border-box',
-                  background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                  background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                   borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: 'var(--text-primary)',
                   outline: 'none'
                 }}
@@ -577,7 +577,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
               onChange={e => setTags(e.target.value)}
               style={{
                 width: '100%', boxSizing: 'border-box',
-                background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                 borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: 'var(--text-primary)',
                 outline: 'none'
               }}
@@ -595,7 +595,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
               onChange={e => setRemarks(e.target.value)}
               style={{
                 width: '100%', boxSizing: 'border-box',
-                background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                 borderRadius: '6px', padding: '8px 10px', fontSize: '13px', color: 'var(--text-primary)',
                 outline: 'none', resize: 'vertical'
               }}
@@ -613,8 +613,8 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
       }}>
         {/* Left: Ledger Entries Table */}
         <div style={{
-          background: 'var(--surface-card, #151515)',
-          border: '1px solid var(--border, #292929)',
+          background: 'var(--surface-card, #FFFFFF)',
+          border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px',
           padding: '20px'
         }}>
@@ -644,10 +644,10 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
           </div>
 
           {/* Table */}
-          <div style={{ overflowX: 'auto', border: '1px solid var(--border, #292929)', borderRadius: '8px' }}>
+          <div style={{ overflowX: 'auto', border: '1px solid var(--border, #E5E7EB)', borderRadius: '8px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
               <thead>
-                <tr style={{ background: 'var(--surface-inner, #191919)', borderBottom: '1px solid var(--border, #292929)', color: 'var(--text-secondary)', textAlign: 'left' }}>
+                <tr style={{ background: 'var(--surface-inner, #F8F7F4)', borderBottom: '1px solid var(--border, #E5E7EB)', color: 'var(--text-secondary)', textAlign: 'left' }}>
                   <th style={{ padding: '10px 8px', width: '32px', textAlign: 'center' }}>#</th>
                   <th style={{ padding: '10px 12px', minWidth: '200px' }}>Ledger Account <span style={{ color: '#EF4444' }}>*</span></th>
                   <th style={{ padding: '10px 12px', minWidth: '180px' }}>Particulars / Narration</th>
@@ -659,7 +659,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
               <tbody>
                 {lines.map((row, index) => {
                   return (
-                    <tr key={row.id} style={{ borderBottom: '1px solid var(--border, #292929)' }}>
+                    <tr key={row.id} style={{ borderBottom: '1px solid var(--border, #E5E7EB)' }}>
                       {/* Row # */}
                       <td style={{ padding: '10px 8px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                         {index + 1}
@@ -672,7 +672,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
                           onChange={e => handleLineChange(row.id, 'ledgerId', e.target.value)}
                           style={{
                             width: '100%', boxSizing: 'border-box',
-                            background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                            background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                             borderRadius: '6px', padding: '6px 8px', fontSize: '12.5px', color: 'var(--text-primary)',
                             outline: 'none', cursor: 'pointer'
                           }}
@@ -695,7 +695,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
                           onChange={e => handleLineChange(row.id, 'particulars', e.target.value)}
                           style={{
                             width: '100%', boxSizing: 'border-box',
-                            background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                            background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                             borderRadius: '6px', padding: '6px 8px', fontSize: '12.5px', color: 'var(--text-primary)',
                             outline: 'none'
                           }}
@@ -713,7 +713,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
                           onChange={e => handleLineChange(row.id, 'debit', e.target.value)}
                           style={{
                             width: '100%', boxSizing: 'border-box', textAlign: 'right',
-                            background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                            background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                             borderRadius: '6px', padding: '6px 8px', fontSize: '12.5px', color: 'var(--text-primary)',
                             outline: 'none', fontWeight: 600
                           }}
@@ -731,7 +731,7 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
                           onChange={e => handleLineChange(row.id, 'credit', e.target.value)}
                           style={{
                             width: '100%', boxSizing: 'border-box', textAlign: 'right',
-                            background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                            background: 'var(--surface-inner, #F8F7F4)', border: '1px solid var(--border, #E5E7EB)',
                             borderRadius: '6px', padding: '6px 8px', fontSize: '12.5px', color: 'var(--text-primary)',
                             outline: 'none', fontWeight: 600
                           }}
@@ -762,8 +762,8 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
 
         {/* Right: Entry Summary Card */}
         <div style={{
-          background: 'var(--surface-card, #151515)',
-          border: '1px solid var(--border, #292929)',
+          background: 'var(--surface-card, #FFFFFF)',
+          border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px',
           padding: '20px',
           display: 'flex',
@@ -775,12 +775,12 @@ export const JournalCreationView: React.FC<JournalCreationViewProps> = ({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '13px', borderBottom: '1px solid var(--border, #292929)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '13px', borderBottom: '1px solid var(--border, #E5E7EB)' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Total Debit</span>
               <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatExactINR(totalDebitPaise)}</span>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '13px', borderBottom: '1px solid var(--border, #292929)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '13px', borderBottom: '1px solid var(--border, #E5E7EB)' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Total Credit</span>
               <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{formatExactINR(totalCreditPaise)}</span>
             </div>

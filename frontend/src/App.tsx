@@ -10,10 +10,15 @@ import { ItemsView } from './pages/ItemsView';
 import { VoucherEntryView } from './pages/VoucherEntryView';
 import { ReportsView } from './pages/ReportsView';
 import { MastersView } from './pages/MastersView';
+import { LedgersView } from './pages/LedgersView';
+import { UnitsView } from './pages/UnitsView';
+import { GodownsView } from './pages/GodownsView';
+import { TaxConfigurationView } from './pages/TaxConfigurationView';
 import { UtilitiesView } from './pages/UtilitiesView';
 import { SettingsView } from './pages/SettingsView';
 import { InvoicePrintModal } from './pages/InvoicePrintModal';
-import { ServiceBillView } from './pages/ServiceBillView';
+import { ServiceBillsDashboardView } from './pages/ServiceBillsDashboardView';
+import { ServiceBillCreationView } from './pages/ServiceBillCreationView';
 import { SalesView } from './pages/SalesView';
 import { SalesInvoiceView } from './pages/SalesInvoiceView';
 import { PurchaseView } from './pages/PurchaseView';
@@ -24,6 +29,9 @@ import { PaymentsView } from './pages/PaymentsView';
 import { PaymentCreationView } from './pages/PaymentCreationView';
 import { JournalView } from './pages/JournalView';
 import { JournalCreationView } from './pages/JournalCreationView';
+import { QuotationsDashboardView } from './pages/QuotationsDashboardView';
+import { QuotationCreationView } from './pages/QuotationCreationView';
+import { QuotationRecord } from './utils/quotationStorage';
 import { CreateBusinessOnboarding } from './components/CreateBusinessOnboarding';
 import { DateChangeModal } from './components/DateChangeModal';
 import { FinancialYearModal } from './components/FinancialYearModal';
@@ -99,6 +107,10 @@ export const App: React.FC = () => {
   const [receiptViewMode, setReceiptViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [paymentViewMode, setPaymentViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [journalViewMode, setJournalViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [serviceBillViewMode, setServiceBillViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [quotationViewMode, setQuotationViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [editQuotationId, setEditQuotationId] = useState<string | null>(null);
+  const [convertedQuotation, setConvertedQuotation] = useState<QuotationRecord | null>(null);
   const [reportSubTab, setReportSubTab] = useState<string>('daybook');
   const [voucherInitialType, setVoucherInitialType] = useState<string>('SALES');
   const [editVoucherId, setEditVoucherId] = useState<string | null>(null);
@@ -385,6 +397,22 @@ export const App: React.FC = () => {
           e.preventDefault();
           setJournalViewMode('dashboard');
           setActiveTab('journal');
+        } else if (k === 'q') {
+          e.preventDefault();
+          setQuotationViewMode('dashboard');
+          setActiveTab('quotation');
+        } else if (k === 'l') {
+          e.preventDefault();
+          setActiveTab('ledgers');
+        } else if (k === 'u') {
+          e.preventDefault();
+          setActiveTab('units');
+        } else if (k === 'g') {
+          e.preventDefault();
+          setActiveTab('godowns');
+        } else if (k === 't') {
+          e.preventDefault();
+          setActiveTab('tax_configuration');
         }
       }
     };
@@ -431,6 +459,11 @@ export const App: React.FC = () => {
       setActiveTab('journal');
       return;
     }
+    if (type === 'SERVICE' || type === 'SERVICE_BILL') {
+      setServiceBillViewMode('create');
+      setActiveTab('service_bill');
+      return;
+    }
     setVoucherInitialType(type);
     if (partyId) {
       (window as any)._preselectedPartyId = partyId;
@@ -447,6 +480,8 @@ export const App: React.FC = () => {
     { label: 'Dashboard', tab: 'dashboard', category: 'Module', icon: <LayoutDashboard size={14} />, hotkey: 'Alt+1' },
     { label: 'Sales Dashboard', tab: 'sales', category: 'Module', icon: <ShoppingCart size={14} />, hotkey: 'Alt+S' },
     { label: 'Create Sales Invoice', tab: 'sales_create', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'F8' },
+    { label: 'Quotations Dashboard', tab: 'quotation', category: 'Module', icon: <ReceiptText size={14} />, hotkey: 'Alt+Q' },
+    { label: 'Create Quotation', tab: 'quotation_create', category: 'Voucher', icon: <ReceiptText size={14} /> },
     { label: 'Purchase Dashboard', tab: 'purchase', category: 'Module', icon: <ShoppingBag size={14} />, hotkey: 'Alt+P' },
     { label: 'Create Purchase Invoice', tab: 'purchase_create', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'F9' },
     { label: 'Receipts Dashboard', tab: 'receipts', category: 'Module', icon: <ArrowDownToLine size={14} />, hotkey: 'Alt+R' },
@@ -455,9 +490,14 @@ export const App: React.FC = () => {
     { label: 'Create Payment', tab: 'payments_create', category: 'Voucher', icon: <ArrowLeftRight size={14} />, hotkey: 'F5' },
     { label: 'Journal Dashboard', tab: 'journal', category: 'Module', icon: <BookText size={14} />, hotkey: 'Alt+J' },
     { label: 'Create Journal Entry', tab: 'journal_create', category: 'Voucher', icon: <BookText size={14} />, hotkey: 'F7' },
-    { label: 'Service Bill Entry (OS / Software / Servicing)', tab: 'service_bill', category: 'Voucher', icon: <Wrench size={14} />, hotkey: 'Alt+W' },
+    { label: 'Service Bills Dashboard', tab: 'service_bill', category: 'Module', icon: <Wrench size={14} />, hotkey: 'Alt+4' },
+    { label: 'Create Service Bill', tab: 'service_bill_create', category: 'Voucher', icon: <Wrench size={14} /> },
     { label: 'Parties (Customers & Suppliers)', tab: 'parties', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+3' },
     { label: 'Stock Items & Inventory', tab: 'items', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+I' },
+    { label: 'Ledgers Master (Chart of Accounts)', tab: 'ledgers', category: 'Master', icon: <BookOpen size={14} />, hotkey: 'Alt+L' },
+    { label: 'Units Master (Measurement Units)', tab: 'units', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+U' },
+    { label: 'Godowns (Warehouses & Locations)', tab: 'godowns', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+G' },
+    { label: 'Tax Configuration (GST Settings)', tab: 'tax_configuration', category: 'Master', icon: <Percent size={14} />, hotkey: 'Alt+T' },
     { label: 'Day Book Report', tab: 'reports', subTab: 'daybook', category: 'Report', icon: <Clock size={14} /> },
     { label: 'Sales Register (Display Sales Entries)', tab: 'reports', subTab: 'sales_register', category: 'Report', icon: <ShoppingCart size={14} /> },
     { label: 'Purchase Register (Display Purchase Entries)', tab: 'reports', subTab: 'purchase_register', category: 'Report', icon: <ShoppingBag size={14} /> },
@@ -487,6 +527,21 @@ export const App: React.FC = () => {
     if (item.tab === 'sales') {
       setSalesViewMode('dashboard');
       setActiveTab('sales');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'quotation_create') {
+      setEditQuotationId(null);
+      setQuotationViewMode('create');
+      setActiveTab('quotation');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'quotation') {
+      setQuotationViewMode('dashboard');
+      setActiveTab('quotation');
       setShowSearchModal(false);
       setSearchQuery('');
       return;
@@ -543,6 +598,20 @@ export const App: React.FC = () => {
     if (item.tab === 'journal') {
       setJournalViewMode('dashboard');
       setActiveTab('journal');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'service_bill_create') {
+      setServiceBillViewMode('create');
+      setActiveTab('service_bill');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'service_bill') {
+      setServiceBillViewMode('dashboard');
+      setActiveTab('service_bill');
       setShowSearchModal(false);
       setSearchQuery('');
       return;
@@ -632,6 +701,8 @@ export const App: React.FC = () => {
         setVoucherInitialType={setVoucherInitialType}
         salesViewMode={salesViewMode}
         setSalesViewMode={setSalesViewMode}
+        quotationViewMode={quotationViewMode}
+        setQuotationViewMode={setQuotationViewMode}
         purchaseViewMode={purchaseViewMode}
         setPurchaseViewMode={setPurchaseViewMode}
         receiptViewMode={receiptViewMode}
@@ -675,7 +746,10 @@ export const App: React.FC = () => {
                 <SalesView
                   company={company}
                   activeFy={activeFy}
-                  onCreateInvoice={() => setSalesViewMode('create')}
+                  onCreateInvoice={() => {
+                    setConvertedQuotation(null);
+                    setSalesViewMode('create');
+                  }}
                   onViewVoucher={(id) => setActivePrintVoucherId(id)}
                   onNavigateTab={(tab, sub) => {
                     setActiveTab(tab);
@@ -687,10 +761,61 @@ export const App: React.FC = () => {
                   company={company}
                   activeFy={activeFy}
                   currentDate={currentDate}
-                  onBack={() => setSalesViewMode('dashboard')}
+                  initialQuotation={convertedQuotation}
+                  onBack={() => {
+                    setConvertedQuotation(null);
+                    setSalesViewMode('dashboard');
+                  }}
                   onPostSuccess={(voucherId) => {
+                    setConvertedQuotation(null);
                     setActivePrintVoucherId(voucherId);
                     setSalesViewMode('dashboard');
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* 1.1.1 Quotation Module (UI-010) — Quotations Dashboard & Create Quotation */}
+          {activeTab === 'quotation' && (
+            <div key="quotation" className="view-container-animated">
+              {quotationViewMode === 'dashboard' ? (
+                <QuotationsDashboardView
+                  company={company}
+                  activeFy={activeFy}
+                  onNewQuotation={() => {
+                    setEditQuotationId(null);
+                    setQuotationViewMode('create');
+                  }}
+                  onEditQuotation={(id) => {
+                    setEditQuotationId(id);
+                    setQuotationViewMode('create');
+                  }}
+                  onConvertToInvoice={(quotation) => {
+                    setConvertedQuotation(quotation);
+                    setActiveTab('sales');
+                    setSalesViewMode('create');
+                  }}
+                />
+              ) : (
+                <QuotationCreationView
+                  company={company}
+                  activeFy={activeFy}
+                  currentDate={currentDate}
+                  editQuotationId={editQuotationId}
+                  onBack={() => {
+                    setEditQuotationId(null);
+                    setQuotationViewMode('dashboard');
+                  }}
+                  onSaveSuccess={() => {
+                    setEditQuotationId(null);
+                    setQuotationViewMode('dashboard');
+                  }}
+                  onConvertToInvoice={(quotation) => {
+                    setEditQuotationId(null);
+                    setConvertedQuotation(quotation);
+                    setActiveTab('sales');
+                    setSalesViewMode('create');
                   }}
                 />
               )}
@@ -834,21 +959,37 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* 2.1 Service Bill Entry View */}
+          {/* 2.1 Service Bill Entry View (UI-009) */}
           {activeTab === 'service_bill' && (
             <div key="service_bill" className="view-container-animated">
-              <ServiceBillView
-                company={company}
-                activeFy={activeFy}
-                currentDate={currentDate}
-                onNavigate={(tab, subTab) => {
-                  setActiveTab(tab);
-                  if (subTab) setReportSubTab(subTab);
-                }}
-                onPostSuccess={(id) => {
-                  setActivePrintVoucherId(id);
-                }}
-              />
+              {serviceBillViewMode === 'dashboard' ? (
+                <ServiceBillsDashboardView
+                  company={company}
+                  activeFy={activeFy}
+                  onNewBill={() => setServiceBillViewMode('create')}
+                  onEditDraft={(vId) => {
+                    setEditVoucherId(vId);
+                    setServiceBillViewMode('create');
+                  }}
+                  onPrintBill={(vId) => setActivePrintVoucherId(vId)}
+                />
+              ) : (
+                <ServiceBillCreationView
+                  company={company}
+                  activeFy={activeFy}
+                  currentDate={currentDate}
+                  editVoucherId={editVoucherId}
+                  onBack={() => {
+                    setEditVoucherId(null);
+                    setServiceBillViewMode('dashboard');
+                  }}
+                  onPostSuccess={(id) => {
+                    setEditVoucherId(null);
+                    setActivePrintVoucherId(id);
+                    setServiceBillViewMode('dashboard');
+                  }}
+                />
+              )}
             </div>
           )}
 
@@ -880,8 +1021,46 @@ export const App: React.FC = () => {
             </div>
           )}
 
+          {/* 2.4 Ledgers View (UI: Master Ledgers Management) */}
+          {(activeTab === 'ledgers' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'ledgers')) && (
+            <div key="ledgers" className="view-container-animated">
+              <LedgersView
+                company={company}
+                activeFy={activeFy}
+                onNavigateReports={(sub, ledgerId) => {
+                  setReportSubTab(sub);
+                  if (ledgerId) {
+                    (window as any)._preselectedLedgerId = ledgerId;
+                  }
+                  setActiveTab('reports');
+                }}
+              />
+            </div>
+          )}
+
+          {/* 2.5 Units View (UI: Master Units Management) */}
+          {(activeTab === 'units' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'units')) && (
+            <div key="units" className="view-container-animated">
+              <UnitsView company={company} />
+            </div>
+          )}
+
+          {/* 2.6 Godowns View (UI: Master Godowns Management) */}
+          {(activeTab === 'godowns' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'godowns')) && (
+            <div key="godowns" className="view-container-animated">
+              <GodownsView company={company} />
+            </div>
+          )}
+
+          {/* 2.7 Tax Configuration View (UI: Tax Configuration) */}
+          {(activeTab === 'tax_configuration' || (activeTab === 'masters' && ((window as any)._currentMasterTab === 'tax_configuration' || (window as any)._currentMasterTab === 'tax'))) && (
+            <div key="tax_configuration" className="view-container-animated">
+              <TaxConfigurationView company={company} onCompanyUpdated={loadCompanyData} />
+            </div>
+          )}
+
           {/* 3. Masters View */}
-          {activeTab === 'masters' && (window as any)._currentMasterTab !== 'parties' && (window as any)._currentMasterTab !== 'items' && (
+          {activeTab === 'masters' && (window as any)._currentMasterTab !== 'parties' && (window as any)._currentMasterTab !== 'items' && (window as any)._currentMasterTab !== 'ledgers' && (window as any)._currentMasterTab !== 'units' && (window as any)._currentMasterTab !== 'godowns' && (window as any)._currentMasterTab !== 'tax_configuration' && (window as any)._currentMasterTab !== 'tax' && (
             <div key="masters" className="view-container-animated">
               <MastersView company={company} onCompanyUpdated={loadCompanyData} />
             </div>

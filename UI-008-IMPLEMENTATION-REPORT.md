@@ -457,12 +457,41 @@ rendering chunks...
 computing gzip size...
 dist/index.html                                   1.37 kB │ gzip:   0.74 kB
 dist/assets/ledgerflow-logo-light-BpGne2qi.png   24.83 kB
-dist/assets/index-u-ULAI07.css                  208.24 kB │ gzip:  32.03 kB
-dist/assets/index-hw0EUvEJ.js                   951.51 kB │ gzip: 200.82 kB
-✓ built in 5.14s
+dist/assets/index-DbMDWp1h.css                  208.58 kB │ gzip:  32.11 kB
+dist/assets/index-CmnrJbhr.js                   952.36 kB │ gzip: 201.03 kB
+✓ built in 4.86s
 ```
 
 **0 TypeScript errors, 0 build failures.**
+
+---
+
+## 13.1. LedgerFlow Dark Theme Direction & Navbar Switcher
+
+UI-008 fully realizes the approved **LedgerFlow Dark Theme Direction** and theme architecture:
+
+### 1. Approved Color Palette Mapping
+- **App Background**: `#080808` (`--color-background`, `--bg`, `--bg-app`)
+- **Sidebar**: `#0B0B0B` (`--sidebar-bg`, `--shell`)
+- **Top Bar**: `#101010` (`--topbar-bg`, `--header-bg`)
+- **Cards**: `#151515` (`--surface-card`, `--color-surface`, `--color-surface-card`, `--card-bg`)
+- **Inner Sections**: `#191919` (`--surface-inner`, `--color-surface-inner`, `--color-surface-secondary`, `--input-bg`)
+- **Borders**: `#292929` (`--color-border`, `--sidebar-border`, `--topbar-border`, `--border`)
+- **Primary Text**: `#F5F5F5` (`--color-text`, `--text-primary`)
+- **Secondary Text**: `#8E8E8E` (`--color-text-secondary`, `--kbd-text`)
+- **LedgerFlow Orange**: `#FF641F` (`--color-primary`, `--primary-accent`)
+- **Success**: Muted Green (`--color-success: #10B981`, `--color-success-text: #34D399`)
+- **Danger**: Muted Red (`--color-danger: #EF4444`, `--color-danger-text: #F87171`)
+- **Charts**: Orange (`#FF641F`) + Neutral Gray (`#6B7280`), replacing rainbow palettes.
+
+### 2. Elimination of Dark Leakage in Light Mode
+- Light mode tokens explicitly declare `--surface-card: #FFFFFF` and `--surface-inner: #F8F7F4` in `:root, [data-theme="light"]`.
+- All fallback values in `ReceiptsView.tsx`, `ReceiptCreationView.tsx`, `PaymentsView.tsx`, `PaymentCreationView.tsx`, `JournalView.tsx`, and `JournalCreationView.tsx` were scrubbed of hardcoded dark hexes (`#151515`, `#191919`, `#292929`) and mapped to standard light fallbacks (`#FFFFFF`, `#F8F7F4`, `#E5E7EB`).
+- Result: Light Mode renders 100% pure light theme with zero dark bleed across all six screens, while Dark Mode applies the strict 12-token neutral palette seamlessly upon toggle.
+
+### 3. Navbar Appearance Theme Switcher
+- The theme switch button is prominently placed directly within the top navigation bar (`Topbar.tsx` and `Navbar.tsx`), immediately preceding the Notification Bell.
+- Features intuitive `Sun` / `Moon` iconography and toggles `data-theme="dark"` / `data-theme="light"` on `document.documentElement` with `localStorage` persistence.
 
 ---
 

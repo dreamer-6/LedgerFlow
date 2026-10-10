@@ -343,7 +343,7 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
       }}>
         {/* KPI 1: Total Receipts */}
         <div style={{
-          background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+          background: 'var(--surface, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px', padding: '18px 20px', display: 'flex', alignItems: 'flex-start',
           justifyContent: 'space-between', boxShadow: 'var(--shadow-sm)'
         }}>
@@ -369,7 +369,7 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
 
         {/* KPI 2: Receipt Count */}
         <div style={{
-          background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+          background: 'var(--surface, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px', padding: '18px 20px', display: 'flex', alignItems: 'flex-start',
           justifyContent: 'space-between', boxShadow: 'var(--shadow-sm)'
         }}>
@@ -395,7 +395,7 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
 
         {/* KPI 3: Outstanding Receivables */}
         <div style={{
-          background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+          background: 'var(--surface, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px', padding: '18px 20px', display: 'flex', alignItems: 'flex-start',
           justifyContent: 'space-between', boxShadow: 'var(--shadow-sm)'
         }}>
@@ -421,7 +421,7 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
 
         {/* KPI 4: Active Customers */}
         <div style={{
-          background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+          background: 'var(--surface, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px', padding: '18px 20px', display: 'flex', alignItems: 'flex-start',
           justifyContent: 'space-between', boxShadow: 'var(--shadow-sm)'
         }}>
@@ -448,12 +448,12 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
 
       {/* Main Table Container */}
       <div style={{
-        background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+        background: 'var(--surface, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
         borderRadius: '12px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)'
       }}>
         {/* Search & Filter Toolbar */}
         <div style={{
-          padding: '16px 20px', borderBottom: '1px solid var(--border, #292929)',
+          padding: '16px 20px', borderBottom: '1px solid var(--border, #E5E7EB)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px'
         }}>
           {/* Search Box */}
@@ -466,7 +466,7 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
               onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
               style={{
                 width: '100%', padding: '8px 12px 8px 36px', borderRadius: '6px',
-                border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                 color: 'var(--text-primary)', fontSize: '13px', outline: 'none'
               }}
             />
@@ -479,8 +479,8 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
               value={customerFilter}
               onChange={e => { setCustomerFilter(e.target.value); setCurrentPage(1); }}
               style={{
-                padding: '7px 12px', borderRadius: '6px', border: '1px solid var(--border, #292929)',
-                background: 'var(--surface, #151515)', color: 'var(--text-primary)', fontSize: '12.5px', outline: 'none'
+                padding: '7px 12px', borderRadius: '6px', border: '1px solid var(--border, #E5E7EB)',
+                background: 'var(--surface, #FFFFFF)', color: 'var(--text-primary)', fontSize: '12.5px', outline: 'none'
               }}
             >
               <option value="ALL">All Customers</option>
@@ -494,8 +494,8 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
               value={statusFilter}
               onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
               style={{
-                padding: '7px 12px', borderRadius: '6px', border: '1px solid var(--border, #292929)',
-                background: 'var(--surface, #151515)', color: 'var(--text-primary)', fontSize: '12.5px', outline: 'none'
+                padding: '7px 12px', borderRadius: '6px', border: '1px solid var(--border, #E5E7EB)',
+                background: 'var(--surface, #FFFFFF)', color: 'var(--text-primary)', fontSize: '12.5px', outline: 'none'
               }}
             >
               <option value="ALL">All Status</option>
@@ -509,8 +509,8 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
               onClick={handleExportCSV}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '7px 12px', borderRadius: '6px', border: '1px solid var(--border, #292929)',
-                background: 'var(--surface-hover, #202020)', color: 'var(--text-primary)',
+                padding: '7px 12px', borderRadius: '6px', border: '1px solid var(--border, #E5E7EB)',
+                background: 'var(--surface-hover, #F3F4F6)', color: 'var(--text-primary)',
                 fontSize: '12.5px', fontWeight: 600, cursor: 'pointer'
               }}
             >
@@ -524,7 +524,7 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
             <thead>
-              <tr style={{ background: 'var(--table-header-bg, #101010)', borderBottom: '1px solid var(--border, #292929)', color: 'var(--text-secondary)' }}>
+              <tr style={{ background: 'var(--table-header-bg, #F9FAFB)', borderBottom: '1px solid var(--border, #E5E7EB)', color: 'var(--text-secondary)' }}>
                 <th style={{ width: '40px', padding: '12px 14px' }}>
                   <input
                     type="checkbox"
@@ -572,7 +572,7 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
                     <tr
                       key={v.voucher_id}
                       style={{
-                        borderBottom: '1px solid var(--border, #292929)',
+                        borderBottom: '1px solid var(--border, #E5E7EB)',
                         background: isSelected ? 'var(--bg-selected, rgba(255,100,31,0.08))' : 'transparent',
                         transition: 'background 0.1s ease'
                       }}
@@ -706,7 +706,7 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
 
         {/* Pagination Footer */}
         <div style={{
-          padding: '14px 20px', borderTop: '1px solid var(--border, #292929)',
+          padding: '14px 20px', borderTop: '1px solid var(--border, #E5E7EB)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12.5px',
           color: 'var(--text-secondary)'
         }}>
@@ -720,8 +720,8 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
               disabled={currentPage <= 1}
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               style={{
-                padding: '5px 10px', borderRadius: '4px', border: '1px solid var(--border, #292929)',
-                background: 'var(--surface, #151515)', color: 'var(--text-primary)',
+                padding: '5px 10px', borderRadius: '4px', border: '1px solid var(--border, #E5E7EB)',
+                background: 'var(--surface, #FFFFFF)', color: 'var(--text-primary)',
                 cursor: currentPage <= 1 ? 'not-allowed' : 'pointer', opacity: currentPage <= 1 ? 0.4 : 1
               }}
             >
@@ -734,8 +734,8 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
                 onClick={() => setCurrentPage(pg)}
                 style={{
                   padding: '5px 10px', borderRadius: '4px',
-                  border: currentPage === pg ? '1px solid #FF641F' : '1px solid var(--border, #292929)',
-                  background: currentPage === pg ? '#FF641F' : 'var(--surface, #151515)',
+                  border: currentPage === pg ? '1px solid #FF641F' : '1px solid var(--border, #E5E7EB)',
+                  background: currentPage === pg ? '#FF641F' : 'var(--surface, #FFFFFF)',
                   color: currentPage === pg ? '#FFFFFF' : 'var(--text-primary)',
                   fontWeight: currentPage === pg ? 700 : 500, cursor: 'pointer'
                 }}
@@ -748,8 +748,8 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
               disabled={currentPage >= totalPages}
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               style={{
-                padding: '5px 10px', borderRadius: '4px', border: '1px solid var(--border, #292929)',
-                background: 'var(--surface, #151515)', color: 'var(--text-primary)',
+                padding: '5px 10px', borderRadius: '4px', border: '1px solid var(--border, #E5E7EB)',
+                background: 'var(--surface, #FFFFFF)', color: 'var(--text-primary)',
                 cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer', opacity: currentPage >= totalPages ? 0.4 : 1
               }}
             >
@@ -766,7 +766,7 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
         }}>
           <div style={{
-            background: 'var(--surface, #151515)', border: '1px solid var(--border, #292929)',
+            background: 'var(--surface-card, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
             borderRadius: '12px', width: '100%', maxWidth: '440px', padding: '24px',
             boxShadow: 'var(--modal-shadow)'
           }}>
@@ -796,7 +796,7 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
               onChange={e => setCancellationReason(e.target.value)}
               style={{
                 width: '100%', padding: '8px 12px', borderRadius: '6px',
-                border: '1px solid var(--border, #292929)', background: 'var(--input-bg, #151515)',
+                border: '1px solid var(--border, #E5E7EB)', background: 'var(--input-bg, #FFFFFF)',
                 color: 'var(--text-primary)', fontSize: '13px', outline: 'none', resize: 'vertical'
               }}
             />
@@ -806,7 +806,7 @@ export const ReceiptsView: React.FC<ReceiptsViewProps> = ({
                 type="button"
                 onClick={() => setCancellingVoucherId(null)}
                 style={{
-                  padding: '8px 16px', borderRadius: '6px', border: '1px solid var(--border, #292929)',
+                  padding: '8px 16px', borderRadius: '6px', border: '1px solid var(--border, #E5E7EB)',
                   background: 'transparent', color: 'var(--text-primary)', fontSize: '13px', cursor: 'pointer'
                 }}
               >

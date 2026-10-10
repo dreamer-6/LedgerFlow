@@ -7,6 +7,7 @@ import {
   ArrowLeftRight,
   BookText,
   ReceiptText,
+  FileText,
   Users,
   Package,
   BookMarked,
@@ -36,6 +37,8 @@ export interface SidebarProps {
   setMastersSubTab?: (tab: string) => void;
   salesViewMode?: 'dashboard' | 'create';
   setSalesViewMode?: (mode: 'dashboard' | 'create') => void;
+  quotationViewMode?: 'dashboard' | 'create';
+  setQuotationViewMode?: (mode: 'dashboard' | 'create') => void;
   purchaseViewMode?: 'dashboard' | 'create';
   setPurchaseViewMode?: (mode: 'dashboard' | 'create') => void;
   receiptViewMode?: 'dashboard' | 'create';
@@ -59,6 +62,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setMastersSubTab,
   salesViewMode = 'dashboard',
   setSalesViewMode,
+  quotationViewMode = 'dashboard',
+  setQuotationViewMode,
   purchaseViewMode = 'dashboard',
   setPurchaseViewMode,
   receiptViewMode = 'dashboard',
@@ -292,6 +297,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
               () => handleNav('service_bill'),
               'Alt+4'
             )}
+            {renderItem(
+              'quotation-module',
+              'Quotation',
+              <FileText size={16} />,
+              activeTab === 'quotation',
+              () => {
+                setActiveTab('quotation');
+                if (setQuotationViewMode) setQuotationViewMode('dashboard');
+                if (onClose) onClose();
+              },
+              'Alt+Q'
+            )}
           </div>
 
           {/* MASTERS */}
@@ -327,41 +344,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'masters-ledgers',
               'Ledgers',
               <BookMarked size={16} />,
-              activeTab === 'masters' && (window as any)._currentMasterTab === 'ledgers',
+              activeTab === 'ledgers' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'ledgers'),
               () => {
                 (window as any)._currentMasterTab = 'ledgers';
-                handleNav('masters', { masterTab: 'ledgers' });
-              }
+                handleNav('ledgers', { masterTab: 'ledgers' });
+              },
+              'Alt+L'
             )}
             {renderItem(
               'masters-units',
               'Units',
               <Ruler size={16} />,
-              activeTab === 'masters' && (window as any)._currentMasterTab === 'units',
+              activeTab === 'units' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'units'),
               () => {
                 (window as any)._currentMasterTab = 'units';
-                handleNav('masters', { masterTab: 'units' });
-              }
+                handleNav('units', { masterTab: 'units' });
+              },
+              'Alt+U'
             )}
             {renderItem(
               'masters-godowns',
               'Godowns',
               <Warehouse size={16} />,
-              activeTab === 'masters' && (window as any)._currentMasterTab === 'godowns',
+              activeTab === 'godowns' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'godowns'),
               () => {
                 (window as any)._currentMasterTab = 'godowns';
-                handleNav('masters', { masterTab: 'godowns' });
-              }
+                handleNav('godowns', { masterTab: 'godowns' });
+              },
+              'Alt+G'
             )}
             {renderItem(
               'masters-tax',
               'Tax Configuration',
               <Percent size={16} />,
-              activeTab === 'masters' && (window as any)._currentMasterTab === 'tax',
+              activeTab === 'tax_configuration' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'tax_configuration'),
               () => {
-                (window as any)._currentMasterTab = 'tax';
-                handleNav('settings');
-              }
+                (window as any)._currentMasterTab = 'tax_configuration';
+                handleNav('tax_configuration', { masterTab: 'tax_configuration' });
+              },
+              'Alt+T'
             )}
           </div>
 

@@ -550,11 +550,11 @@
 }
 
 .lf-legend-dot.purchase {
-  background-color: #E2D9D0;
+  background-color: var(--chart-purchase, #E2D9D0);
 }
 
 [data-theme="dark"] .lf-legend-dot.purchase {
-  background-color: #64748B;
+  background-color: var(--chart-purchase, #6B7280);
 }
 
 .lf-chart-plot-area {
@@ -629,15 +629,15 @@
 }
 
 .lf-bar.purchase {
-  background: #E2D9D0;
+  background: var(--chart-purchase, #E2D9D0);
 }
 
 [data-theme="dark"] .lf-bar.purchase {
-  background: #475569;
+  background: var(--chart-purchase, #6B7280);
 }
 
 .lf-chart-col:hover .lf-bar.sales {
-  background: var(--color-primary-hover, #EA580C);
+  background: var(--color-primary-hover, #FF7A3D);
 }
 
 .lf-chart-col:hover .lf-bar.purchase {
@@ -645,7 +645,7 @@
 }
 
 [data-theme="dark"] .lf-chart-col:hover .lf-bar.purchase {
-  background: #64748B;
+  background: #8E8E8E;
 }
 
 .lf-chart-month-label {

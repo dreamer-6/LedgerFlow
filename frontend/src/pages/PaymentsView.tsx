@@ -309,7 +309,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
       {toastMessage && (
         <div style={{
           position: 'fixed', bottom: '24px', right: '24px', zIndex: 1000,
-          background: 'var(--surface-elevated, #1D1D1D)', border: '1px solid var(--border)',
+          background: 'var(--surface-elevated, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '8px', padding: '12px 20px', boxShadow: 'var(--modal-shadow)',
           display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600,
           color: 'var(--text-primary)'
@@ -359,13 +359,14 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
       }}>
         {/* Card 1: Total Payments */}
         <div style={{
-          background: 'var(--surface-card, #151515)',
-          border: '1px solid var(--border, #292929)',
+          background: 'var(--surface, #FFFFFF)',
+          border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px',
           padding: '20px',
           display: 'flex',
           alignItems: 'center',
-          gap: '16px'
+          gap: '16px',
+          boxShadow: 'var(--shadow-sm)'
         }}>
           <div style={{
             width: '46px', height: '46px', borderRadius: '10px',
@@ -389,13 +390,14 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
 
         {/* Card 2: Supplier Payments */}
         <div style={{
-          background: 'var(--surface-card, #151515)',
-          border: '1px solid var(--border, #292929)',
+          background: 'var(--surface, #FFFFFF)',
+          border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px',
           padding: '20px',
           display: 'flex',
           alignItems: 'center',
-          gap: '16px'
+          gap: '16px',
+          boxShadow: 'var(--shadow-sm)'
         }}>
           <div style={{
             width: '46px', height: '46px', borderRadius: '10px',
@@ -419,13 +421,14 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
 
         {/* Card 3: Expenses Paid */}
         <div style={{
-          background: 'var(--surface-card, #151515)',
-          border: '1px solid var(--border, #292929)',
+          background: 'var(--surface, #FFFFFF)',
+          border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px',
           padding: '20px',
           display: 'flex',
           alignItems: 'center',
-          gap: '16px'
+          gap: '16px',
+          boxShadow: 'var(--shadow-sm)'
         }}>
           <div style={{
             width: '46px', height: '46px', borderRadius: '10px',
@@ -449,13 +452,14 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
 
         {/* Card 4: Outstanding Payables */}
         <div style={{
-          background: 'var(--surface-card, #151515)',
-          border: '1px solid var(--border, #292929)',
+          background: 'var(--surface, #FFFFFF)',
+          border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '12px',
           padding: '20px',
           display: 'flex',
           alignItems: 'center',
-          gap: '16px'
+          gap: '16px',
+          boxShadow: 'var(--shadow-sm)'
         }}>
           <div style={{
             width: '46px', height: '46px', borderRadius: '10px',
@@ -480,8 +484,8 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
 
       {/* Filter and Search Bar */}
       <div style={{
-        background: 'var(--surface-card, #151515)',
-        border: '1px solid var(--border, #292929)',
+        background: 'var(--surface, #FFFFFF)',
+        border: '1px solid var(--border, #E5E7EB)',
         borderRadius: '12px',
         padding: '14px 18px',
         display: 'flex',
@@ -489,12 +493,13 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: '12px',
-        marginBottom: '16px'
+        marginBottom: '16px',
+        boxShadow: 'var(--shadow-sm)'
       }}>
         {/* Search */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: '8px',
-          background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+          background: 'var(--input-bg, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
           borderRadius: '8px', padding: '7px 12px', minWidth: '320px', flex: '1 1 320px'
         }}>
           <Search size={15} color="var(--text-secondary)" />
@@ -518,7 +523,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
             value={dateRangeFilter}
             onChange={e => setDateRangeFilter(e.target.value)}
             style={{
-              background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+              background: 'var(--input-bg, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
               color: 'var(--text-primary)', borderRadius: '8px', padding: '7px 12px', fontSize: '13px',
               cursor: 'pointer', outline: 'none'
             }}
@@ -534,7 +539,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
             value={typeFilter}
             onChange={e => { setTypeFilter(e.target.value); setCurrentPage(1); }}
             style={{
-              background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+              background: 'var(--input-bg, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
               color: 'var(--text-primary)', borderRadius: '8px', padding: '7px 12px', fontSize: '13px',
               cursor: 'pointer', outline: 'none'
             }}
@@ -550,7 +555,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
             value={statusFilter}
             onChange={e => { setStatusFilter(e.target.value); setCurrentPage(1); }}
             style={{
-              background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+              background: 'var(--input-bg, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
               color: 'var(--text-primary)', borderRadius: '8px', padding: '7px 12px', fontSize: '13px',
               cursor: 'pointer', outline: 'none'
             }}
@@ -566,7 +571,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
             type="button"
             style={{
               display: 'flex', alignItems: 'center', gap: '6px',
-              background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+              background: 'var(--input-bg, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
               borderRadius: '8px', padding: '7px 12px', color: 'var(--text-primary)',
               fontSize: '13px', cursor: 'pointer'
             }}
@@ -581,7 +586,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
             onClick={handleExportCSV}
             style={{
               display: 'flex', alignItems: 'center', gap: '6px',
-              background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+              background: 'var(--input-bg, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
               borderRadius: '8px', padding: '7px 12px', color: 'var(--text-primary)',
               fontSize: '13px', cursor: 'pointer'
             }}
@@ -594,17 +599,18 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
 
       {/* Table Section */}
       <div style={{
-        background: 'var(--surface-card, #151515)',
-        border: '1px solid var(--border, #292929)',
+        background: 'var(--surface, #FFFFFF)',
+        border: '1px solid var(--border, #E5E7EB)',
         borderRadius: '12px',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        boxShadow: 'var(--shadow-sm)'
       }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
             <thead>
               <tr style={{
-                background: 'var(--surface-inner, #191919)',
-                borderBottom: '1px solid var(--border, #292929)',
+                background: 'var(--table-header-bg, #F8F7F4)',
+                borderBottom: '1px solid var(--border, #E5E7EB)',
                 color: 'var(--text-secondary)',
                 fontWeight: 600,
                 fontSize: '12px'
@@ -667,11 +673,13 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
                     <tr
                       key={v.voucher_id}
                       style={{
-                        borderBottom: '1px solid var(--border, #292929)',
+                        borderBottom: '1px solid var(--border, #E5E7EB)',
                         background: isChecked ? 'rgba(255, 100, 31, 0.05)' : 'transparent',
                         opacity: isCancelled ? 0.65 : 1,
                         transition: 'background 0.15s ease'
                       }}
+                      onMouseEnter={e => !isChecked && (e.currentTarget.style.background = 'var(--table-row-hover, #F5F4F1)')}
+                      onMouseLeave={e => !isChecked && (e.currentTarget.style.background = 'transparent')}
                     >
                       {/* Checkbox */}
                       <td style={{ padding: '12px 14px', textAlign: 'center' }}>
@@ -832,7 +840,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
                         {openActionId === v.voucher_id && (
                           <div style={{
                             position: 'absolute', right: '14px', top: '38px', zIndex: 100,
-                            background: 'var(--surface-elevated, #1D1D1D)', border: '1px solid var(--border, #292929)',
+                            background: 'var(--surface-elevated, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
                             borderRadius: '8px', boxShadow: 'var(--modal-shadow)', width: '140px',
                             padding: '4px 0', textAlign: 'left'
                           }}>
@@ -881,8 +889,8 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
         {/* Pagination Bar */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '12px 18px', borderTop: '1px solid var(--border, #292929)',
-          fontSize: '12.5px', color: 'var(--text-secondary)', background: 'var(--surface-card, #151515)'
+          padding: '12px 18px', borderTop: '1px solid var(--border, #E5E7EB)',
+          fontSize: '12.5px', color: 'var(--text-secondary)', background: 'var(--surface, #FFFFFF)'
         }}>
           <div>
             Showing {filteredVouchers.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{' '}
@@ -895,7 +903,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
               disabled={currentPage <= 1}
               onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
               style={{
-                background: 'transparent', border: '1px solid var(--border, #292929)',
+                background: 'transparent', border: '1px solid var(--border, #E5E7EB)',
                 color: 'var(--text-primary)', borderRadius: '6px', padding: '4px 8px',
                 cursor: currentPage <= 1 ? 'not-allowed' : 'pointer', opacity: currentPage <= 1 ? 0.5 : 1
               }}
@@ -914,7 +922,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
                   style={{
                     background: isActive ? '#FF641F' : 'transparent',
                     border: '1px solid',
-                    borderColor: isActive ? '#FF641F' : 'var(--border, #292929)',
+                    borderColor: isActive ? '#FF641F' : 'var(--border, #E5E7EB)',
                     color: isActive ? '#FFFFFF' : 'var(--text-primary)',
                     borderRadius: '6px', width: '28px', height: '28px',
                     fontSize: '12px', fontWeight: isActive ? 700 : 500,
@@ -931,7 +939,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
               disabled={currentPage >= totalPages}
               onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
               style={{
-                background: 'transparent', border: '1px solid var(--border, #292929)',
+                background: 'transparent', border: '1px solid var(--border, #E5E7EB)',
                 color: 'var(--text-primary)', borderRadius: '6px', padding: '4px 8px',
                 cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer', opacity: currentPage >= totalPages ? 0.5 : 1
               }}
@@ -950,7 +958,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           <div style={{
-            background: 'var(--surface-elevated, #1D1D1D)', border: '1px solid var(--border, #292929)',
+            background: 'var(--surface-elevated, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
             borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '440px',
             boxShadow: 'var(--modal-shadow)', color: 'var(--text-primary)'
           }}>
@@ -981,7 +989,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
                 rows={3}
                 style={{
                   width: '100%', boxSizing: 'border-box',
-                  background: 'var(--surface-inner, #191919)', border: '1px solid var(--border, #292929)',
+                  background: 'var(--input-bg, #FFFFFF)', border: '1px solid var(--border, #E5E7EB)',
                   borderRadius: '6px', padding: '8px 10px', color: 'var(--text-primary)',
                   fontSize: '13px', outline: 'none', resize: 'vertical'
                 }}
@@ -993,7 +1001,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
                 type="button"
                 onClick={() => { setCancellingVoucherId(null); setCancellationReason(''); }}
                 style={{
-                  background: 'transparent', border: '1px solid var(--border, #292929)',
+                  background: 'transparent', border: '1px solid var(--border, #E5E7EB)',
                   color: 'var(--text-primary)', padding: '8px 16px', borderRadius: '6px',
                   fontSize: '13px', cursor: 'pointer'
                 }}

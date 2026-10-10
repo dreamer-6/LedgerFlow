@@ -17,6 +17,8 @@ export interface AppShellProps {
   setMastersSubTab?: (tab: string) => void;
   salesViewMode?: 'dashboard' | 'create';
   setSalesViewMode?: (mode: 'dashboard' | 'create') => void;
+  quotationViewMode?: 'dashboard' | 'create';
+  setQuotationViewMode?: (mode: 'dashboard' | 'create') => void;
   purchaseViewMode?: 'dashboard' | 'create';
   setPurchaseViewMode?: (mode: 'dashboard' | 'create') => void;
   receiptViewMode?: 'dashboard' | 'create';
@@ -46,6 +48,8 @@ export const AppShell: React.FC<AppShellProps> = ({
   setMastersSubTab,
   salesViewMode,
   setSalesViewMode,
+  quotationViewMode,
+  setQuotationViewMode,
   purchaseViewMode,
   setPurchaseViewMode,
   receiptViewMode,
@@ -91,6 +95,8 @@ export const AppShell: React.FC<AppShellProps> = ({
         setMastersSubTab={setMastersSubTab}
         salesViewMode={salesViewMode}
         setSalesViewMode={setSalesViewMode}
+        quotationViewMode={quotationViewMode}
+        setQuotationViewMode={setQuotationViewMode}
         purchaseViewMode={purchaseViewMode}
         setPurchaseViewMode={setPurchaseViewMode}
         receiptViewMode={receiptViewMode}
