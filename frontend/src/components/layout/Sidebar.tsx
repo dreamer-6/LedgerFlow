@@ -475,7 +475,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             'Settings',
             <Settings size={16} />,
             activeTab === 'settings',
-            () => handleNav('settings')
+            () => handleNav('settings'),
+            'Alt+C'
           )}
         </div>
       </aside>

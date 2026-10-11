@@ -464,6 +464,56 @@ export const api = {
     return res.json();
   },
 
+  async updateFinancialYearStatus(
+    fyId: string,
+    status: 'OPEN' | 'LOCKED' | 'CLOSED',
+    reason?: string
+  ): Promise<FinancialYear> {
+    const res = await fetch(`${API_BASE}/financial-years/${encodeURIComponent(fyId)}`, {
+      method: 'PUT',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ status, reason })
+    });
+    if (!res.ok) {
+      throw new Error(await extractErrorMessage(res, 'Failed to update financial year status'));
+    }
+    return res.json();
+  },
+
+  async getNextVoucherNumber(
+    arg1: string,
+    arg2?: string,
+    arg3?: string
+  ): Promise<{ nextVoucherNumber: string; next_number: string }> {
+    let companyId: string | undefined;
+    let fyId: string | undefined;
+    let type: string;
+
+    if (arg3 !== undefined) {
+      companyId = arg1;
+      fyId = arg2;
+      type = arg3;
+    } else {
+      type = arg1;
+      fyId = arg2;
+    }
+
+    const params = new URLSearchParams({ type });
+    if (companyId) params.append('companyId', companyId);
+    if (fyId) params.append('fyId', fyId);
+
+    const res = await fetch(`${API_BASE}/vouchers/next-number?${params.toString()}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to get next voucher number'));
+    const data = await res.json();
+    const nextVal = data.nextVoucherNumber || data.next_number || '';
+    return {
+      nextVoucherNumber: nextVal,
+      next_number: nextVal
+    };
+  },
+
   async getDashboard(companyId?: string) {
     const targetCompId = companyId || authStorage.getActiveCompanyId() || '';
     const res = await fetch(`${API_BASE}/reports/dashboard?companyId=${encodeURIComponent(targetCompId)}`, {
@@ -608,14 +658,6 @@ export const api = {
 
   async getUnits(): Promise<UnitMaster[]> {
     const res = await fetch(`${API_BASE}/masters/units`, {
-      headers: getHeaders()
-    });
-    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
-    return res.json();
-  },
-
-  async getNextVoucherNumber(companyId: string, fyId: string, type: string) {
-    const res = await fetch(`${API_BASE}/vouchers/next-number?companyId=${companyId}&fyId=${fyId}&type=${type}`, {
       headers: getHeaders()
     });
     if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));

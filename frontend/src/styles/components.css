@@ -1921,3 +1921,94 @@ kbd {
     overflow: auto;
   }
 }
+
+/* ==========================================================
+   SETTINGS HORIZONTAL NAVIGATION & CORPORATE CONFIGURATION
+   ========================================================== */
+.settings-horizontal-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  background-color: var(--color-surface, #FFFFFF);
+  border-radius: 10px;
+  border: 1px solid var(--color-border, #E2E8F0);
+  padding: 4px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.settings-horizontal-nav::-webkit-scrollbar {
+  height: 4px;
+}
+
+.settings-horizontal-nav::-webkit-scrollbar-thumb {
+  background: var(--color-border, #E2E8F0);
+  border-radius: 4px;
+}
+
+.settings-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  background-color: transparent;
+  color: var(--color-text-secondary, #64748B);
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.settings-tab-btn:hover {
+  background-color: rgba(15, 23, 42, 0.03);
+  color: var(--color-text, #0F172A);
+}
+
+.settings-tab-btn.active {
+  background-color: rgba(249, 115, 22, 0.08);
+  color: var(--color-primary-active, #C2410C);
+  border-bottom: 2.5px solid var(--color-primary, #F97316);
+  font-weight: 700;
+}
+
+.settings-tab-btn.active svg {
+  color: var(--color-primary, #F97316);
+}
+
+.settings-content-card {
+  background-color: var(--color-surface, #FFFFFF);
+  border-radius: 12px;
+  border: 1px solid var(--color-border, #E2E8F0);
+  padding: 28px 32px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  min-height: 600px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 900px) {
+  .settings-content-card {
+    padding: 20px 20px;
+  }
+}
+
+@media (max-width: 600px) {
+  .settings-content-card {
+    padding: 16px 14px;
+  }
+  .settings-tab-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+    gap: 6px;
+  }
+}

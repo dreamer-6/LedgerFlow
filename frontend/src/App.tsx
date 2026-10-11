@@ -177,9 +177,13 @@ export const App: React.FC = () => {
       return;
     }
     try {
-      setLoading(true);
       const res = await api.getCompanyAndFy();
-      setCompany(res.company);
+      const bizList = await api.getBusinesses().catch(() => []);
+      const match = bizList.find((b: any) => (b.company_id || b.companyId) === activeId);
+      const enrichedCompany = res.company
+        ? { ...res.company, role: match?.role || (res.company as any).role || user?.role || 'OWNER' }
+        : null;
+      setCompany(enrichedCompany);
       setActiveFy(res.activeFinancialYear);
     } catch (err) {
       console.error('Failed to load company master:', err);
@@ -453,6 +457,9 @@ export const App: React.FC = () => {
           e.preventDefault();
           setReportSubTab('outstanding');
           setActiveTab('reports');
+        } else if (k === 'c') {
+          e.preventDefault();
+          setActiveTab('settings');
         }
       }
     };
@@ -549,7 +556,7 @@ export const App: React.FC = () => {
     { label: 'Outstanding Reports (Receivables & Payables)', tab: 'reports', subTab: 'outstanding', category: 'Report', icon: <Scale size={14} />, hotkey: 'Alt+O' },
     { label: 'GST Tax Returns Summary', tab: 'reports', subTab: 'gst', category: 'Report', icon: <Percent size={14} />, hotkey: 'Alt+Y' },
     { label: 'Backup & Audit Trail', tab: 'utilities', category: 'System', icon: <Boxes size={14} />, hotkey: 'Alt+5' },
-    { label: 'Company Settings', tab: 'settings', category: 'System', icon: <Boxes size={14} /> }
+    { label: 'Company Settings', tab: 'settings', category: 'System', icon: <Boxes size={14} />, hotkey: 'Alt+C' }
   ];
 
   const filteredSearchItems = searchNavItems.filter((item) =>
@@ -1386,6 +1393,7 @@ export const App: React.FC = () => {
               <SettingsView 
                 company={company} 
                 onCompanyUpdated={loadCompanyData} 
+                onNavigateToTab={(tab) => setActiveTab(tab)}
                 onCompanyDeleted={async () => {
                   try {
                     const list = await api.getBusinesses();

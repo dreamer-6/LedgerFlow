@@ -75,10 +75,10 @@ export const Topbar: React.FC<TopbarProps> = ({
     if (meta) meta.setAttribute('content', newTheme);
   };
 
-  const companyName = company?.company_name || 'Dream Tech Solutions';
-  const fyLabel = activeFy?.name || 'FY 2024-25';
-  const userName = user?.fullName || 'John Doe';
-  const userRole = user?.role || 'Admin';
+  const companyName = company?.company_name || 'Select Company';
+  const fyLabel = activeFy?.name || 'Select Period';
+  const userName = user?.fullName || user?.username || 'User';
+  const userRole = (company as any)?.role || user?.role || 'Accountant';
   const avatarInitials = userName
     .split(' ')
     .map((n) => n[0])
@@ -217,7 +217,7 @@ export const Topbar: React.FC<TopbarProps> = ({
           <div className="lf-dropdown" style={{ top: 'calc(100% + 8px)', right: 0, minWidth: 210 }}>
             <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--color-border)' }}>
               <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text)' }}>{userName}</div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{user?.email || 'admin@ledgerflow.app'}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{user?.email || ''}</div>
             </div>
 
             <div style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border)', fontSize: '12px' }}>
