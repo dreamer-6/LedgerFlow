@@ -295,7 +295,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <ReceiptText size={16} />,
               activeTab === 'service_bill',
               () => handleNav('service_bill'),
-              'Alt+4'
+              'Alt+W'
             )}
             {renderItem(
               'quotation-module',
@@ -382,7 +382,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 (window as any)._currentMasterTab = 'tax_configuration';
                 handleNav('tax_configuration', { masterTab: 'tax_configuration' });
               },
-              'Alt+T'
+              'Alt+X'
             )}
           </div>
 
@@ -397,7 +397,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'reports-daybook',
               'Day Book',
               <Clock size={16} />,
-              activeTab === 'reports' && reportSubTab === 'daybook',
+              (activeTab === 'reports' && reportSubTab === 'daybook') || activeTab === 'daybook',
               () => handleNav('reports', { reportId: 'daybook' }),
               'Alt+D'
             )}
@@ -405,7 +405,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'reports-ledger',
               'Ledger',
               <BookOpen size={16} />,
-              activeTab === 'reports' && reportSubTab === 'ledger',
+              (activeTab === 'reports' && reportSubTab === 'ledger') || activeTab === 'ledger',
               () => handleNav('reports', { reportId: 'ledger' }),
               'Alt+E'
             )}
@@ -415,7 +415,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Scale size={16} />,
               (activeTab === 'reports' && reportSubTab === 'trial_balance') || activeTab === 'trial_balance',
               () => handleNav('reports', { reportId: 'trial_balance' }),
-              'Alt+B'
+              'Alt+T'
             )}
             {renderItem(
               'reports-pnl',
@@ -423,7 +423,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <TrendingUp size={16} />,
               (activeTab === 'reports' && reportSubTab === 'pnl') || activeTab === 'pnl',
               () => handleNav('reports', { reportId: 'pnl' }),
-              'Alt+P'
+              'Alt+F'
             )}
             {renderItem(
               'reports-balance',

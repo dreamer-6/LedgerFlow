@@ -301,11 +301,10 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
     return {
       total,
       buckets: [
-        { label: 'Current', sub: '0-30 Days', paise: b0_30, pct: calcPct(b0_30), color: '#ea580c' },
-        { label: '1–30 Days', sub: '1-30 Days', paise: Math.round(b0_30 * 0.75), pct: calcPct(Math.round(b0_30 * 0.75)), color: '#f97316' },
-        { label: '31–60 Days', sub: '31-60 Days', paise: b31_60, pct: calcPct(b31_60), color: '#fb923c' },
-        { label: '61–90 Days', sub: '61-90 Days', paise: b61_90, pct: calcPct(b61_90), color: '#fdba74' },
-        { label: '> 90 Days', sub: '> 90 Days', paise: b90_plus, pct: calcPct(b90_plus), color: '#fed7aa' }
+        { label: '0–30 Days', sub: 'Current', paise: b0_30, pct: calcPct(b0_30), color: '#ea580c' },
+        { label: '31–60 Days', sub: '31-60 Days', paise: b31_60, pct: calcPct(b31_60), color: '#f97316' },
+        { label: '61–90 Days', sub: '61-90 Days', paise: b61_90, pct: calcPct(b61_90), color: '#fb923c' },
+        { label: '> 90 Days', sub: '> 90 Days', paise: b90_plus, pct: calcPct(b90_plus), color: '#fdba74' }
       ]
     };
   }, [customersData]);
@@ -330,11 +329,10 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
     return {
       total,
       buckets: [
-        { label: 'Current', sub: '0-30 Days', paise: b0_30, pct: calcPct(b0_30), color: '#6366f1' },
-        { label: '1–30 Days', sub: '1-30 Days', paise: Math.round(b0_30 * 0.65), pct: calcPct(Math.round(b0_30 * 0.65)), color: '#818cf8' },
-        { label: '31–60 Days', sub: '31-60 Days', paise: b31_60, pct: calcPct(b31_60), color: '#a5b4fc' },
-        { label: '61–90 Days', sub: '61-90 Days', paise: b61_90, pct: calcPct(b61_90), color: '#c7d2fe' },
-        { label: '> 90 Days', sub: '> 90 Days', paise: b90_plus, pct: calcPct(b90_plus), color: '#e0e7ff' }
+        { label: '0–30 Days', sub: 'Current', paise: b0_30, pct: calcPct(b0_30), color: '#6366f1' },
+        { label: '31–60 Days', sub: '31-60 Days', paise: b31_60, pct: calcPct(b31_60), color: '#818cf8' },
+        { label: '61–90 Days', sub: '61-90 Days', paise: b61_90, pct: calcPct(b61_90), color: '#a5b4fc' },
+        { label: '> 90 Days', sub: '> 90 Days', paise: b90_plus, pct: calcPct(b90_plus), color: '#c7d2fe' }
       ]
     };
   }, [suppliersData]);

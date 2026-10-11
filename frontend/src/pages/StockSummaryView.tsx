@@ -300,27 +300,47 @@ export const StockSummaryView: React.FC<StockSummaryViewProps> = ({
     return result;
   }, [enrichedStockList, kpiData.totalValuationPaise]);
 
-  // Stock Movements Over Past 6 Months (Bar Chart)
+  // Stock Movements Over Past 6 Months (Bar Chart) derived from real posted vouchers
   const movementHistory = useMemo(() => {
-    const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
-    const totalVal = kpiData.totalValuationPaise || 1000000;
+    const refDate = asOfDate ? new Date(asOfDate) : new Date();
+    const monthList: Array<{ label: string; yearMonth: string }> = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
+      const label = d.toLocaleDateString('en-IN', { month: 'short' });
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthList.push({ label, yearMonth: ym });
+    }
 
-    return months.map((m, idx) => {
-      // Proportional monthly distribution based on purchases and sales
-      const inVal = Math.round(totalVal * (0.15 + (idx * 0.05)));
-      const outVal = Math.round(totalVal * (0.10 + (idx * 0.04)));
-      const inQty = Math.round(kpiData.totalQuantity * (0.14 + (idx * 0.04)));
-      const outQty = Math.round(kpiData.totalQuantity * (0.10 + (idx * 0.03)));
+    const avgRate = kpiData.totalQuantity > 0 ? (kpiData.totalValuationPaise / kpiData.totalQuantity) : 100000;
+
+    return monthList.map(({ label, yearMonth }) => {
+      let inVal = 0;
+      let outVal = 0;
+
+      for (const p of recentPurchases) {
+        if (p.voucher_date && p.voucher_date.startsWith(yearMonth)) {
+          inVal += Number(p.total_amount_paise || 0);
+        }
+      }
+
+      for (const s of recentSales) {
+        if (s.voucher_date && s.voucher_date.startsWith(yearMonth)) {
+          outVal += Number(s.total_amount_paise || 0);
+        }
+      }
+
+      const inQty = avgRate > 0 ? Math.round(inVal / avgRate) : 0;
+      const outQty = avgRate > 0 ? Math.round(outVal / avgRate) : 0;
 
       return {
-        month: m,
+        month: label,
         inwardValue: inVal,
         outwardValue: outVal,
         inwardQty: inQty,
         outwardQty: outQty
       };
     });
-  }, [kpiData]);
+  }, [asOfDate, recentPurchases, recentSales, kpiData]);
 
   // CSV Export
   const handleExportCsv = () => {

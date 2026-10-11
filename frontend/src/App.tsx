@@ -436,6 +436,14 @@ export const App: React.FC = () => {
           setActiveTab('godowns');
         } else if (k === 't') {
           e.preventDefault();
+          setReportSubTab('trial_balance');
+          setActiveTab('reports');
+        } else if (k === 'f') {
+          e.preventDefault();
+          setReportSubTab('pnl');
+          setActiveTab('reports');
+        } else if (k === 'x') {
+          e.preventDefault();
           setActiveTab('tax_configuration');
         } else if (k === 'k') {
           e.preventDefault();
@@ -522,20 +530,20 @@ export const App: React.FC = () => {
     { label: 'Create Payment', tab: 'payments_create', category: 'Voucher', icon: <ArrowLeftRight size={14} />, hotkey: 'F5' },
     { label: 'Journal Dashboard', tab: 'journal', category: 'Module', icon: <BookText size={14} />, hotkey: 'Alt+J' },
     { label: 'Create Journal Entry', tab: 'journal_create', category: 'Voucher', icon: <BookText size={14} />, hotkey: 'F7' },
-    { label: 'Service Bills Dashboard', tab: 'service_bill', category: 'Module', icon: <Wrench size={14} />, hotkey: 'Alt+4' },
+    { label: 'Service Bills Dashboard', tab: 'service_bill', category: 'Module', icon: <Wrench size={14} />, hotkey: 'Alt+W' },
     { label: 'Create Service Bill', tab: 'service_bill_create', category: 'Voucher', icon: <Wrench size={14} /> },
     { label: 'Parties (Customers & Suppliers)', tab: 'parties', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+3' },
     { label: 'Stock Items & Inventory', tab: 'items', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+I' },
     { label: 'Ledgers Master (Chart of Accounts)', tab: 'ledgers', category: 'Master', icon: <BookOpen size={14} />, hotkey: 'Alt+L' },
     { label: 'Units Master (Measurement Units)', tab: 'units', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+U' },
     { label: 'Godowns (Warehouses & Locations)', tab: 'godowns', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+G' },
-    { label: 'Tax Configuration (GST Settings)', tab: 'tax_configuration', category: 'Master', icon: <Percent size={14} />, hotkey: 'Alt+T' },
+    { label: 'Tax Configuration (GST Settings)', tab: 'tax_configuration', category: 'Master', icon: <Percent size={14} />, hotkey: 'Alt+X' },
     { label: 'Day Book Report', tab: 'reports', subTab: 'daybook', category: 'Report', icon: <Clock size={14} />, hotkey: 'Alt+D' },
     { label: 'Sales Register (Display Sales Entries)', tab: 'reports', subTab: 'sales_register', category: 'Report', icon: <ShoppingCart size={14} /> },
     { label: 'Purchase Register (Display Purchase Entries)', tab: 'reports', subTab: 'purchase_register', category: 'Report', icon: <ShoppingBag size={14} /> },
     { label: 'Ledger Report (Statement)', tab: 'reports', subTab: 'ledger', category: 'Report', icon: <BookOpen size={14} />, hotkey: 'Alt+E' },
-    { label: 'Trial Balance', tab: 'reports', subTab: 'trial_balance', category: 'Report', icon: <Scale size={14} />, hotkey: 'Alt+B' },
-    { label: 'Profit & Loss Statement', tab: 'reports', subTab: 'pnl', category: 'Report', icon: <TrendingUp size={14} />, hotkey: 'Alt+P' },
+    { label: 'Trial Balance', tab: 'reports', subTab: 'trial_balance', category: 'Report', icon: <Scale size={14} />, hotkey: 'Alt+T' },
+    { label: 'Profit & Loss Statement', tab: 'reports', subTab: 'pnl', category: 'Report', icon: <TrendingUp size={14} />, hotkey: 'Alt+F' },
     { label: 'Balance Sheet', tab: 'reports', subTab: 'balance_sheet', category: 'Report', icon: <FileSpreadsheet size={14} />, hotkey: 'Alt+N' },
     { label: 'Stock Summary Report', tab: 'reports', subTab: 'stock_summary', category: 'Report', icon: <Layers size={14} />, hotkey: 'Alt+K' },
     { label: 'Outstanding Reports (Receivables & Payables)', tab: 'reports', subTab: 'outstanding', category: 'Report', icon: <Scale size={14} />, hotkey: 'Alt+O' },
