@@ -13,6 +13,8 @@ import { DayBookView } from './pages/DayBookView';
 import { TrialBalanceView } from './pages/TrialBalanceView';
 import { LedgerReportView } from './pages/LedgerReportView';
 import { ProfitAndLossView } from './pages/ProfitAndLossView';
+import { BalanceSheetView } from './pages/BalanceSheetView';
+import { GSTReportsView } from './pages/GSTReportsView';
 import { MastersView } from './pages/MastersView';
 import { LedgersView } from './pages/LedgersView';
 import { UnitsView } from './pages/UnitsView';
@@ -393,10 +395,26 @@ export const App: React.FC = () => {
           e.preventDefault();
           setReceiptViewMode('dashboard');
           setActiveTab('receipts');
-        } else if (k === 'y' || k === 'm') {
+        } else if (k === 'm') {
           e.preventDefault();
           setPaymentViewMode('dashboard');
           setActiveTab('payments');
+        } else if (k === 'n') {
+          e.preventDefault();
+          setReportSubTab('balance_sheet');
+          setActiveTab('reports');
+        } else if (k === 'y') {
+          e.preventDefault();
+          setReportSubTab('gst');
+          setActiveTab('reports');
+        } else if (k === 'd') {
+          e.preventDefault();
+          setReportSubTab('daybook');
+          setActiveTab('reports');
+        } else if (k === 'e') {
+          e.preventDefault();
+          setReportSubTab('ledger');
+          setActiveTab('reports');
         } else if (k === 'j') {
           e.preventDefault();
           setJournalViewMode('dashboard');
@@ -508,9 +526,9 @@ export const App: React.FC = () => {
     { label: 'Ledger Report (Statement)', tab: 'reports', subTab: 'ledger', category: 'Report', icon: <BookOpen size={14} />, hotkey: 'Alt+E' },
     { label: 'Trial Balance', tab: 'reports', subTab: 'trial_balance', category: 'Report', icon: <Scale size={14} />, hotkey: 'Alt+B' },
     { label: 'Profit & Loss Statement', tab: 'reports', subTab: 'pnl', category: 'Report', icon: <TrendingUp size={14} />, hotkey: 'Alt+P' },
-    { label: 'Balance Sheet', tab: 'reports', subTab: 'balance_sheet', category: 'Report', icon: <FileSpreadsheet size={14} /> },
+    { label: 'Balance Sheet', tab: 'reports', subTab: 'balance_sheet', category: 'Report', icon: <FileSpreadsheet size={14} />, hotkey: 'Alt+N' },
     { label: 'Stock Summary Report', tab: 'reports', subTab: 'stock_summary', category: 'Report', icon: <Layers size={14} /> },
-    { label: 'GST Tax Returns Summary', tab: 'reports', subTab: 'gst', category: 'Report', icon: <Percent size={14} /> },
+    { label: 'GST Tax Returns Summary', tab: 'reports', subTab: 'gst', category: 'Report', icon: <Percent size={14} />, hotkey: 'Alt+Y' },
     { label: 'Backup & Audit Trail', tab: 'utilities', category: 'System', icon: <Boxes size={14} />, hotkey: 'Alt+5' },
     { label: 'Company Settings', tab: 'settings', category: 'System', icon: <Boxes size={14} /> }
   ];
@@ -1143,6 +1161,40 @@ export const App: React.FC = () => {
             </div>
           )}
 
+          {/* Balance Sheet Direct Route (UI-015) */}
+          {activeTab === 'balance_sheet' && (
+            <div key="balance_sheet" className="view-container-animated">
+              <BalanceSheetView
+                company={company}
+                activeFy={activeFy}
+                onViewLedger={(ledgerId) => {
+                  (window as any)._preselectedLedgerId = ledgerId;
+                  setReportSubTab('ledger');
+                  setActiveTab('reports');
+                }}
+                onNavigateReports={(sub) => {
+                  setReportSubTab(sub);
+                  setActiveTab('reports');
+                }}
+              />
+            </div>
+          )}
+
+          {/* GST Reports Direct Route (UI-016) */}
+          {activeTab === 'gst' && (
+            <div key="gst" className="view-container-animated">
+              <GSTReportsView
+                company={company}
+                activeFy={activeFy}
+                onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                onNavigateReports={(sub) => {
+                  setReportSubTab(sub);
+                  setActiveTab('reports');
+                }}
+              />
+            </div>
+          )}
+
           {/* 4. Reports View */}
           {activeTab === 'reports' && (
             <div key="reports" className="view-container-animated">
@@ -1194,6 +1246,30 @@ export const App: React.FC = () => {
                     setReportSubTab('ledger');
                     setActiveTab('reports');
                   }}
+                  onNavigateReports={(sub) => {
+                    setReportSubTab(sub);
+                    setActiveTab('reports');
+                  }}
+                />
+              ) : reportSubTab === 'balance_sheet' ? (
+                <BalanceSheetView
+                  company={company}
+                  activeFy={activeFy}
+                  onViewLedger={(ledgerId) => {
+                    (window as any)._preselectedLedgerId = ledgerId;
+                    setReportSubTab('ledger');
+                    setActiveTab('reports');
+                  }}
+                  onNavigateReports={(sub) => {
+                    setReportSubTab(sub);
+                    setActiveTab('reports');
+                  }}
+                />
+              ) : reportSubTab === 'gst' ? (
+                <GSTReportsView
+                  company={company}
+                  activeFy={activeFy}
+                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
                   onNavigateReports={(sub) => {
                     setReportSubTab(sub);
                     setActiveTab('reports');

@@ -413,7 +413,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'reports-trial',
               'Trial Balance',
               <Scale size={16} />,
-              activeTab === 'reports' && reportSubTab === 'trial_balance',
+              (activeTab === 'reports' && reportSubTab === 'trial_balance') || activeTab === 'trial_balance',
               () => handleNav('reports', { reportId: 'trial_balance' }),
               'Alt+B'
             )}
@@ -421,7 +421,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'reports-pnl',
               'Profit & Loss',
               <TrendingUp size={16} />,
-              activeTab === 'reports' && reportSubTab === 'pnl',
+              (activeTab === 'reports' && reportSubTab === 'pnl') || activeTab === 'pnl',
               () => handleNav('reports', { reportId: 'pnl' }),
               'Alt+P'
             )}
@@ -429,15 +429,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'reports-balance',
               'Balance Sheet',
               <FileSpreadsheet size={16} />,
-              activeTab === 'reports' && reportSubTab === 'balance_sheet',
-              () => handleNav('reports', { reportId: 'balance_sheet' })
+              (activeTab === 'reports' && reportSubTab === 'balance_sheet') || activeTab === 'balance_sheet',
+              () => handleNav('reports', { reportId: 'balance_sheet' }),
+              'Alt+N'
             )}
             {renderItem(
               'reports-gst',
               'GST Reports',
               <Percent size={16} />,
-              activeTab === 'reports' && reportSubTab === 'gst',
-              () => handleNav('reports', { reportId: 'gst' })
+              (activeTab === 'reports' && reportSubTab === 'gst') || activeTab === 'gst',
+              () => handleNav('reports', { reportId: 'gst' }),
+              'Alt+Y'
             )}
             {renderItem(
               'reports-stock',

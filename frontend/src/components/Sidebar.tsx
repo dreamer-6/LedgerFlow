@@ -51,7 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     hotkey?: string
   ) => {
     const isSelected = isReport
-      ? activeTab === 'reports' && reportSubTab === reportId
+      ? (activeTab === 'reports' && reportSubTab === reportId) || activeTab === reportId
       : activeTab === id;
 
     const handleClick = () => {
