@@ -37,12 +37,13 @@
 /* Dashboard KPI card accent gradients — Dark Mode Depth & Illumination */
 [data-theme="dark"] .kpi-card-sales {
   background: linear-gradient(140deg,
-    rgba(255, 122, 0, 0.14) 0%,
-    rgba(255, 122, 0, 0.04) 36%,
-    var(--surface) 100%) !important;
+      rgba(255, 122, 0, 0.14) 0%,
+      rgba(255, 122, 0, 0.04) 36%,
+      var(--surface) 100%) !important;
   border-color: rgba(255, 122, 0, 0.28) !important;
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 122, 0, 0.15) !important;
 }
+
 [data-theme="dark"] .kpi-card-sales:hover {
   border-color: rgba(255, 122, 0, 0.45) !important;
   box-shadow: 0 12px 30px -4px rgba(255, 122, 0, 0.25), 0 0 15px rgba(255, 122, 0, 0.12) !important;
@@ -50,12 +51,13 @@
 
 [data-theme="dark"] .kpi-card-receivable {
   background: linear-gradient(140deg,
-    rgba(56, 189, 248, 0.12) 0%,
-    rgba(56, 189, 248, 0.03) 36%,
-    var(--surface) 100%) !important;
+      rgba(56, 189, 248, 0.12) 0%,
+      rgba(56, 189, 248, 0.03) 36%,
+      var(--surface) 100%) !important;
   border-color: rgba(56, 189, 248, 0.24) !important;
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(56, 189, 248, 0.10) !important;
 }
+
 [data-theme="dark"] .kpi-card-receivable:hover {
   border-color: rgba(56, 189, 248, 0.42) !important;
   box-shadow: 0 12px 30px -4px rgba(56, 189, 248, 0.22), 0 4px 12px rgba(0, 0, 0, 0.4) !important;
@@ -63,12 +65,13 @@
 
 [data-theme="dark"] .kpi-card-payable {
   background: linear-gradient(140deg,
-    rgba(245, 158, 11, 0.12) 0%,
-    rgba(245, 158, 11, 0.03) 36%,
-    var(--surface) 100%) !important;
+      rgba(245, 158, 11, 0.12) 0%,
+      rgba(245, 158, 11, 0.03) 36%,
+      var(--surface) 100%) !important;
   border-color: rgba(245, 158, 11, 0.24) !important;
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(245, 158, 11, 0.10) !important;
 }
+
 [data-theme="dark"] .kpi-card-payable:hover {
   border-color: rgba(245, 158, 11, 0.42) !important;
   box-shadow: 0 12px 30px -4px rgba(245, 158, 11, 0.22), 0 4px 12px rgba(0, 0, 0, 0.4) !important;
@@ -76,12 +79,13 @@
 
 [data-theme="dark"] .kpi-card-cash {
   background: linear-gradient(140deg,
-    rgba(16, 185, 129, 0.12) 0%,
-    rgba(16, 185, 129, 0.03) 36%,
-    var(--surface) 100%) !important;
+      rgba(16, 185, 129, 0.12) 0%,
+      rgba(16, 185, 129, 0.03) 36%,
+      var(--surface) 100%) !important;
   border-color: rgba(16, 185, 129, 0.24) !important;
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(16, 185, 129, 0.10) !important;
 }
+
 [data-theme="dark"] .kpi-card-cash:hover {
   border-color: rgba(16, 185, 129, 0.42) !important;
   box-shadow: 0 12px 30px -4px rgba(16, 185, 129, 0.22), 0 4px 12px rgba(0, 0, 0, 0.4) !important;
@@ -93,6 +97,7 @@
   border-color: rgba(255, 122, 0, 0.22) !important;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
 }
+
 [data-theme="light"] .kpi-card-sales:hover {
   border-color: rgba(255, 122, 0, 0.40) !important;
   box-shadow: 0 10px 26px -2px rgba(255, 122, 0, 0.18), 0 2px 6px rgba(15, 23, 42, 0.05) !important;
@@ -103,6 +108,7 @@
   border-color: rgba(59, 130, 246, 0.20) !important;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
 }
+
 [data-theme="light"] .kpi-card-receivable:hover {
   border-color: rgba(59, 130, 246, 0.35) !important;
   box-shadow: 0 10px 26px -2px rgba(59, 130, 246, 0.16), 0 2px 6px rgba(15, 23, 42, 0.05) !important;
@@ -113,6 +119,7 @@
   border-color: rgba(245, 158, 11, 0.22) !important;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
 }
+
 [data-theme="light"] .kpi-card-payable:hover {
   border-color: rgba(245, 158, 11, 0.35) !important;
   box-shadow: 0 10px 26px -2px rgba(245, 158, 11, 0.16), 0 2px 6px rgba(15, 23, 42, 0.05) !important;
@@ -123,6 +130,7 @@
   border-color: rgba(16, 185, 129, 0.20) !important;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
 }
+
 [data-theme="light"] .kpi-card-cash:hover {
   border-color: rgba(16, 185, 129, 0.35) !important;
   box-shadow: 0 10px 26px -2px rgba(16, 185, 129, 0.16), 0 2px 6px rgba(15, 23, 42, 0.05) !important;
@@ -132,10 +140,26 @@
 .kpi-icon-chip {
   transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
-.kpi-card-sales:hover .kpi-icon-chip   { box-shadow: 0 0 16px rgba(255,122,0,0.35); transform: scale(1.06); }
-.kpi-card-receivable:hover .kpi-icon-chip { box-shadow: 0 0 16px rgba(56,189,248,0.30); transform: scale(1.06); }
-.kpi-card-payable:hover .kpi-icon-chip { box-shadow: 0 0 16px rgba(245,158,11,0.30); transform: scale(1.06); }
-.kpi-card-cash:hover .kpi-icon-chip   { box-shadow: 0 0 16px rgba(16,185,129,0.30); transform: scale(1.06); }
+
+.kpi-card-sales:hover .kpi-icon-chip {
+  box-shadow: 0 0 16px rgba(255, 122, 0, 0.35);
+  transform: scale(1.06);
+}
+
+.kpi-card-receivable:hover .kpi-icon-chip {
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.30);
+  transform: scale(1.06);
+}
+
+.kpi-card-payable:hover .kpi-icon-chip {
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.30);
+  transform: scale(1.06);
+}
+
+.kpi-card-cash:hover .kpi-icon-chip {
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.30);
+  transform: scale(1.06);
+}
 
 /* Dashboard Panel Cards */
 [data-theme="dark"] .dash-panel {
@@ -729,7 +753,8 @@ kbd {
 }
 
 .sidebar-aside {
-  width: var(--sidebar-width, 220px);
+  /*  width: var(--sidebar-width, 220px); */
+  width: 280px;
   background-color: var(--sidebar-bg);
   border-right: 1px solid var(--border-subtle);
   height: 100vh;
@@ -744,7 +769,7 @@ kbd {
 
 /* Sidebar Option 1: Collapsed / Compact Mode (Show icons without name) */
 .sidebar-aside.collapsed {
-  width: 68px;
+  width: 78px;
 }
 
 .sidebar-aside.collapsed .sidebar-brand {
@@ -1355,7 +1380,7 @@ kbd {
     display: block !important;
   }
 
-  .invoice-modal-overlay > div {
+  .invoice-modal-overlay>div {
     max-width: 100% !important;
     width: 100% !important;
     box-shadow: none !important;
@@ -1445,8 +1470,13 @@ kbd {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .animate-spin {
@@ -4451,6 +4481,7 @@ textarea,
     opacity: 0;
     transform: scale(0.96) translateY(8px);
   }
+
   100% {
     opacity: 1;
     transform: scale(1) translateY(0);
@@ -6666,14 +6697,14 @@ textarea,
   background: #fff;
   border-radius: 50%;
   transition: transform 0.2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-.vev2-toggle-switch input:checked + .vev2-toggle-track {
+.vev2-toggle-switch input:checked+.vev2-toggle-track {
   background: #10b981;
 }
 
-.vev2-toggle-switch input:checked ~ .vev2-toggle-thumb {
+.vev2-toggle-switch input:checked~.vev2-toggle-thumb {
   transform: translateX(16px);
 }
 
@@ -6939,7 +6970,7 @@ textarea,
   height: 64px;
   background: var(--surface);
   border-top: 1px solid var(--border);
-  box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -7038,7 +7069,7 @@ textarea,
   width: 34px;
   background: #059669;
   border: none;
-  border-left: 1px solid rgba(255,255,255,0.25);
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 0 8px 8px 0;
   color: #fff;
   display: grid;
@@ -7089,7 +7120,7 @@ textarea,
   background: var(--surface);
   color: var(--primary-accent);
   font-weight: 700;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* Responsive */
@@ -7384,7 +7415,8 @@ input.vev2-combobox-input:focus {
    ========================================================= */
 
 /* Typography Scale */
-.sg-title, h2.sg-title {
+.sg-title,
+h2.sg-title {
   font-family: var(--font-sans);
   font-size: 20px;
   font-weight: 500;
@@ -7516,12 +7548,12 @@ input.vev2-combobox-input:focus {
   height: 0;
 }
 
-.sg-switch-input:checked + .sg-switch-track {
+.sg-switch-input:checked+.sg-switch-track {
   background-color: var(--primary-accent);
   box-shadow: 0 0 12px rgba(255, 122, 0, 0.4);
 }
 
-.sg-switch-input:checked + .sg-switch-track .sg-switch-thumb {
+.sg-switch-input:checked+.sg-switch-track .sg-switch-thumb {
   transform: translateX(20px);
 }
 
@@ -7555,10 +7587,12 @@ input.vev2-combobox-input:focus {
   body * {
     visibility: hidden;
   }
+
   #service-bill-printable,
   #service-bill-printable * {
     visibility: visible;
   }
+
   #service-bill-printable {
     position: absolute;
     left: 0;
@@ -7569,12 +7603,14 @@ input.vev2-combobox-input:focus {
     background: #FFFFFF !important;
     color: #0F172A !important;
   }
+
   .print-modal-overlay {
     position: static !important;
     padding: 0 !important;
     background: none !important;
     box-shadow: none !important;
   }
+
   .no-print,
   .topbar,
   .sidebar-aside {

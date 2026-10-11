@@ -445,15 +445,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               'reports-stock',
               'Stock Summary',
               <Layers size={16} />,
-              activeTab === 'reports' && reportSubTab === 'stock_summary',
-              () => handleNav('reports', { reportId: 'stock_summary' })
+              (activeTab === 'reports' && reportSubTab === 'stock_summary') || activeTab === 'stock_summary',
+              () => handleNav('reports', { reportId: 'stock_summary' }),
+              'Alt+K'
             )}
             {renderItem(
               'reports-outstanding',
               'Outstanding',
               <CircleDollarSign size={16} />,
-              activeTab === 'reports' && reportSubTab === 'outstanding',
-              () => handleNav('reports', { reportId: 'outstanding' })
+              (activeTab === 'reports' && reportSubTab === 'outstanding') || activeTab === 'outstanding',
+              () => handleNav('reports', { reportId: 'outstanding' }),
+              'Alt+O'
             )}
           </div>
         </nav>

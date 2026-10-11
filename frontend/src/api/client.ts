@@ -197,6 +197,17 @@ export interface StockSummaryItem {
   total_value_paise: number;
 }
 
+export interface OutstandingPartyItem {
+  partyId: string;
+  partyName: string;
+  phone?: string;
+  totalOutstandingPaise: number;
+  bucket0to30Paise: number;
+  bucket31to60Paise: number;
+  bucket61to90Paise: number;
+  bucket90PlusPaise: number;
+}
+
 export interface CreateStockItemPayload {
   itemName: string;
   itemCode?: string;
@@ -718,8 +729,11 @@ export const api = {
   },
 
 
-  async getOutstanding(companyId: string, type: 'CUSTOMER' | 'SUPPLIER') {
-    const res = await fetch(`${API_BASE}/reports/outstanding?companyId=${companyId}&type=${type}`, {
+  async getOutstanding(companyId: string, type: 'CUSTOMER' | 'SUPPLIER', asOnDate?: string): Promise<OutstandingPartyItem[]> {
+    const url = asOnDate
+      ? `${API_BASE}/reports/outstanding?companyId=${encodeURIComponent(companyId)}&type=${type}&asOnDate=${encodeURIComponent(asOnDate)}`
+      : `${API_BASE}/reports/outstanding?companyId=${encodeURIComponent(companyId)}&type=${type}`;
+    const res = await fetch(url, {
       headers: getHeaders()
     });
     if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));

@@ -15,6 +15,8 @@ import { LedgerReportView } from './pages/LedgerReportView';
 import { ProfitAndLossView } from './pages/ProfitAndLossView';
 import { BalanceSheetView } from './pages/BalanceSheetView';
 import { GSTReportsView } from './pages/GSTReportsView';
+import { StockSummaryView } from './pages/StockSummaryView';
+import { OutstandingReportsView } from './pages/OutstandingReportsView';
 import { MastersView } from './pages/MastersView';
 import { LedgersView } from './pages/LedgersView';
 import { UnitsView } from './pages/UnitsView';
@@ -435,6 +437,14 @@ export const App: React.FC = () => {
         } else if (k === 't') {
           e.preventDefault();
           setActiveTab('tax_configuration');
+        } else if (k === 'k') {
+          e.preventDefault();
+          setReportSubTab('stock_summary');
+          setActiveTab('reports');
+        } else if (k === 'o') {
+          e.preventDefault();
+          setReportSubTab('outstanding');
+          setActiveTab('reports');
         }
       }
     };
@@ -527,7 +537,8 @@ export const App: React.FC = () => {
     { label: 'Trial Balance', tab: 'reports', subTab: 'trial_balance', category: 'Report', icon: <Scale size={14} />, hotkey: 'Alt+B' },
     { label: 'Profit & Loss Statement', tab: 'reports', subTab: 'pnl', category: 'Report', icon: <TrendingUp size={14} />, hotkey: 'Alt+P' },
     { label: 'Balance Sheet', tab: 'reports', subTab: 'balance_sheet', category: 'Report', icon: <FileSpreadsheet size={14} />, hotkey: 'Alt+N' },
-    { label: 'Stock Summary Report', tab: 'reports', subTab: 'stock_summary', category: 'Report', icon: <Layers size={14} /> },
+    { label: 'Stock Summary Report', tab: 'reports', subTab: 'stock_summary', category: 'Report', icon: <Layers size={14} />, hotkey: 'Alt+K' },
+    { label: 'Outstanding Reports (Receivables & Payables)', tab: 'reports', subTab: 'outstanding', category: 'Report', icon: <Scale size={14} />, hotkey: 'Alt+O' },
     { label: 'GST Tax Returns Summary', tab: 'reports', subTab: 'gst', category: 'Report', icon: <Percent size={14} />, hotkey: 'Alt+Y' },
     { label: 'Backup & Audit Trail', tab: 'utilities', category: 'System', icon: <Boxes size={14} />, hotkey: 'Alt+5' },
     { label: 'Company Settings', tab: 'settings', category: 'System', icon: <Boxes size={14} /> }
@@ -1195,6 +1206,43 @@ export const App: React.FC = () => {
             </div>
           )}
 
+          {/* Stock Summary Direct Route (UI-017) */}
+          {activeTab === 'stock_summary' && (
+            <div key="stock_summary" className="view-container-animated">
+              <StockSummaryView
+                company={company}
+                activeFy={activeFy}
+                onViewItem={(itemId) => {
+                  (window as any)._preselectedItemId = itemId;
+                  setActiveTab('items');
+                }}
+                onNavigateReports={(sub) => {
+                  setReportSubTab(sub);
+                  setActiveTab('reports');
+                }}
+              />
+            </div>
+          )}
+
+          {/* Outstanding Reports Direct Route (UI-018) */}
+          {activeTab === 'outstanding' && (
+            <div key="outstanding" className="view-container-animated">
+              <OutstandingReportsView
+                company={company}
+                activeFy={activeFy}
+                onNavigateReports={(sub) => {
+                  setReportSubTab(sub);
+                  setActiveTab('reports');
+                }}
+                onSelectPartyLedger={(partyName) => {
+                  (window as any)._preselectedLedgerName = partyName;
+                  setReportSubTab('ledger');
+                  setActiveTab('reports');
+                }}
+              />
+            </div>
+          )}
+
           {/* 4. Reports View */}
           {activeTab === 'reports' && (
             <div key="reports" className="view-container-animated">
@@ -1272,6 +1320,33 @@ export const App: React.FC = () => {
                   onViewVoucher={(id) => setActivePrintVoucherId(id)}
                   onNavigateReports={(sub) => {
                     setReportSubTab(sub);
+                    setActiveTab('reports');
+                  }}
+                />
+              ) : reportSubTab === 'stock_summary' ? (
+                <StockSummaryView
+                  company={company}
+                  activeFy={activeFy}
+                  onViewItem={(itemId) => {
+                    (window as any)._preselectedItemId = itemId;
+                    setActiveTab('items');
+                  }}
+                  onNavigateReports={(sub) => {
+                    setReportSubTab(sub);
+                    setActiveTab('reports');
+                  }}
+                />
+              ) : reportSubTab === 'outstanding' ? (
+                <OutstandingReportsView
+                  company={company}
+                  activeFy={activeFy}
+                  onNavigateReports={(sub) => {
+                    setReportSubTab(sub);
+                    setActiveTab('reports');
+                  }}
+                  onSelectPartyLedger={(partyName) => {
+                    (window as any)._preselectedLedgerName = partyName;
+                    setReportSubTab('ledger');
                     setActiveTab('reports');
                   }}
                 />
