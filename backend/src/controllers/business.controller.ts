@@ -190,4 +190,105 @@ export class BusinessController {
       res.status(400).json({ error: err.message });
     }
   };
+
+  /**
+   * GET /companies/current/users
+   * Requires: authenticate + resolveCompanyContext
+   */
+  getCompanyMembers = (req: SecureRequest, res: Response) => {
+    try {
+      if (!req.companyId) {
+        return res.status(400).json({ error: 'No company context selected.' });
+      }
+      const members = BusinessService.getCompanyMembers(this.db, req.companyId);
+      res.json(members);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  };
+
+  /**
+   * POST /companies/current/users
+   * Requires: authenticate + resolveCompanyContext + ADMIN
+   */
+  addCompanyMember = (req: SecureRequest, res: Response) => {
+    try {
+      if (!req.companyId || !req.user?.userId) {
+        return res.status(400).json({ error: 'Company context and authenticated user required.' });
+      }
+      const operatorRole = req.membershipRole || req.user.role || 'VIEWER';
+      const result = BusinessService.addCompanyMember(
+        this.db,
+        req.companyId,
+        req.user.userId,
+        operatorRole,
+        req.body
+      );
+      res.status(201).json(result);
+    } catch (err: any) {
+      if (err.message.includes('Forbidden') || err.message.includes('permission')) {
+        res.status(403).json({ error: err.message });
+      } else {
+        res.status(400).json({ error: err.message });
+      }
+    }
+  };
+
+  /**
+   * PUT /companies/current/users/:userId/role
+   * Requires: authenticate + resolveCompanyContext + ADMIN
+   */
+  updateMemberRole = (req: SecureRequest, res: Response) => {
+    try {
+      if (!req.companyId || !req.user?.userId) {
+        return res.status(400).json({ error: 'Company context and authenticated user required.' });
+      }
+      const { userId } = req.params;
+      const { role } = req.body;
+      const operatorRole = req.membershipRole || req.user.role || 'VIEWER';
+      const result = BusinessService.updateMemberRole(
+        this.db,
+        req.companyId,
+        req.user.userId,
+        operatorRole,
+        userId,
+        role
+      );
+      res.json(result);
+    } catch (err: any) {
+      if (err.message.includes('Forbidden') || err.message.includes('permission')) {
+        res.status(403).json({ error: err.message });
+      } else {
+        res.status(400).json({ error: err.message });
+      }
+    }
+  };
+
+  /**
+   * DELETE /companies/current/users/:userId
+   * Requires: authenticate + resolveCompanyContext + ADMIN
+   */
+  removeCompanyMember = (req: SecureRequest, res: Response) => {
+    try {
+      if (!req.companyId || !req.user?.userId) {
+        return res.status(400).json({ error: 'Company context and authenticated user required.' });
+      }
+      const { userId } = req.params;
+      const operatorRole = req.membershipRole || req.user.role || 'VIEWER';
+      const result = BusinessService.removeCompanyMember(
+        this.db,
+        req.companyId,
+        req.user.userId,
+        operatorRole,
+        userId
+      );
+      res.json(result);
+    } catch (err: any) {
+      if (err.message.includes('Forbidden') || err.message.includes('permission')) {
+        res.status(403).json({ error: err.message });
+      } else {
+        res.status(400).json({ error: err.message });
+      }
+    }
+  };
 }

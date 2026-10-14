@@ -116,10 +116,9 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
         backdropFilter: 'blur(4px)',
         zIndex: 9999,
         display: 'flex',
-        flexDirection: 'column',
         alignItems: 'center',
-        padding: '24px 16px',
-        overflowY: 'auto'
+        justifyContent: 'center',
+        padding: '16px'
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -157,116 +156,142 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
         }
       `}</style>
 
-      {/* Top Action Toolbar (Hidden during print) */}
+      {/* Viewport-Constrained Modal Container */}
       <div
-        className="no-print"
         style={{
-          width: getContainerWidth(),
-          maxWidth: '100%',
+          width: '100%',
+          maxWidth: getContainerWidth(),
+          maxHeight: 'calc(100vh - 32px)',
+          height: '100%',
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '10px',
-          marginBottom: '16px',
-          backgroundColor: 'var(--surface, #1e293b)',
-          padding: '10px 18px',
+          flexDirection: 'column',
           borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-          border: '1px solid var(--border, #334155)'
+          overflow: 'hidden',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
+          backgroundColor: '#0F172A'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--text-primary, #f8fafc)', fontWeight: 600, fontSize: '13px' }}>
-            Preview: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--brand-primary, #FF641F)' }}>{quotation.quotationNumber}</span>
-          </span>
-          {/* Format / Paper Size Pills */}
-          <div style={{ display: 'flex', gap: '4px', background: 'var(--surface-elevated, #0f172a)', padding: '3px', borderRadius: '6px', border: '1px solid var(--border-subtle, #334155)' }}>
-            {[
-              { id: 'A4', label: 'A4 Standard' },
-              { id: 'A5_LANDSCAPE', label: 'A5 Landscape' },
-              { id: 'A5_PORTRAIT', label: 'A5 Portrait' },
-              { id: 'THERMAL', label: 'Thermal POS' }
-            ].map((fmt) => (
-              <button
-                key={fmt.id}
-                type="button"
-                onClick={() => setFormat(fmt.id as PaperFormat)}
-                style={{
-                  padding: '4px 8px',
-                  fontSize: '11px',
-                  fontWeight: format === fmt.id ? 700 : 500,
-                  borderRadius: '4px',
-                  background: format === fmt.id ? 'var(--surface, #1e293b)' : 'transparent',
-                  color: format === fmt.id ? 'var(--text-primary, #f8fafc)' : 'var(--text-secondary, #94a3b8)',
-                  border: format === fmt.id ? '1px solid var(--border, #475569)' : '1px solid transparent',
-                  cursor: 'pointer'
-                }}
-              >
-                {fmt.label}
-              </button>
-            ))}
+        {/* Sticky Action Toolbar (Hidden during print) */}
+        <div
+          className="no-print"
+          style={{
+            flexShrink: 0,
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '10px',
+            backgroundColor: 'var(--surface, #1e293b)',
+            padding: '10px 18px',
+            borderBottom: '1px solid var(--border, #334155)',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--text-primary, #f8fafc)', fontWeight: 600, fontSize: '13px' }}>
+              Preview: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--brand-primary, #FF641F)' }}>{quotation.quotationNumber}</span>
+            </span>
+            {/* Format / Paper Size Pills */}
+            <div style={{ display: 'flex', gap: '4px', background: 'var(--surface-elevated, #0f172a)', padding: '3px', borderRadius: '6px', border: '1px solid var(--border-subtle, #334155)' }}>
+              {[
+                { id: 'A4', label: 'A4 Standard' },
+                { id: 'A5_LANDSCAPE', label: 'A5 Landscape' },
+                { id: 'A5_PORTRAIT', label: 'A5 Portrait' },
+                { id: 'THERMAL', label: 'Thermal POS' }
+              ].map((fmt) => (
+                <button
+                  key={fmt.id}
+                  type="button"
+                  onClick={() => setFormat(fmt.id as PaperFormat)}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '11px',
+                    fontWeight: format === fmt.id ? 700 : 500,
+                    borderRadius: '4px',
+                    background: format === fmt.id ? 'var(--surface, #1e293b)' : 'transparent',
+                    color: format === fmt.id ? 'var(--text-primary, #f8fafc)' : 'var(--text-secondary, #94a3b8)',
+                    border: format === fmt.id ? '1px solid var(--border, #475569)' : '1px solid transparent',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {fmt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="lf-btn lf-btn-primary"
+              style={{
+                padding: '6px 14px',
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: '#FF641F',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: 600
+              }}
+            >
+              <Printer size={15} />
+              <span>Print Quotation</span>
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-secondary, #94a3b8)',
+                padding: '6px',
+                borderRadius: '6px',
+                cursor: 'pointer'
+              }}
+              title="Close Preview"
+            >
+              <X size={18} />
+            </button>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="lf-btn lf-btn-primary"
+        {/* Scrollable Document Stage with Internal Sizing */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'auto',
+            padding: '20px 16px',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'flex-start',
+            backgroundColor: 'rgba(15, 23, 42, 0.4)'
+          }}
+        >
+          {/* The Printable Document Container */}
+          <div
+            id="printable-quotation"
             style={{
-              padding: '6px 14px',
-              fontSize: '13px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              backgroundColor: '#FF641F',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 600
+              width: getContainerWidth(),
+              maxWidth: '100%',
+              backgroundColor: '#FFFFFF',
+              color: '#121B2E',
+              borderRadius: '4px',
+              padding: format === 'THERMAL' ? '12px' : '28px 36px',
+              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
+              fontSize: format === 'THERMAL' ? '10px' : '12px',
+              fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+              lineHeight: 1.45,
+              position: 'relative',
+              margin: '0 auto'
             }}
           >
-            <Printer size={15} />
-            <span>Print Quotation</span>
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-secondary, #94a3b8)',
-              padding: '6px',
-              borderRadius: '6px',
-              cursor: 'pointer'
-            }}
-            title="Close Preview"
-          >
-            <X size={18} />
-          </button>
-        </div>
-      </div>
-
-      {/* The Printable Document Container */}
-      <div
-        id="printable-quotation"
-        style={{
-          width: getContainerWidth(),
-          maxWidth: '100%',
-          backgroundColor: '#FFFFFF',
-          color: '#121B2E',
-          borderRadius: '4px',
-          padding: format === 'THERMAL' ? '12px' : '28px 36px',
-          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
-          fontSize: format === 'THERMAL' ? '10px' : '12px',
-          fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-          lineHeight: 1.45,
-          position: 'relative',
-          marginBottom: '32px'
-        }}
-      >
         {/* Document Header */}
         <div style={{ borderBottom: '2px solid #FF641F', paddingBottom: '12px', marginBottom: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
@@ -297,11 +322,21 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
               From (Seller):
             </div>
             <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>
-              {company?.company_name || 'Acme Traders Pvt Ltd'}
+              {company?.company_name || 'Business Name'}
             </div>
-            <div style={{ color: '#475569', fontSize: '11.5px', marginTop: '3px' }}>
-              {company?.address_line1 || 'No. 12, Main Road, Gandhipuram'}, {company?.city || 'Coimbatore'}, {company?.state || 'Tamil Nadu'} - {company?.pincode || '641012'}
-            </div>
+            {(() => {
+              const addrParts = [
+                company?.address_line1,
+                company?.address_line2,
+                company?.city,
+                company?.state ? (company?.pincode ? `${company.state} - ${company.pincode}` : company.state) : company?.pincode
+              ].filter(Boolean);
+              return addrParts.length > 0 ? (
+                <div style={{ color: '#475569', fontSize: '11.5px', marginTop: '3px' }}>
+                  {addrParts.join(', ')}
+                </div>
+              ) : null;
+            })()}
             {company?.gstin && (
               <div style={{ fontSize: '11px', color: '#334155', marginTop: '2px' }}>
                 GSTIN: <strong>{company.gstin}</strong>
@@ -506,7 +541,9 @@ export const QuotationPrintModal: React.FC<QuotationPrintModalProps> = ({
             </div>
           </div>
         </div>
+        </div>
       </div>
     </div>
-  );
+  </div>
+);
 };

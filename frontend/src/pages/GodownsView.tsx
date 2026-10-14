@@ -53,16 +53,16 @@ export const GodownsView: React.FC<GodownsViewProps> = ({ company }) => {
   const [formName, setFormName] = useState<string>('Main Godown');
   const [formCode, setFormCode] = useState<string>('MAIN');
   const [formType, setFormType] = useState<string>('Main Warehouse');
-  const [formAddress, setFormAddress] = useState<string>('No. 12, Market Road, Gandhipuram, Coimbatore - 641012');
-  const [formState, setFormState] = useState<string>('Tamil Nadu');
-  const [formCity, setFormCity] = useState<string>('Coimbatore');
-  const [formPincode, setFormPincode] = useState<string>('641012');
-  const [formContactPerson, setFormContactPerson] = useState<string>('Rajesh');
-  const [formPhone, setFormPhone] = useState<string>('98765 43210');
-  const [formEmail, setFormEmail] = useState<string>('rajesh@dreamtech.in');
-  const [formGstin, setFormGstin] = useState<string>('33ABCDE1234F1Z5');
-  const [formDescription, setFormDescription] = useState<string>('Main warehouse for finished goods and regular stock.');
-  const [formIsDefault, setFormIsDefault] = useState<boolean>(true);
+  const [formAddress, setFormAddress] = useState<string>('');
+  const [formState, setFormState] = useState<string>('');
+  const [formCity, setFormCity] = useState<string>('');
+  const [formPincode, setFormPincode] = useState<string>('');
+  const [formContactPerson, setFormContactPerson] = useState<string>('');
+  const [formPhone, setFormPhone] = useState<string>('');
+  const [formEmail, setFormEmail] = useState<string>('');
+  const [formGstin, setFormGstin] = useState<string>('');
+  const [formDescription, setFormDescription] = useState<string>('');
+  const [formIsDefault, setFormIsDefault] = useState<boolean>(false);
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);

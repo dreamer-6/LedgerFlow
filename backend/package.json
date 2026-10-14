@@ -7,13 +7,19 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "tsx src/server.ts",
-    "test": "tsx tests/run-all-tests.ts && tsx tests/accounting-invariants.test.ts && tsx tests/concurrency.test.ts && tsx tests/security-regression.test.ts && tsx tests/inventory-integrity.test.ts && tsx tests/masters-integrity.test.ts",
+    "test": "tsx tests/run-all-tests.ts && tsx tests/accounting-invariants.test.ts && tsx tests/concurrency.test.ts && tsx tests/security-regression.test.ts && tsx tests/inventory-integrity.test.ts && tsx tests/masters-integrity.test.ts && tsx tests/ui023-stock-balance.test.ts && tsx tests/ui025-voucher-numbering.test.ts && tsx tests/ui024-smart-pricing.test.ts && tsx tests/ui026-multicompany.test.ts && tsx tests/ui026-e2e-workflows.test.ts && tsx tests/ui026-report-reconciliation.test.ts",
     "test:accounting": "tsx tests/run-all-tests.ts && tsx tests/accounting-invariants.test.ts && tsx tests/concurrency.test.ts && tsx tests/inventory-integrity.test.ts",
     "test:invariants": "tsx tests/accounting-invariants.test.ts",
     "test:concurrency": "tsx tests/concurrency.test.ts",
     "test:security": "tsx tests/security-regression.test.ts",
     "test:inventory": "tsx tests/inventory-integrity.test.ts",
-    "test:masters": "tsx tests/masters-integrity.test.ts"
+    "test:masters": "tsx tests/masters-integrity.test.ts",
+    "test:stock": "tsx tests/ui023-stock-balance.test.ts",
+    "test:numbering": "tsx tests/ui025-voucher-numbering.test.ts",
+    "test:pricing": "tsx tests/ui024-smart-pricing.test.ts",
+    "test:multicompany": "tsx tests/ui026-multicompany.test.ts",
+    "test:workflows": "tsx tests/ui026-e2e-workflows.test.ts",
+    "test:reconciliation": "tsx tests/ui026-report-reconciliation.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

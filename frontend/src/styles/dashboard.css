@@ -230,6 +230,7 @@
   display: grid;
   grid-template-columns: 1.32fr 1fr;
   gap: 20px;
+  align-items: stretch;
 }
 
 .lf-panel-card {
@@ -241,6 +242,13 @@
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.lf-dashboard-grid-bottom .lf-panel-card {
+  min-height: 380px;
 }
 
 .lf-panel-header {

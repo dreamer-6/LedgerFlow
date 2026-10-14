@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FinancialYear } from '../api/client';
 import { Calendar, X, Check, ArrowRight, Clock, AlertCircle } from 'lucide-react';
+import { getLocalTodayDateString } from '../utils/dateUtils';
 
 interface DateChangeModalProps {
   isOpen: boolean;
@@ -19,10 +20,18 @@ export const DateChangeModal: React.FC<DateChangeModalProps> = ({
 }) => {
   const [selectedDate, setSelectedDate] = useState(currentDate);
 
+  React.useEffect(() => {
+    if (isOpen) {
+      setSelectedDate(currentDate);
+    }
+  }, [isOpen, currentDate]);
+
   if (!isOpen) return null;
 
-  const today = new Date().toISOString().split('T')[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const today = getLocalTodayDateString();
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = `${yesterdayDate.getFullYear()}-${String(yesterdayDate.getMonth() + 1).padStart(2, '0')}-${String(yesterdayDate.getDate()).padStart(2, '0')}`;
   const fyStart = activeFy?.start_date || '2026-04-01';
   const fyEnd = activeFy?.end_date || '2027-03-31';
 

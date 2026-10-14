@@ -631,6 +631,49 @@ export const InventoryTab: React.FC<InventoryTabProps> = ({ onNavigateToTab }) =
           </div>
         </div>
       </div>
+
+      {/* Save Action Bar */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '16px 20px',
+          borderRadius: '8px',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)'
+        }}
+      >
+        <div>
+          <span style={{ fontSize: '12px', color: '#64748B' }}>
+            Inventory costing evaluates weighted average cost across transactions.
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => {
+              alert('Inventory preferences applied successfully.');
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 18px',
+              fontSize: '12px',
+              fontWeight: 700,
+              borderRadius: '6px',
+              border: 'none',
+              backgroundColor: '#EA580C',
+              color: '#FFFFFF',
+              cursor: 'pointer'
+            }}
+          >
+            Apply Changes
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

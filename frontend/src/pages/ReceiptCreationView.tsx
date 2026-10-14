@@ -369,7 +369,7 @@ export const ReceiptCreationView: React.FC<ReceiptCreationViewProps> = ({
       const payload: any = {
         voucherType: 'RECEIPT',
         voucherDate,
-        voucherNumber: voucherNumber || undefined,
+        voucherNumber: asDraft ? undefined : (voucherNumber || undefined),
         partyId: partyId || undefined,
         status: asDraft ? 'DRAFT' : 'POSTED',
         referenceNo: referenceNo.trim() || undefined,

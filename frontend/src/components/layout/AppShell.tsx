@@ -27,8 +27,10 @@ export interface AppShellProps {
   setPaymentViewMode?: (mode: 'dashboard' | 'create') => void;
   journalViewMode?: 'dashboard' | 'create';
   setJournalViewMode?: (mode: 'dashboard' | 'create') => void;
+  currentDate?: string;
   onOpenBusinessSwitcher: () => void;
   onOpenFyModal: () => void;
+  onOpenDateModal?: () => void;
   onOpenSearch: () => void;
   onLogout?: () => void;
   children: React.ReactNode;
@@ -58,8 +60,10 @@ export const AppShell: React.FC<AppShellProps> = ({
   setPaymentViewMode,
   journalViewMode,
   setJournalViewMode,
+  currentDate,
   onOpenBusinessSwitcher,
   onOpenFyModal,
+  onOpenDateModal,
   onOpenSearch,
   onLogout,
   children
@@ -117,11 +121,18 @@ export const AppShell: React.FC<AppShellProps> = ({
           company={company}
           activeFy={activeFy}
           user={user}
+          currentDate={currentDate}
           onOpenBusinessSwitcher={onOpenBusinessSwitcher}
           onOpenFyModal={onOpenFyModal}
+          onOpenDateModal={onOpenDateModal}
           onOpenSearch={onOpenSearch}
-          onLogout={onLogout}
-          onNavigateSettings={() => setActiveTab('settings')}
+          onNavigateSettings={(section) => {
+            if (section) {
+              sessionStorage.setItem('lf_settings_active_tab', section);
+              window.dispatchEvent(new CustomEvent('lf_switch_settings_tab', { detail: section }));
+            }
+            setActiveTab('settings');
+          }}
           onToggleMobileSidebar={() => setSidebarOpen(true)}
         />
 

@@ -129,9 +129,11 @@ const CircularGauge: React.FC<{ percentage: number; size?: number; strokeWidth?:
    Mini Bar Sparkline Component
 ────────────────────────────────────────────── */
 const MiniBarSparkline: React.FC<{ heights?: number[]; color?: string }> = ({
-  heights = [30, 45, 60, 40, 80, 100],
+  heights = [],
   color = '#F97316'
 }) => {
+  if (!heights || heights.length === 0) return null;
+  const max = Math.max(...heights, 1);
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '24px' }}>
       {heights.map((h, i) => (
@@ -139,10 +141,10 @@ const MiniBarSparkline: React.FC<{ heights?: number[]; color?: string }> = ({
           key={i}
           style={{
             width: '4px',
-            height: `${h}%`,
+            height: `${Math.max(3, Math.round((h / max) * 24))}px`,
             backgroundColor: color,
             borderRadius: '2px',
-            opacity: 0.35 + (i / (heights.length - 1)) * 0.65
+            opacity: 0.35 + (i / Math.max(1, heights.length - 1)) * 0.65
           }}
         />
       ))}
@@ -153,16 +155,27 @@ const MiniBarSparkline: React.FC<{ heights?: number[]; color?: string }> = ({
 /* ─────────────────────────────────────────────
    Mini Line Sparkline Component
 ────────────────────────────────────────────── */
-const MiniLineSparkline: React.FC<{ color?: string }> = ({ color = '#EF4444' }) => {
+const MiniLineSparkline: React.FC<{ values?: number[]; color?: string }> = ({ values = [], color = '#EF4444' }) => {
+  if (!values || values.length < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values, min + 1);
+  const w = 60;
+  const h = 24;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - min) / (max - min)) * (h - 6) - 3;
+    return `${x},${y}`;
+  }).join(' ');
+
   return (
-    <svg width="60" height="24" viewBox="0 0 60 24" style={{ overflow: 'visible' }}>
-      <path
-        d="M 2 18 L 14 14 L 26 19 L 38 10 L 50 12 L 58 4"
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ overflow: 'visible' }}>
+      <polyline
         fill="none"
         stroke={color}
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
+        points={pts}
       />
     </svg>
   );
@@ -201,6 +214,11 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
   const [cancelReason, setCancelReason] = useState('Cancelled by user');
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [showCancelled, setShowCancelled] = useState(false);
+  const [includeHidden, setIncludeHidden] = useState(false);
+  const [permanentDeleteDialog, setPermanentDeleteDialog] = useState<{ id: string; number: string } | null>(null);
+  const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false);
+  const [permanentDeleteError, setPermanentDeleteError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   // Pagination state
@@ -228,7 +246,10 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
     setError(null);
     try {
       const [vchList, dash, suppList] = await Promise.all([
-        api.getPurchaseVouchers(fromDate || undefined, toDate || undefined),
+        api.getPurchaseVouchers(fromDate || undefined, toDate || undefined, {
+          showCancelled: showCancelled || statusFilter === 'cancelled',
+          includeHidden
+        }),
         api.getDashboard(),
         api.getParties('SUPPLIER')
       ]);
@@ -244,7 +265,48 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
 
   useEffect(() => {
     if (company) loadData();
-  }, [company, fromDate, toDate]);
+  }, [company, fromDate, toDate, showCancelled, includeHidden]);
+
+  /* Monthly 6-month purchase trend */
+  const purchaseTrendData = useMemo(() => {
+    const now = new Date();
+    const last6: { month: string; purchases: number; count: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      last6.push({ month: key, purchases: 0, count: 0 });
+    }
+
+    if (dashData?.trendData) {
+      (dashData.trendData as any[]).filter(r => r.voucher_type === 'PURCHASE').forEach(r => {
+        const e = last6.find(x => x.month === r.month);
+        if (e) e.purchases = r.total;
+      });
+    }
+
+    vouchers.filter(v => v.status === 'POSTED').forEach(v => {
+      const key = v.voucher_date?.substring(0, 7);
+      const e = last6.find(x => x.month === key);
+      if (e) {
+        e.count++;
+        if (!dashData?.trendData) {
+          e.purchases += (v.total_amount_paise || 0);
+        }
+      }
+    });
+
+    return last6;
+  }, [dashData, vouchers]);
+
+  const purchaseGrowth = useMemo(() => {
+    if (purchaseTrendData.length < 2) return null;
+    const curr = purchaseTrendData[purchaseTrendData.length - 1];
+    const prev = purchaseTrendData[purchaseTrendData.length - 2];
+    if (prev.purchases > 0) {
+      return Math.round(((curr.purchases - prev.purchases) / prev.purchases) * 1000) / 10;
+    }
+    return null;
+  }, [purchaseTrendData]);
 
   /* Authoritative calculations derived from real database vouchers */
   const kpis = useMemo(() => {
@@ -253,23 +315,21 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
     const cancelled = vouchers.filter(v => v.status === 'CANCELLED');
 
     const totalPurchasePaise = posted.reduce((sum, v) => sum + (v.total_amount_paise || 0), 0);
-    const totalInvoices = vouchers.length;
+    const totalInvoices = posted.length;
 
     // Use payables from backend dashboard report if available, else derive from vouchers
     const outstandingPaise = dashData?.payablesPaise !== undefined
       ? dashData.payablesPaise
       : totalPurchasePaise;
 
-    // Estimate paid count from available vouchers
-    const paidCount = Math.max(0, Math.floor(posted.length * 0.7));
-    const paidPercentage = totalInvoices > 0 ? Math.round((paidCount / totalInvoices) * 100) : 0;
+    const paidPercentage = vouchers.length > 0 ? Math.round((posted.length / vouchers.length) * 100) : 0;
     const supplierCount = suppliers.length;
 
     return {
       totalPurchasePaise,
       totalInvoices,
       outstandingPaise,
-      paidCount,
+      paidCount: posted.length,
       paidPercentage,
       supplierCount,
       draftCount: drafts.length,
@@ -281,7 +341,11 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
   /* Filter vouchers based on status, search, and date filters */
   const filteredVouchers = useMemo(() => {
     return vouchers.filter(v => {
+      // 0. Hidden Filter
+      if (!includeHidden && v.is_hidden) return false;
+
       // 1. Status Filter
+      if (statusFilter === 'all' && !showCancelled && v.status === 'CANCELLED') return false;
       if (statusFilter === 'draft' && v.status !== 'DRAFT') return false;
       if (statusFilter === 'posted' && v.status !== 'POSTED') return false;
       if (statusFilter === 'cancelled' && v.status !== 'CANCELLED') return false;
@@ -299,7 +363,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
 
       return true;
     });
-  }, [vouchers, statusFilter, searchQuery]);
+  }, [vouchers, statusFilter, searchQuery, showCancelled, includeHidden]);
 
   // Paginated vouchers
   const totalPages = Math.ceil(filteredVouchers.length / pageSize) || 1;
@@ -351,6 +415,45 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
       setCancelError(err.message || 'Failed to cancel invoice');
     } finally {
       setIsCancelling(false);
+    }
+  };
+
+  const handleHideVoucher = async (id: string) => {
+    try {
+      await api.hideVoucher(id);
+      showToast('Voucher hidden from normal lists');
+      loadData();
+    } catch (err: any) {
+      showToast('Error: ' + (err.message || 'Hide failed'));
+    }
+  };
+
+  const handleUnhideVoucher = async (id: string) => {
+    try {
+      await api.unhideVoucher(id);
+      showToast('Voucher restored to normal lists');
+      loadData();
+    } catch (err: any) {
+      showToast('Error: ' + (err.message || 'Unhide failed'));
+    }
+  };
+
+  const handleConfirmPermanentDelete = async () => {
+    if (!permanentDeleteDialog) return;
+    setIsPermanentlyDeleting(true);
+    setPermanentDeleteError(null);
+    try {
+      await api.deleteVoucher(permanentDeleteDialog.id, {
+        permanentDelete: true,
+        cancelReason: 'Permanent purge from purchase view'
+      });
+      showToast(`Invoice ${permanentDeleteDialog.number} permanently deleted.`);
+      setPermanentDeleteDialog(null);
+      loadData();
+    } catch (err: any) {
+      setPermanentDeleteError(err.message || 'Permanent deletion failed');
+    } finally {
+      setIsPermanentlyDeleting(false);
     }
   };
 
@@ -527,10 +630,16 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px' }}>
-            <span style={{ fontSize: '11.5px', color: '#10B981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
-              ↑ 8.6% <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>vs last month</span>
+            <span style={{ fontSize: '11.5px', color: purchaseGrowth !== null && purchaseGrowth >= 0 ? '#10B981' : purchaseGrowth !== null ? '#EF4444' : 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
+              {purchaseGrowth !== null ? (
+                <>
+                  {purchaseGrowth >= 0 ? '↑' : '↓'} {Math.abs(purchaseGrowth)}% <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>vs last month</span>
+                </>
+              ) : (
+                <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Active Period</span>
+              )}
             </span>
-            <MiniBarSparkline heights={[30, 45, 60, 40, 75, 100]} color="#F97316" />
+            <MiniBarSparkline heights={purchaseTrendData.map(d => d.purchases)} color="#F97316" />
           </div>
         </div>
 
@@ -564,10 +673,10 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px' }}>
-            <span style={{ fontSize: '11.5px', color: '#10B981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
-              ↑ 12.3% <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>vs last month</span>
+            <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <span>Recorded Vouchers</span>
             </span>
-            <MiniBarSparkline heights={[40, 55, 30, 70, 85, 95]} color="#EF4444" />
+            <MiniBarSparkline heights={purchaseTrendData.map(d => d.count)} color="#EF4444" />
           </div>
         </div>
 
@@ -601,10 +710,10 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px' }}>
-            <span style={{ fontSize: '11.5px', color: '#EF4444', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
-              ↑ 6.1% <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>vs last month</span>
+            <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <span>Active Payables</span>
             </span>
-            <MiniLineSparkline color="#EF4444" />
+            <MiniLineSparkline values={purchaseTrendData.map(d => d.purchases)} color="#EF4444" />
           </div>
         </div>
 
@@ -634,10 +743,10 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
               {kpis.paidCount}
             </div>
             <div style={{ fontSize: '11.5px', color: 'var(--text-muted, #64748B)', marginTop: '4px' }}>
-              of {kpis.totalInvoices} invoices
+              of {vouchers.length} invoices
             </div>
           </div>
-          <CircularGauge percentage={kpis.paidPercentage || 69} size={54} strokeWidth={5} color="#F97316" />
+          <CircularGauge percentage={kpis.paidPercentage || 0} size={54} strokeWidth={5} color="#F97316" />
         </div>
 
         {/* Card 5: Suppliers */}
@@ -669,10 +778,10 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px' }}>
-            <span style={{ fontSize: '11.5px', color: '#10B981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
-              ↑ 3 new <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>this month</span>
+            <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <span>Registered Vendors</span>
             </span>
-            <MiniBarSparkline heights={[20, 40, 60, 50, 75, 90]} color="#3B82F6" />
+            <MiniBarSparkline heights={purchaseTrendData.map(d => d.count)} color="#3B82F6" />
           </div>
         </div>
       </div>
@@ -680,7 +789,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
       {/* ─────────────────────────────────────────────
           Table Card with Filters & Search
       ────────────────────────────────────────────── */}
-      <div className="ledger-card" style={{ padding: '0', overflow: 'hidden', marginBottom: '24px' }}>
+      <div className="ledger-card" style={{ padding: '0', overflow: 'hidden', minHeight: '420px', marginBottom: '24px' }}>
         {/* Toolbar: Segmented Status Pills + Search & Filters */}
         <div
           style={{
@@ -693,36 +802,48 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             gap: '12px'
           }}
         >
-          {/* Segmented Status Tabs */}
-          <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--bg-subtle, #F1F5F9)', padding: '3px', borderRadius: '8px', overflowX: 'auto' }}>
-            {[
-              { id: 'all', label: 'All Invoices' },
-              { id: 'draft', label: 'Draft' },
-              { id: 'pending', label: 'Pending Approval' },
-              { id: 'partial', label: 'Partially Received' },
-              { id: 'posted', label: 'Posted' },
-              { id: 'cancelled', label: 'Cancelled' }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setStatusFilter(tab.id as PurchaseStatusFilter)}
-                style={{
-                  border: 'none',
-                  outline: 'none',
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  backgroundColor: statusFilter === tab.id ? '#F97316' : 'transparent',
-                  color: statusFilter === tab.id ? '#FFFFFF' : 'var(--text-secondary, #475569)',
-                  transition: 'all 0.15s ease',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
+          {/* Segmented Status Tabs & Show Cancelled Checkbox */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--bg-subtle, #F1F5F9)', padding: '3px', borderRadius: '8px', overflowX: 'auto' }}>
+              {[
+                { id: 'all', label: 'All Invoices' },
+                { id: 'draft', label: 'Draft' },
+                { id: 'pending', label: 'Pending Approval' },
+                { id: 'partial', label: 'Partially Received' },
+                { id: 'posted', label: 'Posted' },
+                { id: 'cancelled', label: 'Cancelled' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setStatusFilter(tab.id as PurchaseStatusFilter)}
+                  style={{
+                    border: 'none',
+                    outline: 'none',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    backgroundColor: statusFilter === tab.id ? '#F97316' : 'transparent',
+                    color: statusFilter === tab.id ? '#FFFFFF' : 'var(--text-secondary, #475569)',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary, #64748B)', cursor: 'pointer', paddingLeft: '4px' }}>
+              <input
+                type="checkbox"
+                checked={showCancelled}
+                onChange={e => setShowCancelled(e.target.checked)}
+                style={{ accentColor: '#F97316', cursor: 'pointer' }}
+              />
+              <span>Show Cancelled</span>
+            </label>
           </div>
 
           {/* Search, Filter Button, Date Dropdown */}
@@ -894,10 +1015,11 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                   </td>
                 </tr>
               ) : (
-                paginatedVouchers.map(v => {
+                paginatedVouchers.map((v, idx) => {
                   const isDraft = v.status === 'DRAFT';
                   const isCancelled = v.status === 'CANCELLED';
                   const isPosted = v.status === 'POSTED';
+                  const isNearBottom = idx >= paginatedVouchers.length - 2;
 
                   // Derive payment status pill
                   let paymentStatusText = 'Pending';
@@ -1014,7 +1136,10 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                             style={{
                               position: 'absolute',
                               right: 14,
-                              top: '100%',
+                              top: isNearBottom ? undefined : '100%',
+                              bottom: isNearBottom ? '100%' : undefined,
+                              marginBottom: isNearBottom ? 4 : undefined,
+                              marginTop: isNearBottom ? undefined : 4,
                               zIndex: 50,
                               backgroundColor: 'var(--bg-card, #FFFFFF)',
                               border: '1px solid var(--border-subtle, #E2E8F0)',
@@ -1043,6 +1168,46 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                             >
                               <Eye size={13} color="#F97316" /> View / Print
                             </button>
+
+                            {v.is_hidden ? (
+                              <button
+                                onClick={() => { setActionMenuId(null); handleUnhideVoucher(v.voucher_id); }}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  background: 'none',
+                                  border: 'none',
+                                  textAlign: 'left',
+                                  fontSize: '12px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  cursor: 'pointer',
+                                  color: 'var(--text-primary)'
+                                }}
+                              >
+                                <Eye size={13} /> Unhide from List
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => { setActionMenuId(null); handleHideVoucher(v.voucher_id); }}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  background: 'none',
+                                  border: 'none',
+                                  textAlign: 'left',
+                                  fontSize: '12px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  cursor: 'pointer',
+                                  color: 'var(--text-secondary, #64748B)'
+                                }}
+                              >
+                                <Eye size={13} /> Hide from List
+                              </button>
+                            )}
 
                             {isDraft && (
                               <>
@@ -1106,6 +1271,31 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                                 }}
                               >
                                 <X size={13} /> Cancel Invoice
+                              </button>
+                            )}
+
+                            {isCancelled && (
+                              <button
+                                onClick={() => {
+                                  setActionMenuId(null);
+                                  setPermanentDeleteDialog({ id: v.voucher_id, number: v.voucher_number || 'Invoice' });
+                                  setPermanentDeleteError(null);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  background: 'none',
+                                  border: 'none',
+                                  textAlign: 'left',
+                                  fontSize: '12px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  cursor: 'pointer',
+                                  color: '#EF4444'
+                                }}
+                              >
+                                <Trash2 size={13} /> Permanently Delete
                               </button>
                             )}
                           </div>
@@ -1474,6 +1664,85 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Permanent Deletion Dialog Modal */}
+      {permanentDeleteDialog && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(2px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setPermanentDeleteDialog(null); }}
+        >
+          <div className="ledger-card" style={{ width: '440px', padding: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(239, 68, 68, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444' }}>
+                <Trash2 size={18} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                  Permanently Delete Voucher?
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{permanentDeleteDialog.number}</span>
+              </div>
+            </div>
+            <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
+              Are you sure you want to permanently delete this cancelled voucher? This action permanently removes the record and writes an immutable audit tombstone. This action cannot be undone.
+            </p>
+            {permanentDeleteError && (
+              <div style={{ padding: '10px 12px', backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: '6px', color: 'var(--danger-red, #EF4444)', fontSize: '12px', marginBottom: '14px' }}>
+                {permanentDeleteError}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button className="lf-btn lf-btn-secondary" onClick={() => setPermanentDeleteDialog(null)} disabled={isPermanentlyDeleting}>
+                Cancel
+              </button>
+              <button
+                className="lf-btn"
+                onClick={handleConfirmPermanentDelete}
+                disabled={isPermanentlyDeleting}
+                style={{
+                  backgroundColor: '#EF4444',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '12.5px',
+                  padding: '8px 14px',
+                  fontWeight: 600
+                }}
+              >
+                {isPermanentlyDeleting ? 'Purging…' : 'Permanently Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Action Toast Notification */}
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            backgroundColor: '#1E293B',
+            color: '#FFFFFF',
+            padding: '10px 18px',
+            borderRadius: '8px',
+            fontSize: '13px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+            zIndex: 1000
+          }}
+        >
+          {toast}
         </div>
       )}
     </div>

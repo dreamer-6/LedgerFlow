@@ -417,6 +417,11 @@ export const SalesView: React.FC<SalesViewProps> = ({
   const [cancelReason, setCancelReason] = useState('Cancelled by user');
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [showCancelled, setShowCancelled] = useState(false);
+  const [includeHidden, setIncludeHidden] = useState(false);
+  const [permanentDeleteDialog, setPermanentDeleteDialog] = useState<{ id: string; number: string } | null>(null);
+  const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false);
+  const [permanentDeleteError, setPermanentDeleteError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   // Dismiss dropdown on outer click
@@ -440,7 +445,10 @@ export const SalesView: React.FC<SalesViewProps> = ({
     setError(null);
     try {
       const [vchList, dash] = await Promise.all([
-        api.getSalesVouchers(fromDate || undefined, toDate || undefined),
+        api.getSalesVouchers(fromDate || undefined, toDate || undefined, {
+          showCancelled: showCancelled || statusFilter === 'CANCELLED',
+          includeHidden
+        }),
         api.getDashboard()
       ]);
       setVouchers(vchList || []);
@@ -454,7 +462,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
 
   useEffect(() => {
     if (company) loadData();
-  }, [company, fromDate, toDate]);
+  }, [company, fromDate, toDate, showCancelled, includeHidden]);
 
   /* Authoritative calculations derived from real database vouchers */
   const kpis = useMemo(() => {
@@ -511,6 +519,34 @@ export const SalesView: React.FC<SalesViewProps> = ({
     return last6;
   }, [dashData, vouchers]);
 
+  /* Authoritative month-over-month trend growth calculations */
+  const growthMetrics = useMemo(() => {
+    if (trendData.length < 2) {
+      return { salesGrowthPct: null, invoicesGrowthPct: null, avgValGrowthPct: null };
+    }
+    const curr = trendData[trendData.length - 1];
+    const prev = trendData[trendData.length - 2];
+
+    let salesGrowthPct: number | null = null;
+    if (prev.sales > 0) {
+      salesGrowthPct = Math.round(((curr.sales - prev.sales) / prev.sales) * 1000) / 10;
+    }
+
+    let invoicesGrowthPct: number | null = null;
+    if (prev.count > 0) {
+      invoicesGrowthPct = Math.round(((curr.count - prev.count) / prev.count) * 1000) / 10;
+    }
+
+    let avgValGrowthPct: number | null = null;
+    const currAvg = curr.count > 0 ? curr.sales / curr.count : 0;
+    const prevAvg = prev.count > 0 ? prev.sales / prev.count : 0;
+    if (prevAvg > 0) {
+      avgValGrowthPct = Math.round(((currAvg - prevAvg) / prevAvg) * 1000) / 10;
+    }
+
+    return { salesGrowthPct, invoicesGrowthPct, avgValGrowthPct };
+  }, [trendData]);
+
   /* Top 5 customers ranked by revenue */
   const topCustomers = useMemo(() => {
     const map: Record<string, { name: string; totalPaise: number }> = {};
@@ -526,14 +562,21 @@ export const SalesView: React.FC<SalesViewProps> = ({
   /* Filtered table list */
   const filtered = useMemo(() => {
     let list = vouchers;
-    if (statusFilter !== 'all') {
-      if (statusFilter === 'POSTED') {
-        list = list.filter(v => v.status === 'POSTED');
-      } else if (statusFilter === 'DRAFT') {
-        list = list.filter(v => v.status === 'DRAFT');
-      } else if (statusFilter === 'CANCELLED') {
-        list = list.filter(v => v.status === 'CANCELLED');
+    // Exclude hidden vouchers unless includeHidden is active
+    if (!includeHidden) {
+      list = list.filter(v => !v.is_hidden);
+    }
+    // Exclude cancelled vouchers from default 'all' view unless showCancelled is checked
+    if (statusFilter === 'all') {
+      if (!showCancelled) {
+        list = list.filter(v => v.status !== 'CANCELLED');
       }
+    } else if (statusFilter === 'POSTED') {
+      list = list.filter(v => v.status === 'POSTED');
+    } else if (statusFilter === 'DRAFT') {
+      list = list.filter(v => v.status === 'DRAFT');
+    } else if (statusFilter === 'CANCELLED') {
+      list = list.filter(v => v.status === 'CANCELLED');
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -543,7 +586,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
       );
     }
     return list;
-  }, [vouchers, statusFilter, searchQuery]);
+  }, [vouchers, statusFilter, searchQuery, showCancelled, includeHidden]);
 
   const handleCancelVoucher = async () => {
     if (!cancelDialog) return;
@@ -568,6 +611,45 @@ export const SalesView: React.FC<SalesViewProps> = ({
       await loadData();
     } catch (err: any) {
       showToast('Error: ' + (err.message || 'Delete failed'));
+    }
+  };
+
+  const handleHideVoucher = async (id: string) => {
+    try {
+      await api.hideVoucher(id);
+      showToast('Voucher hidden from normal lists');
+      await loadData();
+    } catch (err: any) {
+      showToast('Error: ' + (err.message || 'Hide failed'));
+    }
+  };
+
+  const handleUnhideVoucher = async (id: string) => {
+    try {
+      await api.unhideVoucher(id);
+      showToast('Voucher restored to normal lists');
+      await loadData();
+    } catch (err: any) {
+      showToast('Error: ' + (err.message || 'Unhide failed'));
+    }
+  };
+
+  const handleConfirmPermanentDelete = async () => {
+    if (!permanentDeleteDialog) return;
+    setIsPermanentlyDeleting(true);
+    setPermanentDeleteError(null);
+    try {
+      await api.deleteVoucher(permanentDeleteDialog.id, {
+        permanentDelete: true,
+        cancelReason: 'Permanent purge from sales view'
+      });
+      showToast(`Voucher ${permanentDeleteDialog.number} permanently deleted.`);
+      setPermanentDeleteDialog(null);
+      await loadData();
+    } catch (err: any) {
+      setPermanentDeleteError(err.message || 'Permanent deletion failed');
+    } finally {
+      setIsPermanentlyDeleting(false);
     }
   };
 
@@ -698,8 +780,15 @@ export const SalesView: React.FC<SalesViewProps> = ({
             {loading ? '…' : formatINR(kpis.totalSalesPaise)}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--success-emerald, #10B981)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-              <ArrowUpRight size={12} /> +12.4% <span style={{ color: 'var(--text-muted, #94A3B8)', fontWeight: 400 }}>vs last month</span>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: growthMetrics.salesGrowthPct !== null && growthMetrics.salesGrowthPct >= 0 ? 'var(--success-emerald, #10B981)' : growthMetrics.salesGrowthPct !== null ? 'var(--danger-red, #EF4444)' : 'var(--text-muted, #94A3B8)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+              {growthMetrics.salesGrowthPct !== null ? (
+                <>
+                  <ArrowUpRight size={12} style={{ transform: growthMetrics.salesGrowthPct < 0 ? 'rotate(90deg)' : undefined }} />
+                  {growthMetrics.salesGrowthPct >= 0 ? `+${growthMetrics.salesGrowthPct}%` : `${growthMetrics.salesGrowthPct}%`} <span style={{ color: 'var(--text-muted, #94A3B8)', fontWeight: 400 }}>vs last month</span>
+                </>
+              ) : (
+                <span style={{ color: 'var(--text-muted, #94A3B8)', fontWeight: 500 }}>Active Period</span>
+              )}
             </span>
             <MiniBars values={trendData.map(d => d.sales)} color="#FF6B2B" />
           </div>
@@ -720,8 +809,15 @@ export const SalesView: React.FC<SalesViewProps> = ({
             {loading ? '…' : String(kpis.totalInvoices)}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--success-emerald, #10B981)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-              <ArrowUpRight size={12} /> +8.6% <span style={{ color: 'var(--text-muted, #94A3B8)', fontWeight: 400 }}>vs last month</span>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: growthMetrics.invoicesGrowthPct !== null && growthMetrics.invoicesGrowthPct >= 0 ? 'var(--success-emerald, #10B981)' : growthMetrics.invoicesGrowthPct !== null ? 'var(--danger-red, #EF4444)' : 'var(--text-muted, #94A3B8)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+              {growthMetrics.invoicesGrowthPct !== null ? (
+                <>
+                  <ArrowUpRight size={12} style={{ transform: growthMetrics.invoicesGrowthPct < 0 ? 'rotate(90deg)' : undefined }} />
+                  {growthMetrics.invoicesGrowthPct >= 0 ? `+${growthMetrics.invoicesGrowthPct}%` : `${growthMetrics.invoicesGrowthPct}%`} <span style={{ color: 'var(--text-muted, #94A3B8)', fontWeight: 400 }}>vs last month</span>
+                </>
+              ) : (
+                <span style={{ color: 'var(--text-muted, #94A3B8)', fontWeight: 500 }}>Active Period</span>
+              )}
             </span>
             <MiniBars values={trendData.map(d => d.count)} color="#F59E0B" />
           </div>
@@ -742,10 +838,17 @@ export const SalesView: React.FC<SalesViewProps> = ({
             {loading ? '…' : formatINR(kpis.avgPaise)}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--success-emerald, #10B981)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-              <ArrowUpRight size={12} /> +4.2% <span style={{ color: 'var(--text-muted, #94A3B8)', fontWeight: 400 }}>vs last month</span>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: growthMetrics.avgValGrowthPct !== null && growthMetrics.avgValGrowthPct >= 0 ? 'var(--success-emerald, #10B981)' : growthMetrics.avgValGrowthPct !== null ? 'var(--danger-red, #EF4444)' : 'var(--text-muted, #94A3B8)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+              {growthMetrics.avgValGrowthPct !== null ? (
+                <>
+                  <ArrowUpRight size={12} style={{ transform: growthMetrics.avgValGrowthPct < 0 ? 'rotate(90deg)' : undefined }} />
+                  {growthMetrics.avgValGrowthPct >= 0 ? `+${growthMetrics.avgValGrowthPct}%` : `${growthMetrics.avgValGrowthPct}%`} <span style={{ color: 'var(--text-muted, #94A3B8)', fontWeight: 400 }}>vs last month</span>
+                </>
+              ) : (
+                <span style={{ color: 'var(--text-muted, #94A3B8)', fontWeight: 500 }}>Active Period</span>
+              )}
             </span>
-            <MiniLine values={trendData.map(d => d.sales > 0 && d.count > 0 ? d.sales / d.count : 1000)} color="#FF6B2B" />
+            <MiniLine values={trendData.map(d => d.sales > 0 && d.count > 0 ? Math.round(d.sales / d.count) : 0)} color="#FF6B2B" />
           </div>
         </div>
 
@@ -764,10 +867,10 @@ export const SalesView: React.FC<SalesViewProps> = ({
             {loading ? '…' : formatINR(kpis.outstandingPaise)}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: '#EF4444', display: 'flex', alignItems: 'center', gap: '3px' }}>
-              ↑ 2.8% <span style={{ color: 'var(--text-muted, #94A3B8)', fontWeight: 400 }}>vs last month</span>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted, #94A3B8)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <span style={{ color: 'var(--text-muted, #94A3B8)', fontWeight: 500 }}>Active Receivables</span>
             </span>
-            <MiniLine values={[10, 14, 12, 16, 18, 20]} color="#D97706" />
+            <MiniLine values={trendData.map(d => d.sales)} color="#EF4444" />
           </div>
         </div>
 
@@ -792,7 +895,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
       </div>
 
       {/* Main Grid: Left 2/3 (Trends + Invoices) | Right 1/3 (Top Customers + Status + Quick Actions) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 310px', gap: '18px', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 310px', gap: '18px', alignItems: 'stretch' }}>
 
         {/* Left Column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', minWidth: 0 }}>
@@ -848,7 +951,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
           </div>
 
           {/* Recent Sales Invoices Table Card */}
-          <div className="ledger-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="ledger-card" style={{ padding: 0, overflow: 'visible', minHeight: '420px', display: 'flex', flexDirection: 'column' }}>
             {/* Header Toolbar */}
             <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -902,42 +1005,54 @@ export const SalesView: React.FC<SalesViewProps> = ({
               </div>
             )}
 
-            {/* Filter Pills (All Invoices, Draft, Pending, Partial, Paid, Overdue) */}
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', padding: '6px 14px', gap: '6px', overflowX: 'auto' }}>
-              {([
-                { key: 'all' as StatusFilter,       label: 'All Invoices' },
-                { key: 'DRAFT' as StatusFilter,     label: 'Draft' },
-                { key: 'PENDING' as StatusFilter,   label: 'Pending' },
-                { key: 'PARTIAL' as StatusFilter,   label: 'Partial' },
-                { key: 'POSTED' as StatusFilter,    label: 'Paid' },
-                { key: 'OVERDUE' as StatusFilter,   label: 'Overdue' }
-              ]).map(tab => {
-                const isActive = statusFilter === tab.key;
-                return (
-                  <button
-                    key={tab.key}
-                    onClick={() => setStatusFilter(tab.key)}
-                    style={{
-                      padding: '5px 12px',
-                      fontSize: '12px',
-                      fontWeight: isActive ? 700 : 500,
-                      borderRadius: '16px',
-                      border: 'none',
-                      backgroundColor: isActive ? '#FF6B2B' : 'transparent',
-                      color: isActive ? '#FFFFFF' : 'var(--text-muted, #64748B)',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
+            {/* Filter Pills with Show Cancelled toggle */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', padding: '6px 14px', gap: '6px', overflowX: 'auto', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                {([
+                  { key: 'all' as StatusFilter,       label: 'All Invoices' },
+                  { key: 'DRAFT' as StatusFilter,     label: 'Draft' },
+                  { key: 'PENDING' as StatusFilter,   label: 'Pending' },
+                  { key: 'PARTIAL' as StatusFilter,   label: 'Partial' },
+                  { key: 'POSTED' as StatusFilter,    label: 'Paid' },
+                  { key: 'CANCELLED' as StatusFilter, label: 'Cancelled' }
+                ]).map(tab => {
+                  const isActive = statusFilter === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setStatusFilter(tab.key)}
+                      style={{
+                        padding: '5px 12px',
+                        fontSize: '12px',
+                        fontWeight: isActive ? 700 : 500,
+                        borderRadius: '16px',
+                        border: 'none',
+                        backgroundColor: isActive ? '#FF6B2B' : 'transparent',
+                        color: isActive ? '#FFFFFF' : 'var(--text-muted, #64748B)',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary, #64748B)', cursor: 'pointer', flexShrink: 0, paddingRight: '4px' }}>
+                <input
+                  type="checkbox"
+                  checked={showCancelled}
+                  onChange={e => setShowCancelled(e.target.checked)}
+                  style={{ accentColor: '#FF6B2B', cursor: 'pointer' }}
+                />
+                <span>Show Cancelled</span>
+              </label>
             </div>
 
             {/* Invoices Table */}
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', minHeight: '260px', flex: 1 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
                 <thead>
                   <tr style={{ backgroundColor: 'var(--bg-subtle, #F8FAFC)', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -972,8 +1087,9 @@ export const SalesView: React.FC<SalesViewProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    filtered.map(v => {
+                    filtered.map((v, idx) => {
                       const isMenuOpen = actionMenuId === v.voucher_id;
+                      const isNearBottom = idx >= filtered.length - 2;
                       const status = v.status?.toUpperCase() || 'DRAFT';
                       const badgeMap: Record<string, { label: string; bg: string; text: string }> = {
                         POSTED:    { label: 'Paid',    bg: '#ECFDF5', text: '#10B981' },
@@ -1052,13 +1168,16 @@ export const SalesView: React.FC<SalesViewProps> = ({
                                   style={{
                                     position: 'absolute',
                                     right: 0,
-                                    top: '100%',
+                                    top: isNearBottom ? undefined : '100%',
+                                    bottom: isNearBottom ? '100%' : undefined,
+                                    marginBottom: isNearBottom ? 4 : undefined,
+                                    marginTop: isNearBottom ? undefined : 4,
                                     zIndex: 50,
                                     backgroundColor: 'var(--bg-card, #FFFFFF)',
                                     border: '1px solid var(--border-subtle, #E2E8F0)',
                                     borderRadius: '8px',
                                     boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
-                                    minWidth: '150px',
+                                    minWidth: '160px',
                                     overflow: 'hidden'
                                   }}
                                 >
@@ -1070,6 +1189,25 @@ export const SalesView: React.FC<SalesViewProps> = ({
                                   >
                                     <Eye size={13} /> View / Print
                                   </button>
+                                  {v.is_hidden ? (
+                                    <button
+                                      onClick={() => { handleUnhideVoucher(v.voucher_id); setActionMenuId(null); }}
+                                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 14px', width: '100%', fontSize: '12.5px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', textAlign: 'left' }}
+                                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, #F8FAFC)')}
+                                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
+                                    >
+                                      <Eye size={13} /> Unhide from List
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => { handleHideVoucher(v.voucher_id); setActionMenuId(null); }}
+                                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 14px', width: '100%', fontSize: '12.5px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary, #64748B)', textAlign: 'left' }}
+                                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, #F8FAFC)')}
+                                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
+                                    >
+                                      <Eye size={13} /> Hide from List
+                                    </button>
+                                  )}
                                   {v.status === 'DRAFT' && (
                                     <button
                                       onClick={() => { handleDeleteDraft(v.voucher_id, v.voucher_number); setActionMenuId(null); }}
@@ -1093,6 +1231,20 @@ export const SalesView: React.FC<SalesViewProps> = ({
                                       onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
                                     >
                                       <X size={13} /> Cancel Invoice
+                                    </button>
+                                  )}
+                                  {v.status === 'CANCELLED' && (
+                                    <button
+                                      onClick={() => {
+                                        setPermanentDeleteDialog({ id: v.voucher_id, number: v.voucher_number });
+                                        setPermanentDeleteError(null);
+                                        setActionMenuId(null);
+                                      }}
+                                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 14px', width: '100%', fontSize: '12.5px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger-red, #EF4444)', textAlign: 'left' }}
+                                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, #F8FAFC)')}
+                                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
+                                    >
+                                      <Trash2 size={13} /> Permanently Delete
                                     </button>
                                   )}
                                 </div>
@@ -1355,6 +1507,53 @@ export const SalesView: React.FC<SalesViewProps> = ({
               </button>
               <button className="lf-btn lf-btn-danger" onClick={handleCancelVoucher} disabled={isCancelling || !cancelReason.trim()}>
                 {isCancelling ? 'Cancelling…' : 'Confirm Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permanent Deletion Dialog Modal */}
+      {permanentDeleteDialog && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(2px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setPermanentDeleteDialog(null); }}
+        >
+          <div className="ledger-card" style={{ width: '440px', padding: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(239, 68, 68, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444' }}>
+                <Trash2 size={18} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+                  Permanently Delete Voucher?
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{permanentDeleteDialog.number}</span>
+              </div>
+            </div>
+            <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
+              Are you sure you want to permanently delete this cancelled voucher? This action permanently removes the record and writes an immutable audit tombstone. This action cannot be undone.
+            </p>
+            {permanentDeleteError && (
+              <div style={{ padding: '10px 12px', backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: '6px', color: 'var(--danger-red)', fontSize: '12px', marginBottom: '14px' }}>
+                {permanentDeleteError}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button className="lf-btn lf-btn-secondary" onClick={() => setPermanentDeleteDialog(null)} disabled={isPermanentlyDeleting}>
+                Cancel
+              </button>
+              <button className="lf-btn lf-btn-danger" onClick={handleConfirmPermanentDelete} disabled={isPermanentlyDeleting}>
+                {isPermanentlyDeleting ? 'Purging…' : 'Permanently Delete'}
               </button>
             </div>
           </div>

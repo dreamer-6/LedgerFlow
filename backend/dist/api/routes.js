@@ -67,6 +67,13 @@ function createApiRouter(db) {
     router.get('/companies/current', ...withCompany, businessController.getCurrentCompanyInfo);
     router.put('/companies/current', ...withAdmin, businessController.updateCurrentCompany);
     router.post('/companies/:id/delete', withAuth, businessController.deleteCompany);
+    // --------------------------------------------------------------------------
+    // COMPANY-SCOPED — Users & Team Members
+    // --------------------------------------------------------------------------
+    router.get('/companies/current/users', ...withCompany, businessController.getCompanyMembers);
+    router.post('/companies/current/users', ...withAdmin, businessController.addCompanyMember);
+    router.put('/companies/current/users/:userId/role', ...withAdmin, businessController.updateMemberRole);
+    router.delete('/companies/current/users/:userId', ...withAdmin, businessController.removeCompanyMember);
     router.get('/financial-years', ...withCompany, businessController.getFinancialYears);
     router.post('/financial-years', ...withAdmin, businessController.createFinancialYear);
     router.put('/financial-years/:fyId', ...withAdmin, businessController.updateFinancialYearStatus);
@@ -632,6 +639,87 @@ function createApiRouter(db) {
             res.status(500).json({ error: err.message });
         }
     });
+    router.get('/masters/items/:id/stock-balance', ...withCompany, (req, res) => {
+        try {
+            const item = db.prepare(`
+        SELECT si.item_id, si.company_id, si.item_name, si.item_code, si.sku, si.hsn_sac,
+               si.opening_qty, si.opening_rate_paise, si.purchase_rate_paise, si.selling_rate_paise,
+               COALESCE(u.symbol, 'Nos') as unit_symbol
+        FROM stock_items si
+        LEFT JOIN units u ON si.unit_id = u.unit_id
+        WHERE si.item_id = ?
+      `).get(req.params.id);
+            if (!item) {
+                return res.status(404).json({ error: `Stock item '${req.params.id}' not found.` });
+            }
+            if (!(0, security_js_1.assertResourceOwnership)(res, item.company_id, req.companyId))
+                return;
+            const isService = Boolean((item.hsn_sac && String(item.hsn_sac).trim().startsWith('99')) ||
+                (item.item_name && item.item_name.toLowerCase().includes('service')));
+            if (isService) {
+                return res.json({
+                    itemId: item.item_id,
+                    itemName: item.item_name,
+                    isInventoryTracked: false,
+                    isService: true,
+                    unitSymbol: item.unit_symbol || 'Service',
+                    totalAvailableStock: null,
+                    availableStock: null,
+                    godownId: req.query.godownId || null,
+                    godownBalances: [],
+                    message: 'Item is a service and does not track inventory balances.'
+                });
+            }
+            const requestedGodownId = req.query.godownId;
+            const asOfDate = req.query.asOfDate || new Date().toISOString().split('T')[0];
+            const summary = valuation_js_1.InventoryEngine.getItemStockSummary(db, item.item_id, asOfDate);
+            let godownStock = null;
+            if (requestedGodownId) {
+                const godown = db.prepare('SELECT godown_id, godown_name, company_id FROM godowns WHERE godown_id = ? AND (company_id = ? OR company_id IS NULL)').get(requestedGodownId, req.companyId);
+                if (!godown) {
+                    const foreign = db.prepare('SELECT company_id FROM godowns WHERE godown_id = ?').get(requestedGodownId);
+                    if (foreign && foreign.company_id !== req.companyId) {
+                        return res.status(403).json({ error: 'Unauthorized access to foreign company godown.' });
+                    }
+                    return res.status(404).json({ error: `Godown '${requestedGodownId}' not found.` });
+                }
+                const check = valuation_js_1.InventoryEngine.validateStockAvailability(db, item.item_id, requestedGodownId, 0, false);
+                godownStock = check.currentQty;
+            }
+            // Godown balances list
+            const godowns = db.prepare(`
+        SELECT g.godown_id, g.godown_name, g.is_default
+        FROM godowns g
+        WHERE g.company_id = ? OR g.company_id IS NULL
+        ORDER BY g.is_default DESC, g.godown_name ASC
+      `).all(req.companyId);
+            const godownBalances = godowns.map(g => {
+                const gCheck = valuation_js_1.InventoryEngine.validateStockAvailability(db, item.item_id, g.godown_id, 0, false);
+                return {
+                    godownId: g.godown_id,
+                    godownName: g.godown_name,
+                    isDefault: Boolean(g.is_default),
+                    availableStock: gCheck.currentQty
+                };
+            });
+            res.json({
+                itemId: item.item_id,
+                itemName: item.item_name,
+                isInventoryTracked: true,
+                isService: false,
+                unitSymbol: item.unit_symbol,
+                totalAvailableStock: summary.totalQuantity,
+                availableStock: requestedGodownId ? godownStock : summary.totalQuantity,
+                godownId: requestedGodownId || null,
+                godownBalances,
+                weightedAverageRatePaise: summary.weightedAverageRatePaise,
+                totalValuePaise: summary.totalValuePaise
+            });
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
     router.put('/masters/items/:id', ...withAccountant, (req, res) => {
         try {
             const b = req.body;
@@ -752,7 +840,7 @@ function createApiRouter(db) {
     });
     router.get('/vouchers', ...withCompany, (req, res) => {
         try {
-            const { type, fromDate, toDate, status } = req.query;
+            const { type, fromDate, toDate, status, includeHidden, showCancelled } = req.query;
             let query = `
         SELECT v.*, p.party_name, p.gstin as party_gstin, p.party_type
         FROM vouchers v
@@ -760,6 +848,14 @@ function createApiRouter(db) {
         WHERE v.company_id = ?
       `;
             const params = [req.companyId];
+            // Default: exclude hidden vouchers unless includeHidden is specifically requested
+            if (includeHidden !== 'true' && includeHidden !== '1') {
+                query += ` AND COALESCE(v.is_hidden, 0) = 0`;
+            }
+            // Optional: exclude CANCELLED vouchers if showCancelled === 'false' or '0'
+            if (showCancelled === 'false' || showCancelled === '0') {
+                query += ` AND v.status != 'CANCELLED'`;
+            }
             if (type) {
                 query += ` AND v.voucher_type = ?`;
                 params.push(type);
@@ -794,7 +890,10 @@ function createApiRouter(db) {
         LEFT JOIN party_addresses pa ON p.party_id = pa.party_id
         WHERE v.voucher_id = ?
       `).get(req.params.id);
-            if (!voucher || !(0, security_js_1.assertResourceOwnership)(res, voucher.company_id, req.companyId))
+            if (!voucher) {
+                return res.status(404).json({ error: 'Voucher not found' });
+            }
+            if (!(0, security_js_1.assertResourceOwnership)(res, voucher.company_id, req.companyId))
                 return;
             const lines = db.prepare(`
         SELECT vl.*, si.item_name, si.hsn_sac, u.symbol as unit_symbol, g.godown_name
@@ -963,25 +1062,150 @@ function createApiRouter(db) {
     });
     /**
      * DELETE /vouchers/:id — BLOCKED
+     * DELETE /vouchers/:id — Lifecycle-aware voucher deletion
      *
-     * Posted vouchers are immutable accounting records.
-     * Use POST /vouchers/:id/cancel to reverse accounting effects.
-     * Returns 405 Method Not Allowed.
+     * - POSTED vouchers: BLOCKED (405 Method Not Allowed) to preserve immutability and accounting history.
+     * - DRAFT vouchers: Safely deleted if unposted.
+     * - CANCELLED vouchers: Eligible for permanent purge if all dependent records are audited and purged
+     *   by an authorized OWNER/ADMIN with an explicit tombstone logged.
      */
     router.delete('/vouchers/:id', ...withAdmin, (req, res) => {
-        // Verify ownership first before revealing policy
-        const vch = db.prepare('SELECT voucher_id, company_id, status FROM vouchers WHERE voucher_id = ?').get(req.params.id);
-        if (!vch || !(0, security_js_1.assertResourceOwnership)(res, vch.company_id, req.companyId))
-            return;
-        // DEF-008-09: Unposted DRAFT vouchers have zero accounting or stock effects and may be deleted
-        if (vch.status === 'DRAFT') {
-            db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(vch.voucher_id);
-            db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(vch.voucher_id);
-            return res.status(200).json({ success: true, message: 'Draft voucher deleted successfully.' });
+        try {
+            const vch = db.prepare('SELECT * FROM vouchers WHERE voucher_id = ?').get(req.params.id);
+            if (!vch) {
+                return res.status(404).json({ error: 'Voucher not found' });
+            }
+            if (!(0, security_js_1.assertResourceOwnership)(res, vch.company_id, req.companyId))
+                return;
+            // Invariant: Direct deletion of active POSTED vouchers is strictly prohibited (Suite 5 Test 5.1)
+            if (vch.status === 'POSTED') {
+                return res.status(405).json({
+                    error: 'Direct voucher deletion is not permitted. Posted vouchers are permanent accounting records. Use the cancel operation to reverse accounting effects.'
+                });
+            }
+            // DEF-008-09: Unposted DRAFT vouchers have zero accounting or stock effects and may be deleted
+            if (vch.status === 'DRAFT') {
+                try {
+                    db.exec('BEGIN IMMEDIATE;');
+                    db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(vch.voucher_id);
+                    db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(vch.voucher_id);
+                    db.prepare(`
+            INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(`log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, vch.company_id, req.user.userId, 'DRAFT_VOUCHER_DELETED', 'vouchers', vch.voucher_id, JSON.stringify({ voucher_number: vch.voucher_number, voucher_type: vch.voucher_type, status: 'DRAFT' }));
+                    db.exec('COMMIT;');
+                    return res.status(200).json({ success: true, message: 'Draft voucher deleted successfully.' });
+                }
+                catch (delErr) {
+                    try {
+                        db.exec('ROLLBACK;');
+                    }
+                    catch (_) { }
+                    throw delErr;
+                }
+            }
+            // CANCELLED vouchers: Permanent purge with strict accounting safeguards
+            if (vch.status === 'CANCELLED') {
+                const role = req.membershipRole || req.user?.role;
+                if (role !== 'OWNER' && role !== 'ADMIN') {
+                    return res.status(403).json({ error: 'Permanent deletion requires OWNER or ADMIN role.' });
+                }
+                // Check dependent allocations where other vouchers reference this one
+                const depAlloc = db.prepare(`
+          SELECT COUNT(*) as cnt FROM bill_allocations
+          WHERE reference_voucher_id = ? AND voucher_id != ?
+        `).get(vch.voucher_id, vch.voucher_id);
+                if (depAlloc && depAlloc.cnt > 0) {
+                    return res.status(400).json({
+                        error: `Cannot permanently delete cancelled voucher: ${depAlloc.cnt} external bill allocation(s) still reference this document. Use 'Hide from Normal Lists' instead.`
+                    });
+                }
+                const reason = req.body?.reason || 'Permanent deletion of cancelled voucher by authorized administrator';
+                try {
+                    db.exec('BEGIN IMMEDIATE;');
+                    // 1. Audit tombstone logged before purging
+                    db.prepare(`
+            INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(`log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, vch.company_id, req.user.userId, 'VOUCHER_PERMANENT_PURGE', 'vouchers', vch.voucher_id, JSON.stringify({
+                        voucher_id: vch.voucher_id,
+                        voucher_number: vch.voucher_number,
+                        voucher_type: vch.voucher_type,
+                        fy_id: vch.fy_id,
+                        voucher_date: vch.voucher_date,
+                        total_amount_paise: vch.total_amount_paise,
+                        original_status: 'CANCELLED',
+                        cancelled_by: vch.cancelled_by,
+                        cancelled_at: vch.cancelled_at,
+                        deleted_by: req.user.userId,
+                        deleted_at: new Date().toISOString(),
+                        reason
+                    }));
+                    // 2. Safely purge dependent entries within atomic transaction
+                    db.prepare('DELETE FROM tax_entries WHERE voucher_id = ?').run(vch.voucher_id);
+                    db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ?').run(vch.voucher_id);
+                    db.prepare('DELETE FROM stock_entries WHERE voucher_id = ?').run(vch.voucher_id);
+                    db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(vch.voucher_id);
+                    db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(vch.voucher_id);
+                    db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(vch.voucher_id);
+                    db.exec('COMMIT;');
+                    return res.status(200).json({
+                        success: true,
+                        message: `Voucher ${vch.voucher_number || ''} permanently deleted and audit tombstone recorded.`
+                    });
+                }
+                catch (purgeErr) {
+                    try {
+                        db.exec('ROLLBACK;');
+                    }
+                    catch (_) { }
+                    throw purgeErr;
+                }
+            }
+            res.status(405).json({
+                error: 'Direct voucher deletion is not permitted. Posted vouchers are permanent accounting records. Use the cancel operation to reverse accounting effects.'
+            });
         }
-        res.status(405).json({
-            error: 'Direct voucher deletion is not permitted. Posted vouchers are permanent accounting records. Use the cancel operation to reverse accounting effects.'
-        });
+        catch (err) {
+            console.error('DELETE voucher error:', err);
+            return res.status(500).json({ error: err.message });
+        }
+    });
+    /**
+     * POST /vouchers/:id/hide — Hide an eligible cancelled voucher from default lists
+     */
+    router.post('/vouchers/:id/hide', ...withAdmin, (req, res) => {
+        try {
+            const vch = db.prepare('SELECT voucher_id, company_id, status FROM vouchers WHERE voucher_id = ?').get(req.params.id);
+            if (!vch) {
+                return res.status(404).json({ error: 'Voucher not found' });
+            }
+            if (!(0, security_js_1.assertResourceOwnership)(res, vch.company_id, req.companyId))
+                return;
+            db.prepare('UPDATE vouchers SET is_hidden = 1 WHERE voucher_id = ?').run(vch.voucher_id);
+            res.json({ success: true, message: 'Voucher hidden from normal lists.' });
+        }
+        catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+    /**
+     * POST /vouchers/:id/unhide — Restore a hidden voucher to normal lists
+     */
+    router.post('/vouchers/:id/unhide', ...withAdmin, (req, res) => {
+        try {
+            const vch = db.prepare('SELECT voucher_id, company_id, status FROM vouchers WHERE voucher_id = ?').get(req.params.id);
+            if (!vch) {
+                return res.status(404).json({ error: 'Voucher not found' });
+            }
+            if (!(0, security_js_1.assertResourceOwnership)(res, vch.company_id, req.companyId))
+                return;
+            db.prepare('UPDATE vouchers SET is_hidden = 0 WHERE voucher_id = ?').run(vch.voucher_id);
+            res.json({ success: true, message: 'Voucher restored to normal lists.' });
+        }
+        catch (err) {
+            res.status(400).json({ error: err.message });
+        }
     });
     // --------------------------------------------------------------------------
     // COMPANY-SCOPED — Reports (all require authentication + company membership)

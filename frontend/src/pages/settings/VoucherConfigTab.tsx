@@ -68,12 +68,34 @@ export const VoucherConfigTab: React.FC<VoucherConfigTabProps> = ({
   // History vouchers
   const [recentVouchers, setRecentVouchers] = useState<any[]>([]);
   const [loadingVouchers, setLoadingVouchers] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [configSuccess, setConfigSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    setPrefix(selectedType.defaultPrefix);
-    setNumberFormat(`${selectedType.defaultPrefix}0001`);
+    let prefPrefix = selectedType.defaultPrefix;
+    let prefStartNumber = '1';
+    let prefFormat = `${selectedType.defaultPrefix}0001`;
+    let prefReset = 'Financial Year';
+
+    if (company?.invoice_settings) {
+      try {
+        const s = typeof company.invoice_settings === 'string' ? JSON.parse(company.invoice_settings) : company.invoice_settings;
+        const cfg = s?.voucherNumbering?.[selectedType.apiType];
+        if (cfg) {
+          if (cfg.prefix) prefPrefix = cfg.prefix;
+          if (cfg.startNumber) prefStartNumber = String(cfg.startNumber);
+          if (cfg.format) prefFormat = cfg.format;
+          if (cfg.resetFrequency) prefReset = cfg.resetFrequency;
+        }
+      } catch {}
+    }
+
+    setPrefix(prefPrefix);
+    setStartNumber(prefStartNumber);
+    setNumberFormat(prefFormat);
+    setResetFreq(prefReset);
     loadRecentVouchers(selectedType.apiType);
-  }, [selectedType, company?.company_id]);
+  }, [selectedType, company?.company_id, company?.invoice_settings]);
 
   const loadRecentVouchers = async (type: string) => {
     if (!company?.company_id) return;
@@ -492,39 +514,98 @@ export const VoucherConfigTab: React.FC<VoucherConfigTabProps> = ({
                   </tr>
                 ))
               ) : (
-                [
-                  { no: 'INV0057', date: '10 Oct 2026', party: 'ABC Computers', amt: '₹ 3,658.00', status: 'Posted', user: 'Dreamer' },
-                  { no: 'INV0056', date: '09 Oct 2026', party: 'Tech World', amt: '₹ 12,450.00', status: 'Posted', user: 'Dreamer' },
-                  { no: 'INV0055', date: '08 Oct 2026', party: 'Sri Balaji Enterprises', amt: '₹ 8,900.00', status: 'Posted', user: 'Dreamer' },
-                  { no: 'INV0054', date: '07 Oct 2026', party: 'Local Customer', amt: '₹ 2,000.00', status: 'Cancelled', user: 'Dreamer' },
-                  { no: 'INV0053', date: '06 Oct 2026', party: 'Pixel Systems', amt: '₹ 5,430.00', status: 'Posted', user: 'Dreamer' }
-                ].map((row, idx) => (
-                  <tr key={idx} style={{ borderBottom: '1px solid var(--color-border, #E2E8F0)' }}>
-                    <td style={{ padding: '9px 12px', color: '#64748B' }}>{idx + 1}</td>
-                    <td style={{ padding: '9px 12px', fontWeight: 700, fontFamily: 'monospace' }}>{row.no}</td>
-                    <td style={{ padding: '9px 12px' }}>{row.date}</td>
-                    <td style={{ padding: '9px 12px' }}>{row.party}</td>
-                    <td style={{ padding: '9px 12px', textAlign: 'right', fontFamily: 'monospace' }}>{row.amt}</td>
-                    <td style={{ padding: '9px 12px' }}>
-                      <span
-                        style={{
-                          padding: '2px 8px',
-                          borderRadius: '10px',
-                          fontSize: '10.5px',
-                          fontWeight: 700,
-                          backgroundColor: row.status === 'Cancelled' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(22, 163, 74, 0.1)',
-                          color: row.status === 'Cancelled' ? '#DC2626' : '#15803D'
-                        }}
-                      >
-                        {row.status}
-                      </span>
-                    </td>
-                    <td style={{ padding: '9px 12px', color: '#64748B' }}>{row.user}</td>
-                  </tr>
-                ))
+                <tr>
+                  <td colSpan={7} style={{ padding: '24px 12px', textAlign: 'center', color: '#94A3B8', fontSize: '12px' }}>
+                    No recent {selectedType.name} transactions recorded for this business.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Save Action Bar */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '16px 20px',
+          borderRadius: '8px',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)'
+        }}
+      >
+        <div>
+          {configSuccess ? (
+            <span style={{ fontSize: '12px', color: '#16A34A', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+              <CheckCircle2 size={14} /> {configSuccess}
+            </span>
+          ) : (
+            <span style={{ fontSize: '12px', color: '#64748B' }}>
+              Voucher sequencing rules are auto-incremented by the accounting engine on posting.
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            type="button"
+            disabled={isSavingConfig}
+            onClick={async () => {
+              if (!company) return;
+              setIsSavingConfig(true);
+              setConfigSuccess(null);
+              try {
+                let existingSettings: any = {};
+                if (company.invoice_settings) {
+                  try {
+                    existingSettings = typeof company.invoice_settings === 'string'
+                      ? JSON.parse(company.invoice_settings)
+                      : company.invoice_settings;
+                  } catch {}
+                }
+
+                const voucherNumbering = existingSettings.voucherNumbering || {};
+                voucherNumbering[selectedType.apiType] = {
+                  prefix: prefix.trim(),
+                  startNumber: parseInt(startNumber, 10) || 1,
+                  format: numberFormat,
+                  resetFrequency: resetFreq
+                };
+
+                const updatedJson = JSON.stringify({
+                  ...existingSettings,
+                  voucherNumbering
+                });
+
+                await api.updateCurrentCompany({ invoice_settings: updatedJson });
+                setConfigSuccess(`Numbering preferences saved for ${selectedType.name}.`);
+                setTimeout(() => setConfigSuccess(null), 3000);
+              } catch (err: any) {
+                alert(err.message || 'Failed to update numbering configuration');
+              } finally {
+                setIsSavingConfig(false);
+              }
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 18px',
+              fontSize: '12px',
+              fontWeight: 700,
+              borderRadius: '6px',
+              border: 'none',
+              backgroundColor: '#EA580C',
+              color: '#FFFFFF',
+              cursor: isSavingConfig ? 'not-allowed' : 'pointer',
+              opacity: isSavingConfig ? 0.7 : 1
+            }}
+          >
+            {isSavingConfig ? 'Saving...' : 'Apply Changes'}
+          </button>
         </div>
       </div>
     </div>

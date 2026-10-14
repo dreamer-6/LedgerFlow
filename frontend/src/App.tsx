@@ -43,6 +43,7 @@ import { QuotationRecord } from './utils/quotationStorage';
 import { CreateBusinessOnboarding } from './components/CreateBusinessOnboarding';
 import { DateChangeModal } from './components/DateChangeModal';
 import { FinancialYearModal } from './components/FinancialYearModal';
+import { getLocalTodayDateString } from './utils/dateUtils';
 import {
   Search,
   LayoutDashboard,
@@ -106,7 +107,9 @@ export const App: React.FC = () => {
 
   const [company, setCompany] = useState<Company | null>(null);
   const [activeFy, setActiveFy] = useState<FinancialYear | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => {
+    return !!authStorage.getToken() && !!authStorage.getUser();
+  });
 
   // Tab & View States
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -148,7 +151,14 @@ export const App: React.FC = () => {
 
   // Working Transaction Date (F2 in Tally Prime)
   const [currentDate, setCurrentDate] = useState<string>(() => {
-    return localStorage.getItem('lf_current_date') || new Date().toISOString().split('T')[0];
+    // If the user explicitly set a working transaction date during this browser session, respect it
+    const sessionDate = sessionStorage.getItem('lf_working_date');
+    if (sessionDate) return sessionDate;
+
+    // Otherwise, default to today's actual local calendar date (e.g. 2026-10-13)
+    const today = getLocalTodayDateString();
+    localStorage.setItem('lf_current_date', today);
+    return today;
   });
   const [showDateModal, setShowDateModal] = useState<boolean>(false);
 
@@ -157,11 +167,13 @@ export const App: React.FC = () => {
 
   const handleDateChange = (newDate: string) => {
     setCurrentDate(newDate);
+    sessionStorage.setItem('lf_working_date', newDate);
     localStorage.setItem('lf_current_date', newDate);
   };
 
   const handleSelectFy = (newFy: FinancialYear) => {
     setActiveFy(newFy);
+    authStorage.setSelectedFyId(newFy.fy_id);
     // If current date falls outside the selected FY range, auto-shift to FY start date
     if (newFy.start_date && (currentDate < newFy.start_date || currentDate > newFy.end_date)) {
       handleDateChange(newFy.start_date);
@@ -169,22 +181,40 @@ export const App: React.FC = () => {
   };
 
   const loadCompanyData = async () => {
-    const activeId = authStorage.getActiveCompanyId();
-    if (!activeId) {
-      setCompany(null);
-      setActiveFy(null);
-      setLoading(false);
-      return;
-    }
+    let activeId = authStorage.getActiveCompanyId();
     try {
-      const res = await api.getCompanyAndFy();
       const bizList = await api.getBusinesses().catch(() => []);
+      if (!activeId && bizList.length > 0) {
+        activeId = bizList[0].company_id || (bizList[0] as any).companyId;
+        if (activeId) authStorage.setActiveCompanyId(activeId);
+      }
+      if (!activeId) {
+        setCompany(null);
+        setActiveFy(null);
+        setLoading(false);
+        return;
+      }
+      const res = await api.getCompanyAndFy();
       const match = bizList.find((b: any) => (b.company_id || b.companyId) === activeId);
       const enrichedCompany = res.company
         ? { ...res.company, role: match?.role || (res.company as any).role || user?.role || 'OWNER' }
         : null;
       setCompany(enrichedCompany);
-      setActiveFy(res.activeFinancialYear);
+
+      const savedFyId = authStorage.getSelectedFyId();
+      let chosenFy = res.activeFinancialYear;
+      if (savedFyId && savedFyId !== res.activeFinancialYear?.fy_id) {
+        try {
+          const fyList = await api.getFinancialYears(activeId);
+          const found = fyList.find((fy) => fy.fy_id === savedFyId);
+          if (found) {
+            chosenFy = found;
+          }
+        } catch {
+          // Keep activeFinancialYear if fetch fails
+        }
+      }
+      setActiveFy(chosenFy);
     } catch (err) {
       console.error('Failed to load company master:', err);
     } finally {
@@ -216,6 +246,7 @@ export const App: React.FC = () => {
     userBizs: Company[],
     requiresOnboarding: boolean = false
   ) => {
+    authStorage.setUser(authUser);
     setUser(authUser);
     setIsAuthenticated(true);
     sessionStorage.removeItem('lf_draft_signup');
@@ -675,42 +706,6 @@ export const App: React.FC = () => {
     setSearchQuery('');
   };
 
-  if (!isAuthenticated && !currentRoute.startsWith('/business-setup')) {
-    return (
-      <AuthView
-        initialMode={currentRoute === '/signup' ? 'SIGNUP' : 'LOGIN'}
-        onAuthSuccess={handleAuthSuccess}
-        onNavigateToBusinessSetup={handleNavigateToBusinessSetup}
-      />
-    );
-  }
-
-  // If user is authenticated and onboarding is pending, render business setup wizard immediately
-  const isOnboardingPending =
-    sessionStorage.getItem('lf_onboarding_pending') === 'true' ||
-    currentRoute.startsWith('/business-setup') ||
-    (!company && businesses.length === 0);
-
-  if (isOnboardingPending) {
-    return (
-      <CreateBusinessOnboarding
-        user={user}
-        draftSignupUser={null}
-        onBusinessCreated={(newCompany) => {
-          sessionStorage.removeItem('lf_onboarding_pending');
-          sessionStorage.removeItem('lf_onboarding_draft');
-          setBusinesses([newCompany]);
-          setCompany(newCompany);
-          authStorage.setActiveCompanyId(newCompany.company_id);
-          loadCompanyData();
-          loadBusinesses();
-          navigateTo('/');
-        }}
-        onLogout={handleLogout}
-      />
-    );
-  }
-
   if (loading) {
     return (
       <div
@@ -732,6 +727,42 @@ export const App: React.FC = () => {
           Loading double-entry accounting engine...
         </div>
       </div>
+    );
+  }
+
+  if (!isAuthenticated && !currentRoute.startsWith('/business-setup')) {
+    return (
+      <AuthView
+        initialMode={currentRoute === '/signup' ? 'SIGNUP' : 'LOGIN'}
+        onAuthSuccess={handleAuthSuccess}
+        onNavigateToBusinessSetup={handleNavigateToBusinessSetup}
+      />
+    );
+  }
+
+  // If user is authenticated and onboarding is pending, render business setup wizard immediately
+  const isOnboardingPending =
+    sessionStorage.getItem('lf_onboarding_pending') === 'true' ||
+    currentRoute.startsWith('/business-setup') ||
+    (!loading && !company && businesses.length === 0);
+
+  if (isOnboardingPending) {
+    return (
+      <CreateBusinessOnboarding
+        user={user}
+        draftSignupUser={null}
+        onBusinessCreated={(newCompany) => {
+          sessionStorage.removeItem('lf_onboarding_pending');
+          sessionStorage.removeItem('lf_onboarding_draft');
+          setBusinesses([newCompany]);
+          setCompany(newCompany);
+          authStorage.setActiveCompanyId(newCompany.company_id);
+          loadCompanyData();
+          loadBusinesses();
+          navigateTo('/');
+        }}
+        onLogout={handleLogout}
+      />
     );
   }
 
@@ -759,8 +790,10 @@ export const App: React.FC = () => {
         setPaymentViewMode={setPaymentViewMode}
         journalViewMode={journalViewMode}
         setJournalViewMode={setJournalViewMode}
+        currentDate={currentDate}
         onOpenBusinessSwitcher={() => setShowBusinessSwitcher(true)}
         onOpenFyModal={() => setShowFyModal(true)}
+        onOpenDateModal={() => setShowDateModal(true)}
         onOpenSearch={() => setShowSearchModal(true)}
         onLogout={handleLogout}
       >
@@ -1394,6 +1427,8 @@ export const App: React.FC = () => {
                 company={company} 
                 onCompanyUpdated={loadCompanyData} 
                 onNavigateToTab={(tab) => setActiveTab(tab)}
+                activeFy={activeFy}
+                onSelectFy={handleSelectFy}
                 onCompanyDeleted={async () => {
                   try {
                     const list = await api.getBusinesses();

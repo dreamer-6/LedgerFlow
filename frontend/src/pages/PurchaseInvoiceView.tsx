@@ -234,6 +234,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [printVoucherId, setPrintVoucherId] = useState<string | null>(null);
+  const [livePreviewData, setLivePreviewData] = useState<{ voucher: any; lines: any[] } | null>(null);
 
   // Search popover ref
   const supplierRef = useRef<HTMLDivElement>(null);
@@ -483,7 +484,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
     return {
       voucherType: 'PURCHASE',
       voucherDate,
-      voucherNumber: voucherNumber || undefined,
+      voucherNumber: status === 'DRAFT' ? undefined : (voucherNumber || undefined),
       partyId: partyId || undefined,
       placeOfSupply: `${placeOfSupply}`,
       paymentTerms: paymentTerms ? `${paymentTerms} Days` : undefined,
@@ -504,6 +505,68 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
         serialNumber: l.serialNumber || undefined,
         movementType: 'IN' // Purchase vouchers bring stock IN
       }))
+    };
+  };
+
+  /* ── Prepare Live Voucher Data for Non-Destructive Preview ── */
+  const prepareLiveVoucherData = () => {
+    const validLines = lines.filter(l => l.itemId || l.name?.trim() || l.description?.trim() || (Number(l.quantity) > 0 && Number(l.rate) > 0));
+    const linesToUse = validLines.length > 0 ? validLines : lines;
+    const chosenSupplier = suppliers.find(s => s.party_id === partyId);
+
+    return {
+      voucher: {
+        voucher_id: 'preview_draft',
+        voucher_number: voucherNumber || 'PUR-DRAFT',
+        voucher_date: voucherDate,
+        voucher_type: 'PURCHASE',
+        reference_number: supplierInvoiceNo || referenceNo || undefined,
+        reference_date: voucherDate,
+        party_id: partyId || undefined,
+        party_name: chosenSupplier?.party_name || 'Cash Purchase',
+        party_gstin: chosenSupplier?.gstin || undefined,
+        party_pan: chosenSupplier?.pan || undefined,
+        address_line1: chosenSupplier?.address_line1 || undefined,
+        address_line2: chosenSupplier?.address_line2 || undefined,
+        city: chosenSupplier?.city || undefined,
+        state: chosenSupplier?.state || undefined,
+        state_code: chosenSupplier?.state_code || placeOfSupply || undefined,
+        pincode: chosenSupplier?.pincode || undefined,
+        phone: chosenSupplier?.phone || undefined,
+        email: chosenSupplier?.email || undefined,
+        taxable_amount_paise: Math.round(invoiceTotals.taxable * 100),
+        cgst_amount_paise: Math.round(invoiceTotals.cgst * 100),
+        sgst_amount_paise: Math.round(invoiceTotals.sgst * 100),
+        igst_amount_paise: Math.round(invoiceTotals.igst * 100),
+        tax_amount_paise: Math.round(invoiceTotals.taxTotal * 100),
+        total_amount_paise: Math.round(invoiceTotals.grandTotal * 100),
+        narration: narration || notes || undefined,
+        status: 'DRAFT',
+        payment_terms: paymentTerms ? `${paymentTerms} Days` : 'Immediate'
+      },
+      lines: linesToUse.map((l, idx) => {
+        const { taxable, taxAmt, lineTotal } = calcLineAmounts(l, taxMode);
+        const itemObj = items.find(it => it.item_id === l.itemId);
+        const isInterState = invoiceTotals.isInterState;
+
+        return {
+          line_number: idx + 1,
+          item_id: l.itemId,
+          item_name: l.name || itemObj?.item_name || l.description || 'Item',
+          description: l.description,
+          hsn_sac: l.hsnCode || itemObj?.hsn_sac || '',
+          quantity: Number(l.quantity) || 1,
+          unit: l.unit || itemObj?.unit_symbol || 'NOS',
+          unit_symbol: l.unit || itemObj?.unit_symbol || 'NOS',
+          rate_paise: Math.round((Number(l.rate) || 0) * 100),
+          taxable_amount_paise: Math.round(taxable * 100),
+          tax_rate: Number(l.gstRate) || 0,
+          cgst_amount_paise: isInterState ? 0 : Math.round((taxAmt / 2) * 100),
+          sgst_amount_paise: isInterState ? 0 : Math.round((taxAmt / 2) * 100),
+          igst_amount_paise: isInterState ? Math.round(taxAmt * 100) : 0,
+          total_amount_paise: Math.round(lineTotal * 100)
+        };
+      })
     };
   };
 
@@ -610,11 +673,15 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
       )}
 
       {/* Print / Preview Modal */}
-      {printVoucherId && (
+      {(printVoucherId || livePreviewData) && (
         <InvoicePrintModal
           voucherId={printVoucherId}
+          liveVoucherData={livePreviewData}
           company={company}
-          onClose={() => setPrintVoucherId(null)}
+          onClose={() => {
+            setPrintVoucherId(null);
+            setLivePreviewData(null);
+          }}
         />
       )}
 
@@ -1267,9 +1334,9 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
             </div>
 
             {/* Items Table */}
-            <div style={{ overflowX: 'auto', marginBottom: '14px' }}>
+            <div style={{ overflowX: 'auto', marginBottom: '14px', minHeight: '260px', position: 'relative' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
-                <thead>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-card, #FFFFFF)' }}>
                   <tr style={{ backgroundColor: 'var(--bg-subtle, #F8FAFC)', borderBottom: '1px solid var(--border-subtle, #E2E8F0)' }}>
                     <th style={{ width: '30px', padding: '8px 10px', textAlign: 'center', color: 'var(--text-muted)' }}>#</th>
                     <th style={{ minWidth: '220px', padding: '8px 10px', textAlign: 'left', color: 'var(--text-muted)' }}>Item Name & Description</th>
@@ -1820,28 +1887,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  // Live preview with current form inputs
-                  const previewPayload = buildPayload('DRAFT');
-                  (window as any)._previewVoucherData = {
-                    voucher: {
-                      voucher_number: voucherNumber || 'PREVIEW',
-                      voucher_type: 'PURCHASE',
-                      voucher_date: voucherDate,
-                      party_name: selectedSupplier?.party_name || 'Cash Purchase',
-                      party_gstin: selectedSupplier?.gstin || 'Unregistered',
-                      total_amount_paise: invoiceTotals.grandTotal * 100,
-                      status: 'DRAFT'
-                    },
-                    lines: lines.map((l, idx) => ({
-                      line_number: idx + 1,
-                      description: l.name || l.description || 'Item',
-                      hsn_sac: l.hsnCode,
-                      quantity: Number(l.quantity),
-                      rate_paise: Math.round(Number(l.rate) * 100),
-                      total_amount_paise: Math.round(Number(l.rate) * Number(l.quantity) * 100)
-                    }))
-                  };
-                  showToast('Live preview generated.');
+                  setLivePreviewData(prepareLiveVoucherData());
                 }}
                 className="lf-btn lf-btn-secondary"
                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', justifyContent: 'flex-start' }}
@@ -1851,7 +1897,9 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
 
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={() => {
+                  setLivePreviewData(prepareLiveVoucherData());
+                }}
                 className="lf-btn lf-btn-secondary"
                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', justifyContent: 'flex-start' }}
               >

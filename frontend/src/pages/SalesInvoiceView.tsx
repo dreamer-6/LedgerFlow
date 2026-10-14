@@ -16,6 +16,7 @@
  */
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { api, Company, FinancialYear } from '../api/client';
 import { InvoicePrintModal } from './InvoicePrintModal';
 import { QuickCustomerModal, QuickItemModal } from '../components/accounting';
@@ -143,6 +144,10 @@ export interface LineItem {
   godownId: string;
   serialNumber?: string;
   isService?: boolean;
+  availableStock?: number | null;
+  stockLoading?: boolean;
+  stockError?: string | null;
+  isInventoryTracked?: boolean;
 }
 
 const emptyLine = (): LineItem => ({
@@ -183,12 +188,13 @@ function calcLineAmounts(line: LineItem, taxMode: 'EXCLUSIVE' | 'INCLUSIVE') {
 }
 
 /* ─────────────────────────────────────────────
-   Searchable Combobox Component
+   Searchable Combobox Component with Immediate Search & Keyboard Nav
 ────────────────────────────────────────────── */
 interface ComboboxItem {
   id: string;
   label: string;
   sub?: string;
+  keywords?: string[];
 }
 
 const Combobox: React.FC<{
@@ -203,13 +209,51 @@ const Combobox: React.FC<{
 }> = ({ value, items, placeholder = 'Search…', onSelect, onClear, onAddNew, addNewLabel, style }) => {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  const [highlightIdx, setHighlightIdx] = useState<number>(-1);
   const ref = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; openUp: boolean } | null>(null);
 
   const selected = items.find(i => i.id === value);
 
+  // Position calculation for Portal dropdown
+  useEffect(() => {
+    if (!open) {
+      setCoords(null);
+      return;
+    }
+
+    const updateCoords = () => {
+      if (!ref.current) return;
+      const rect = ref.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUp = spaceBelow < 230 && rect.top > 230;
+
+      setCoords({
+        top: openUp ? rect.top : rect.bottom + 4,
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - 360)),
+        width: Math.max(rect.width, 320),
+        openUp
+      });
+    };
+
+    updateCoords();
+    window.addEventListener('scroll', updateCoords, true);
+    window.addEventListener('resize', updateCoords);
+    return () => {
+      window.removeEventListener('scroll', updateCoords, true);
+      window.removeEventListener('resize', updateCoords);
+    };
+  }, [open]);
+
+  // Click outside listener accounting for portal element
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        ref.current && !ref.current.contains(target) &&
+        listRef.current && !listRef.current.contains(target)
+      ) {
         setOpen(false);
       }
     };
@@ -217,10 +261,56 @@ const Combobox: React.FC<{
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const filtered = items.filter(i =>
-    i.label.toLowerCase().includes(q.toLowerCase()) ||
-    (i.sub && i.sub.toLowerCase().includes(q.toLowerCase()))
-  );
+  const query = q.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!query) return items;
+    return items.filter(i => {
+      if (i.label.toLowerCase().includes(query)) return true;
+      if (i.sub && i.sub.toLowerCase().includes(query)) return true;
+      if (i.keywords && i.keywords.some(k => k && k.toLowerCase().includes(query))) return true;
+      return false;
+    });
+  }, [items, query]);
+
+  useEffect(() => {
+    if (open && filtered.length > 0) {
+      setHighlightIdx(0);
+    } else {
+      setHighlightIdx(-1);
+    }
+  }, [open, q, filtered.length]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setOpen(true);
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightIdx(prev => (prev < filtered.length - 1 ? prev + 1 : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightIdx(prev => (prev > 0 ? prev - 1 : Math.max(0, filtered.length - 1)));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlightIdx >= 0 && highlightIdx < filtered.length) {
+        onSelect(filtered[highlightIdx].id);
+        setOpen(false);
+        setQ('');
+      } else if (filtered.length === 0 && onAddNew) {
+        onAddNew();
+        setOpen(false);
+        setQ('');
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setOpen(false);
+    }
+  };
 
   return (
     <div ref={ref} style={{ position: 'relative', width: '100%', ...style }}>
@@ -238,6 +328,7 @@ const Combobox: React.FC<{
             setOpen(true);
             setQ('');
           }}
+          onKeyDown={handleKeyDown}
           style={{
             width: '100%',
             paddingRight: '32px',
@@ -281,21 +372,23 @@ const Combobox: React.FC<{
         )}
       </div>
 
-      {open && (
+      {open && coords && createPortal(
         <div
+          ref={listRef}
           style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            backgroundColor: 'var(--bg-card, #FFFFFF)',
-            border: '1px solid var(--border-subtle, #E2E8F0)',
+            position: 'fixed',
+            top: coords.openUp ? 'auto' : `${coords.top}px`,
+            bottom: coords.openUp ? `${window.innerHeight - coords.top + 4}px` : 'auto',
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            maxWidth: '460px',
+            zIndex: 99999,
+            backgroundColor: 'var(--bg-card, #1E293B)',
+            border: '1px solid var(--border-subtle, #334155)',
             borderRadius: '8px',
-            boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+            boxShadow: '0 16px 36px rgba(0,0,0,0.35)',
             maxHeight: '230px',
-            overflowY: 'auto',
-            marginTop: '3px'
+            overflowY: 'auto'
           }}
         >
           {filtered.length === 0 && !onAddNew ? (
@@ -304,31 +397,36 @@ const Combobox: React.FC<{
             </div>
           ) : (
             <>
-              {filtered.slice(0, 30).map(item => (
-                <div
-                  key={item.id}
-                  onClick={() => {
-                    onSelect(item.id);
-                    setOpen(false);
-                    setQ('');
-                  }}
-                  style={{
-                    padding: '9px 12px',
-                    cursor: 'pointer',
-                    fontSize: '12.5px',
-                    color: 'var(--text-primary)',
-                    borderBottom: '1px solid var(--border-subtle, #F1F5F9)'
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, #F8FAFC)')}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
-                >
-                  <div style={{ fontWeight: 600 }}>{item.label}</div>
-                  {item.sub && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{item.sub}</div>}
-                </div>
-              ))}
+              {filtered.slice(0, 40).map((item, idx) => {
+                const isHighlighted = idx === highlightIdx;
+                return (
+                  <div
+                    key={item.id}
+                    onMouseDown={e => {
+                      e.preventDefault();
+                      onSelect(item.id);
+                      setOpen(false);
+                      setQ('');
+                    }}
+                    onMouseEnter={() => setHighlightIdx(idx)}
+                    style={{
+                      padding: '9px 12px',
+                      cursor: 'pointer',
+                      fontSize: '12.5px',
+                      color: 'var(--text-primary)',
+                      backgroundColor: isHighlighted ? 'var(--bg-hover, rgba(255,107,43,0.12))' : 'transparent',
+                      borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.06))'
+                    }}
+                  >
+                    <div style={{ fontWeight: 600 }}>{item.label}</div>
+                    {item.sub && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{item.sub}</div>}
+                  </div>
+                );
+              })}
               {onAddNew && (
                 <div
-                  onClick={() => {
+                  onMouseDown={e => {
+                    e.preventDefault();
                     setOpen(false);
                     onAddNew();
                   }}
@@ -352,7 +450,8 @@ const Combobox: React.FC<{
               )}
             </>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -420,6 +519,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [printVoucherId, setPrintVoucherId] = useState<string | null>(null);
+  const [livePreviewData, setLivePreviewData] = useState<{ voucher: any; lines: any[] } | null>(null);
 
   /* ── Quick Master Modals ── */
   const [showQuickCustomerModal, setShowQuickCustomerModal] = useState(false);
@@ -537,12 +637,54 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     setLines(prev => prev.map((l, i) => (i === index ? { ...l, [field]: value } : l)));
   };
 
+  const fetchStockForLine = async (lineIndex: number, itemId: string, godownId?: string) => {
+    if (!itemId) return;
+    setLines(prev =>
+      prev.map((l, i) =>
+        i === lineIndex
+          ? { ...l, stockLoading: true, stockError: null }
+          : l
+      )
+    );
+    try {
+      const res = await api.getItemStockBalance(itemId, godownId || undefined, voucherDate);
+      setLines(prev =>
+        prev.map((l, i) =>
+          i === lineIndex
+            ? {
+                ...l,
+                stockLoading: false,
+                stockError: null,
+                availableStock: res.availableStock,
+                isInventoryTracked: res.isInventoryTracked,
+                isService: res.isService
+              }
+            : l
+        )
+      );
+    } catch (err: any) {
+      setLines(prev =>
+        prev.map((l, i) =>
+          i === lineIndex
+            ? {
+                ...l,
+                stockLoading: false,
+                stockError: err.message || 'Unable to load stock',
+                availableStock: null
+              }
+            : l
+        )
+      );
+    }
+  };
+
   const selectItem = (lineIndex: number, itemId: string) => {
     const item = stockItems.find(s => s.item_id === itemId);
     if (!item) return;
     const defaultGodown = godowns[0]?.godown_id || '';
     const sellRate = item.selling_rate_paise ? item.selling_rate_paise / 100 : 0;
     const gstRate = item.gst_rate ?? 18;
+    const chosenGodown = lines[lineIndex]?.godownId || defaultGodown;
 
     setLines(prev =>
       prev.map((l, i) =>
@@ -556,11 +698,24 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
               unit: item.unit_symbol || 'NOS',
               rate: taxMode === 'INCLUSIVE' ? sellRate * (1 + gstRate / 100) : sellRate,
               gstRate,
-              godownId: l.godownId || defaultGodown
+              godownId: chosenGodown,
+              stockLoading: true,
+              stockError: null
             }
           : l
       )
     );
+
+    // Authoritative stock balance fetch
+    fetchStockForLine(lineIndex, item.item_id, chosenGodown);
+  };
+
+  const handleGodownChange = (lineIndex: number, newGodownId: string) => {
+    updateLine(lineIndex, 'godownId', newGodownId);
+    const line = lines[lineIndex];
+    if (line?.itemId) {
+      fetchStockForLine(lineIndex, line.itemId, newGodownId);
+    }
   };
 
   const addRow = (isService = false) => {
@@ -606,7 +761,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     return {
       voucherType: 'SALES',
       voucherDate,
-      voucherNumber: voucherNumber || undefined,
+      voucherNumber: status === 'DRAFT' ? undefined : (voucherNumber || undefined),
       partyId: partyId || undefined,
       placeOfSupply: `${placeOfSupply}`,
       paymentTerms: paymentTerms ? `${paymentTerms} Days` : undefined,
@@ -674,7 +829,70 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     }
   };
 
-  /* ── Party & Item Combobox Options ── */
+  /* ── Prepare Live Voucher Data for Non-Destructive Preview ── */
+  const prepareLiveVoucherData = () => {
+    const validLines = lines.filter(l => l.itemId || l.description?.trim() || (Number(l.quantity) > 0 && Number(l.rate) > 0));
+    const linesToUse = validLines.length > 0 ? validLines : lines;
+    const isInterState = company?.state_code && placeOfSupply && company.state_code !== placeOfSupply;
+
+    return {
+      voucher: {
+        voucher_id: 'preview_draft',
+        voucher_number: voucherNumber || 'INV-DRAFT',
+        voucher_date: voucherDate,
+        voucher_type: 'SALES',
+        reference_number: referenceNo || undefined,
+        reference_date: voucherDate,
+        due_date: dueDate,
+        party_id: partyId || undefined,
+        party_name: selectedParty?.party_name || 'Cash Customer',
+        party_gstin: selectedParty?.gstin || undefined,
+        party_pan: selectedParty?.pan || undefined,
+        address_line1: selectedParty?.address_line1 || undefined,
+        address_line2: selectedParty?.address_line2 || undefined,
+        city: selectedParty?.city || undefined,
+        state: selectedParty?.state || undefined,
+        state_code: selectedParty?.state_code || placeOfSupply || undefined,
+        pincode: selectedParty?.pincode || undefined,
+        phone: selectedParty?.phone || undefined,
+        email: selectedParty?.email || undefined,
+        taxable_amount_paise: Math.round(totals.taxable * 100),
+        cgst_amount_paise: isInterState ? 0 : Math.round((totals.taxTotal / 2) * 100),
+        sgst_amount_paise: isInterState ? 0 : Math.round((totals.taxTotal / 2) * 100),
+        igst_amount_paise: isInterState ? Math.round(totals.taxTotal * 100) : 0,
+        tax_amount_paise: Math.round(totals.taxTotal * 100),
+        total_amount_paise: Math.round(totals.grandTotal * 100),
+        narration: narration || notes || undefined,
+        terms_and_conditions: termsAndCond || undefined,
+        status: 'DRAFT',
+        payment_terms: paymentTerms ? `${paymentTerms} Days` : 'Immediate'
+      },
+      lines: linesToUse.map((l, idx) => {
+        const { taxable, taxAmt, lineTotal } = calcLineAmounts(l, taxMode);
+        const itemObj = stockItems.find(it => it.item_id === l.itemId);
+
+        return {
+          line_number: idx + 1,
+          item_id: l.itemId,
+          item_name: itemObj?.item_name || l.description || 'Item',
+          description: l.description,
+          hsn_sac: l.hsnSac || itemObj?.hsn_sac || '',
+          quantity: Number(l.quantity) || 1,
+          unit: l.unit || itemObj?.unit_symbol || 'NOS',
+          unit_symbol: l.unit || itemObj?.unit_symbol || 'NOS',
+          rate_paise: Math.round((Number(l.rate) || 0) * 100),
+          taxable_amount_paise: Math.round(taxable * 100),
+          tax_rate: Number(l.gstRate) || 0,
+          cgst_amount_paise: isInterState ? 0 : Math.round((taxAmt / 2) * 100),
+          sgst_amount_paise: isInterState ? 0 : Math.round((taxAmt / 2) * 100),
+          igst_amount_paise: isInterState ? Math.round(taxAmt * 100) : 0,
+          total_amount_paise: Math.round(lineTotal * 100)
+        };
+      })
+    };
+  };
+
+  /* ── Party & Item Combobox Options with Extended Search Keywords ── */
   const partyItems: ComboboxItem[] = useMemo(
     () =>
       parties
@@ -682,7 +900,8 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
         .map(p => ({
           id: p.party_id,
           label: `${p.party_name} (${p.party_code || 'CUS'})`,
-          sub: [p.gstin && `GSTIN: ${p.gstin}`, p.phone, p.city].filter(Boolean).join(' · ')
+          sub: [p.gstin && `GSTIN: ${p.gstin}`, p.phone && `Ph: ${p.phone}`, p.email, p.city].filter(Boolean).join(' · '),
+          keywords: [p.party_name, p.party_code, p.gstin, p.phone, p.email, p.city, p.state].filter(Boolean)
         })),
     [parties]
   );
@@ -693,13 +912,16 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
         id: s.item_id,
         label: s.item_name,
         sub: [
+          s.item_code && `Code: ${s.item_code}`,
+          s.sku && `SKU: ${s.sku}`,
           s.hsn_sac && `HSN: ${s.hsn_sac}`,
           s.unit_symbol,
           `GST: ${s.gst_rate}%`,
-          `₹${(s.selling_rate_paise / 100).toLocaleString('en-IN')}`
+          `₹${((s.selling_rate_paise || 0) / 100).toLocaleString('en-IN')}`
         ]
           .filter(Boolean)
-          .join(' · ')
+          .join(' · '),
+        keywords: [s.item_name, s.item_code, s.sku, s.barcode, s.hsn_sac, s.unit_symbol].filter(Boolean)
       })),
     [stockItems]
   );
@@ -730,11 +952,15 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
       )}
 
       {/* Print / Preview Modal */}
-      {printVoucherId && (
+      {(printVoucherId || livePreviewData) && (
         <InvoicePrintModal
           voucherId={printVoucherId}
+          liveVoucherData={livePreviewData}
           company={company}
-          onClose={() => setPrintVoucherId(null)}
+          onClose={() => {
+            setPrintVoucherId(null);
+            setLivePreviewData(null);
+          }}
         />
       )}
 
@@ -838,102 +1064,125 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
         {/* Left Column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
 
-          {/* Row 1: Customer Details + Invoice Details */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          {/* Row 1: Customer Details + Invoice Details (Harmonized Layout & Height) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 380px) 1fr', gap: '16px', alignItems: 'stretch' }}>
 
             {/* Customer Details Card */}
-            <div className="ledger-card" style={{ padding: '18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                  <UserPlus size={15} color="#FF6B2B" />
-                  <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>Customer Details</span>
+            <div className="ledger-card" style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                    <UserPlus size={15} color="#FF6B2B" />
+                    <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>Customer Details</span>
+                  </div>
+                  <button
+                    type="button"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#FF641F',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    onClick={() => setShowQuickCustomerModal(true)}
+                  >
+                    <Plus size={12} /> New Customer
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: '#FF641F',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                  onClick={() => setShowQuickCustomerModal(true)}
-                >
-                  <Plus size={12} /> New Customer
-                </button>
+
+                <Combobox
+                  value={partyId}
+                  items={partyItems}
+                  placeholder="Search customer name, GSTIN, city…"
+                  onSelect={handleSelectParty}
+                  onClear={() => setPartyId('')}
+                  style={{ marginBottom: '10px' }}
+                />
               </div>
 
-              <Combobox
-                value={partyId}
-                items={partyItems}
-                placeholder="Search customer name, GSTIN, city…"
-                onSelect={handleSelectParty}
-                onClear={() => setPartyId('')}
-                style={{ marginBottom: '12px' }}
-              />
-
-              {selectedParty && (
+              {selectedParty ? (
                 <div
                   style={{
                     backgroundColor: 'var(--bg-subtle, #F8FAFC)',
                     border: '1px solid var(--border-subtle, #E2E8F0)',
                     borderRadius: '8px',
-                    padding: '12px 14px',
-                    fontSize: '12px'
+                    padding: '10px 12px',
+                    fontSize: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
                   }}
                 >
-                  <div style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                    {selectedParty.party_name}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>
+                      {selectedParty.party_name}
+                    </div>
+                    <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#FF6B2B', backgroundColor: 'rgba(255,107,43,0.1)', padding: '1px 6px', borderRadius: '4px' }}>
+                      {selectedParty.party_code || 'CUS-001'}
+                    </span>
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                    {selectedParty.party_code || 'CUS-001'} &bull; {[selectedParty.address_line1, selectedParty.city, selectedParty.state].filter(Boolean).join(', ')}
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.3 }}>
+                    {[selectedParty.address_line1, selectedParty.city, selectedParty.state].filter(Boolean).join(', ') || 'No address provided'}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: '3px 8px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                    {selectedParty.gstin && (
-                      <>
-                        <span style={{ fontWeight: 600 }}>GSTIN</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{selectedParty.gstin}</span>
-                      </>
-                    )}
-                    {selectedParty.phone && (
-                      <>
-                        <span style={{ fontWeight: 600 }}>Phone</span>
-                        <span style={{ color: 'var(--text-primary)' }}>{selectedParty.phone}</span>
-                      </>
-                    )}
-                    {selectedParty.email && (
-                      <>
-                        <span style={{ fontWeight: 600 }}>Email</span>
-                        <span style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedParty.email}</span>
-                      </>
-                    )}
-                    {selectedParty.state_code && (
-                      <>
-                        <span style={{ fontWeight: 600 }}>State</span>
-                        <span style={{ color: 'var(--text-primary)' }}>{selectedParty.state || 'Tamil Nadu'} ({selectedParty.state_code})</span>
-                      </>
-                    )}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 8px', fontSize: '11px', borderTop: '1px solid var(--border-subtle, #E2E8F0)', paddingTop: '6px' }}>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>GSTIN: </span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>{selectedParty.gstin || 'Unregistered'}</span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Phone: </span>
+                      <span style={{ color: 'var(--text-primary)' }}>{selectedParty.phone || '—'}</span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>State: </span>
+                      <span style={{ color: 'var(--text-primary)' }}>{selectedParty.state || 'Tamil Nadu'} ({selectedParty.state_code || '33'})</span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-muted)' }}>Email: </span>
+                      <span style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedParty.email || '—'}</span>
+                    </div>
                   </div>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    backgroundColor: 'var(--bg-subtle, #F8FAFC)',
+                    border: '1px dashed var(--border-subtle, #CBD5E1)',
+                    borderRadius: '8px',
+                    padding: '14px',
+                    textAlign: 'center',
+                    fontSize: '11.5px',
+                    color: 'var(--text-muted)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <UserPlus size={16} style={{ opacity: 0.5 }} />
+                  <span>Select a customer from the search above</span>
                 </div>
               )}
             </div>
 
             {/* Invoice Details Card */}
-            <div className="ledger-card" style={{ padding: '18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div className="ledger-card" style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                   <Package size={15} color="#FF6B2B" />
                   <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>Invoice Details</span>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px 10px' }}>
+                {/* Row 1: Invoice No, Invoice Date, Due Date */}
                 <div>
-                  <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Invoice No.</label>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>Invoice No.</label>
                   <div style={{ position: 'relative' }}>
                     <input
                       type="text"
@@ -941,40 +1190,31 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                       value={voucherNumber}
                       onChange={e => setVoucherNumber(e.target.value)}
                       placeholder="Auto-generated"
-                      style={{ fontFamily: 'var(--font-mono)', fontSize: '12.5px', paddingRight: '26px' }}
+                      style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', paddingRight: '24px', height: '32px' }}
                     />
-                    <Settings size={13} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+                    <Settings size={12} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
                   </div>
                 </div>
                 <div>
-                  <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Invoice Date</label>
-                  <input type="date" className="lf-input" value={voucherDate} onChange={e => setVoucherDate(e.target.value)} />
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>Invoice Date</label>
+                  <input type="date" className="lf-input" value={voucherDate} onChange={e => setVoucherDate(e.target.value)} style={{ fontSize: '12px', height: '32px' }} />
                 </div>
                 <div>
-                  <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Due Date</label>
-                  <input type="date" className="lf-input" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>Due Date</label>
+                  <input type="date" className="lf-input" value={dueDate} onChange={e => setDueDate(e.target.value)} style={{ fontSize: '12px', height: '32px' }} />
                 </div>
+
+                {/* Row 2: Sales Ledger, Place of Supply, Payment Terms */}
                 <div>
-                  <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Sales Ledger</label>
-                  <select className="lf-input" value={salesLedger} onChange={e => setSalesLedger(e.target.value)} style={{ fontSize: '12.5px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>Sales Ledger</label>
+                  <select className="lf-input" value={salesLedger} onChange={e => setSalesLedger(e.target.value)} style={{ fontSize: '12px', height: '32px' }}>
                     <option value="Sales">Sales Account</option>
                     <option value="General Sales">General Sales</option>
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Payment Terms</label>
-                  <select className="lf-input" value={paymentTerms} onChange={e => handlePaymentTermsChange(e.target.value)}>
-                    <option value="">Immediate</option>
-                    <option value="7">7 Days</option>
-                    <option value="15">15 Days</option>
-                    <option value="30">30 Days</option>
-                    <option value="45">45 Days</option>
-                    <option value="60">60 Days</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Place of Supply</label>
-                  <select className="lf-input" value={placeOfSupply} onChange={e => setPlaceOfSupply(e.target.value)} style={{ fontSize: '12px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>Place of Supply</label>
+                  <select className="lf-input" value={placeOfSupply} onChange={e => setPlaceOfSupply(e.target.value)} style={{ fontSize: '11.5px', height: '32px' }}>
                     {INDIAN_STATES.map(s => (
                       <option key={s.code} value={s.code}>
                         {s.name} ({s.code})
@@ -983,12 +1223,25 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Reference No. (Optional)</label>
-                  <input type="text" className="lf-input" placeholder="PO / Ref. No." value={referenceNo} onChange={e => setReferenceNo(e.target.value)} />
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>Payment Terms</label>
+                  <select className="lf-input" value={paymentTerms} onChange={e => handlePaymentTermsChange(e.target.value)} style={{ fontSize: '12px', height: '32px' }}>
+                    <option value="">Immediate</option>
+                    <option value="7">7 Days</option>
+                    <option value="15">15 Days</option>
+                    <option value="30">30 Days</option>
+                    <option value="45">45 Days</option>
+                    <option value="60">60 Days</option>
+                  </select>
                 </div>
-                <div>
-                  <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Sales Executive (Optional)</label>
-                  <select className="lf-input" value={salesExecutive} onChange={e => setSalesExecutive(e.target.value)} style={{ fontSize: '12px' }}>
+
+                {/* Row 3: Reference No, Sales Executive */}
+                <div style={{ gridColumn: 'span 1' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>Reference No. (Optional)</label>
+                  <input type="text" className="lf-input" placeholder="PO / Ref. No." value={referenceNo} onChange={e => setReferenceNo(e.target.value)} style={{ fontSize: '12px', height: '32px' }} />
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>Sales Executive (Optional)</label>
+                  <select className="lf-input" value={salesExecutive} onChange={e => setSalesExecutive(e.target.value)} style={{ fontSize: '11.5px', height: '32px' }}>
                     <option value="">Select executive</option>
                     <option value="exec_1">Direct / Admin</option>
                   </select>
@@ -998,7 +1251,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
           </div>
 
           {/* Item Details Card */}
-          <div className="ledger-card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="ledger-card" style={{ padding: 0, display: 'flex', flexDirection: 'column' }}>
             <div
               style={{
                 padding: '12px 18px',
@@ -1072,12 +1325,12 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
             </div>
 
             {/* Line Items Table */}
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', minHeight: '130px', flex: 1, position: 'relative' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                <thead>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-card, #FFFFFF)' }}>
                   <tr style={{ backgroundColor: 'var(--bg-subtle, #F8FAFC)', borderBottom: '1px solid var(--border-subtle)' }}>
                     <th style={{ padding: '9px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-muted)', width: '32px' }}>#</th>
-                    <th style={{ padding: '9px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-muted)', minWidth: '220px' }}>Item Name</th>
+                    <th style={{ padding: '9px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-muted)', minWidth: '240px' }}>Item Name</th>
                     <th style={{ padding: '9px 10px', textAlign: 'left', fontWeight: 600, color: 'var(--text-muted)', width: '90px' }}>HSN/SAC</th>
                     <th style={{ padding: '9px 10px', textAlign: 'center', fontWeight: 600, color: 'var(--text-muted)', width: '70px' }}>Qty</th>
                     <th style={{ padding: '9px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-muted)', width: '105px' }}>
@@ -1111,7 +1364,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                                 setShowQuickItemModal(true);
                               }}
                               addNewLabel="+ Quick Add Item"
-                              style={{ minWidth: '190px' }}
+                              style={{ minWidth: '210px' }}
                             />
                             <button
                               type="button"
@@ -1137,6 +1390,53 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                           {line.description && (
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', padding: '2px 4px', fontStyle: 'normal' }}>
                               {line.subtext || (line.isService ? 'Service' : 'Product')}
+                            </div>
+                          )}
+                          {line.itemId && (
+                            <div style={{ marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', paddingLeft: '4px' }}>
+                              {line.stockLoading ? (
+                                <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                  ⏳ Checking stock…
+                                </span>
+                              ) : line.stockError ? (
+                                <span style={{ fontSize: '10.5px', color: '#EF4444', backgroundColor: 'rgba(239,68,68,0.1)', padding: '1px 6px', borderRadius: '4px' }} title={line.stockError}>
+                                  ⚠️ Stock unavailable
+                                </span>
+                              ) : (line.isService || line.isInventoryTracked === false) ? (
+                                <span style={{ fontSize: '10.5px', color: '#64748B', backgroundColor: 'rgba(100,116,139,0.1)', padding: '1px 6px', borderRadius: '4px' }}>
+                                  Service / Untracked
+                                </span>
+                              ) : line.availableStock !== undefined && line.availableStock !== null ? (
+                                line.availableStock <= 0 ? (
+                                  <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#DC2626', backgroundColor: '#FEE2E2', padding: '1px 6px', borderRadius: '4px' }}>
+                                    Out of Stock (0 {line.unit})
+                                  </span>
+                                ) : Number(line.quantity) > line.availableStock ? (
+                                  <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#D97706', backgroundColor: '#FEF3C7', padding: '1px 6px', borderRadius: '4px' }}>
+                                    ⚠️ Low Stock: {line.availableStock} {line.unit} (Qty {line.quantity} exceeds stock)
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#16A34A', backgroundColor: '#DCFCE7', padding: '1px 6px', borderRadius: '4px' }}>
+                                    ✓ Avail: {line.availableStock} {line.unit}
+                                  </span>
+                                )
+                              ) : null}
+
+                              {godowns.length > 1 && (
+                                <select
+                                  value={line.godownId}
+                                  onChange={e => handleGodownChange(idx, e.target.value)}
+                                  className="lf-input"
+                                  style={{ fontSize: '10.5px', padding: '1px 4px', height: '20px', width: 'auto', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}
+                                  title="Godown / Storage location"
+                                >
+                                  {godowns.map(g => (
+                                    <option key={g.godown_id} value={g.godown_id}>
+                                      {g.godown_name}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
                             </div>
                           )}
                         </td>
@@ -1228,41 +1528,41 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
           </div>
 
           {/* Terms and Notes Card */}
-          <div className="ledger-card" style={{ padding: '18px' }}>
-            <div style={{ fontSize: '13.5px', fontWeight: 700, marginBottom: '12px', color: 'var(--text-primary)' }}>
+          <div className="ledger-card" style={{ padding: '16px 18px' }}>
+            <div style={{ fontSize: '13.5px', fontWeight: 700, marginBottom: '10px', color: 'var(--text-primary)' }}>
               Terms and Notes
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
                   Terms &amp; Conditions
                 </label>
                 <textarea
                   className="lf-input"
-                  rows={4}
+                  rows={2}
                   value={termsAndCond}
                   onChange={e => setTermsAndCond(e.target.value)}
-                  style={{ resize: 'vertical', fontSize: '12px', lineHeight: 1.4 }}
+                  style={{ resize: 'vertical', fontSize: '12px', lineHeight: 1.4, minHeight: '52px', height: 'auto', padding: '6px 10px' }}
                 />
               </div>
               <div>
-                <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>
                   Notes (Optional)
                 </label>
                 <textarea
                   className="lf-input"
-                  rows={4}
+                  rows={2}
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
-                  style={{ resize: 'vertical', fontSize: '12px', lineHeight: 1.4 }}
+                  style={{ resize: 'vertical', fontSize: '12px', lineHeight: 1.4, minHeight: '52px', height: 'auto', padding: '6px 10px' }}
                 />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Sidebar Column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Right Sidebar Column (Sticky for High Ergonomics) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'sticky', top: '16px' }}>
 
           {/* Invoice Summary Card */}
           <div className="ledger-card" style={{ padding: '18px' }}>
@@ -1408,7 +1708,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
               <button
                 type="button"
                 className="lf-btn lf-btn-secondary"
-                onClick={handlePost}
+                onClick={() => setLivePreviewData(prepareLiveVoucherData())}
                 style={{ fontSize: '11.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', padding: '8px 6px' }}
               >
                 <Eye size={13} /> Preview Invoice
@@ -1416,7 +1716,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
               <button
                 type="button"
                 className="lf-btn lf-btn-secondary"
-                onClick={handlePost}
+                onClick={() => setLivePreviewData(prepareLiveVoucherData())}
                 style={{ fontSize: '11.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', padding: '8px 6px' }}
               >
                 <Printer size={13} /> Print Invoice

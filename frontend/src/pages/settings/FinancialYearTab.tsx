@@ -20,6 +20,8 @@ export interface FinancialYearTabProps {
   userRole: string;
   onNavigateToTab?: (tab: string) => void;
   currentUser?: any;
+  activeFy?: FinancialYear | null;
+  onSelectFy?: (fy: FinancialYear) => void;
 }
 
 export const FinancialYearTab: React.FC<FinancialYearTabProps> = ({
@@ -28,7 +30,9 @@ export const FinancialYearTab: React.FC<FinancialYearTabProps> = ({
   onRefreshFys,
   userRole,
   onNavigateToTab,
-  currentUser
+  currentUser,
+  activeFy: propActiveFy,
+  onSelectFy
 }) => {
   // New FY Form
   const [newFyName, setNewFyName] = useState('2027 - 2028');
@@ -45,7 +49,7 @@ export const FinancialYearTab: React.FC<FinancialYearTabProps> = ({
   const [reopenReason, setReopenReason] = useState('');
   const [reopeningFy, setReopeningFy] = useState(false);
 
-  const activeFy = financialYears.find(f => f.status === 'OPEN') || financialYears[0] || null;
+  const activeFy = propActiveFy || financialYears.find(f => f.status === 'OPEN') || financialYears[0] || null;
 
   const handleCreateFy = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,15 +151,17 @@ export const FinancialYearTab: React.FC<FinancialYearTabProps> = ({
 
             <div style={{ marginBottom: '16px' }}>
               <div style={{ fontSize: '26px', fontWeight: 800, color: 'var(--color-text, #0F172A)', letterSpacing: '-0.5px' }}>
-                {activeFy?.name || '2026 - 2027'}
+                {activeFy ? activeFy.name : 'No Active Financial Year'}
               </div>
               <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginTop: '2px' }}>
-                {activeFy?.start_date || '01 Apr 2026'} — {activeFy?.end_date || '31 Mar 2027'}
+                {activeFy ? `${activeFy.start_date} — ${activeFy.end_date}` : 'Please configure or open a financial year below'}
               </div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#16A34A', fontWeight: 600, marginTop: '8px' }}>
-                <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#16A34A' }}></span>
-                Current Year
-              </div>
+              {activeFy && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#16A34A', fontWeight: 600, marginTop: '8px' }}>
+                  <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#16A34A' }}></span>
+                  Current Active Year
+                </div>
+              )}
             </div>
           </div>
 
@@ -406,12 +412,26 @@ export const FinancialYearTab: React.FC<FinancialYearTabProps> = ({
                                 : '#475569'
                           }}
                         >
-                          {fy.status === 'OPEN' ? 'Active' : fy.status === 'LOCKED' ? 'Locked' : 'Closed'}
+                          {fy.fy_id === activeFy?.fy_id ? (
+                            <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: 700 }}>● Active</span>
+                          ) : (
+                            fy.status === 'OPEN' ? 'Open' : fy.status === 'LOCKED' ? 'Locked' : 'Closed'
+                          )}
                         </span>
                       </td>
                       <td style={{ padding: '9px 12px', color: '#64748B' }}>Manual Entry</td>
                       <td style={{ padding: '9px 12px', textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '4px' }}>
+                        <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                          {fy.status === 'OPEN' && fy.fy_id !== activeFy?.fy_id && onSelectFy && (
+                            <button
+                              type="button"
+                              onClick={() => onSelectFy(fy)}
+                              title="Set as active financial year for transactions"
+                              style={{ padding: '3px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid #EA580C', color: '#EA580C', background: '#FFFFFF', cursor: 'pointer', fontWeight: 600 }}
+                            >
+                              Set Active
+                            </button>
+                          )}
                           {fy.status === 'OPEN' ? (
                             <button
                               type="button"

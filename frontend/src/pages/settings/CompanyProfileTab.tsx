@@ -20,6 +20,12 @@ export interface CompanyProfileTabProps {
   onRemoveLogo: () => void;
   onRequestDeleteModal: () => void;
   userRole: string;
+  onSave?: () => void;
+  saving?: boolean;
+  isDirty?: boolean;
+  saved?: boolean;
+  saveError?: string | null;
+  onReset?: () => void;
 }
 
 export const CompanyProfileTab: React.FC<CompanyProfileTabProps> = ({
@@ -30,7 +36,13 @@ export const CompanyProfileTab: React.FC<CompanyProfileTabProps> = ({
   onLogoUpload,
   onRemoveLogo,
   onRequestDeleteModal,
-  userRole
+  userRole,
+  onSave,
+  saving = false,
+  isDirty = false,
+  saved = false,
+  saveError = null,
+  onReset
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -227,7 +239,7 @@ export const CompanyProfileTab: React.FC<CompanyProfileTabProps> = ({
               className="form-control"
               value={formData.email || ''}
               onChange={e => onChange('email', e.target.value)}
-              placeholder="info@dreamtech.in"
+              placeholder="e.g. contact@company.in"
             />
             {validationErrors.email && (
               <span style={{ fontSize: '11px', color: 'var(--color-danger, #DC2626)', marginTop: '4px', display: 'block' }}>
@@ -247,7 +259,7 @@ export const CompanyProfileTab: React.FC<CompanyProfileTabProps> = ({
               className="form-control"
               value={formData.phone || ''}
               onChange={e => onChange('phone', e.target.value)}
-              placeholder="+91 98765 43210"
+              placeholder="e.g. +91 98765 43210"
             />
           </div>
 
@@ -260,7 +272,7 @@ export const CompanyProfileTab: React.FC<CompanyProfileTabProps> = ({
               className="form-control"
               value={formData.website || ''}
               onChange={e => onChange('website', e.target.value)}
-              placeholder="https://www.dreamtech.in"
+              placeholder="e.g. https://www.company.in"
             />
           </div>
         </div>
@@ -542,9 +554,90 @@ export const CompanyProfileTab: React.FC<CompanyProfileTabProps> = ({
               className="form-control"
               value={formData.bank_branch || ''}
               onChange={e => onChange('bank_branch', e.target.value)}
-              placeholder="e.g. Pudukkottai Main Branch"
+              placeholder="e.g. City Center Branch"
             />
           </div>
+        </div>
+      </div>
+
+      {/* Save Action Bar */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '16px 20px',
+          borderRadius: '8px',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)'
+        }}
+      >
+        <div>
+          {isDirty && (
+            <span style={{ fontSize: '12px', color: '#EA580C', fontWeight: 700 }}>
+              ● Unsaved changes pending
+            </span>
+          )}
+          {saved && (
+            <span style={{ fontSize: '12px', color: '#16A34A', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              ✓ Company profile saved successfully
+            </span>
+          )}
+          {saveError && (
+            <span style={{ fontSize: '12px', color: '#DC2626', fontWeight: 600 }}>
+              {saveError}
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {onReset && (
+            <button
+              type="button"
+              onClick={onReset}
+              disabled={!isDirty || saving}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '7px 14px',
+                fontSize: '12px',
+                fontWeight: 600,
+                borderRadius: '6px',
+                border: '1px solid var(--color-border, #CBD5E1)',
+                backgroundColor: 'var(--color-surface, #FFFFFF)',
+                color: 'var(--color-text-secondary, #64748B)',
+                cursor: !isDirty || saving ? 'not-allowed' : 'pointer',
+                opacity: !isDirty || saving ? 0.6 : 1
+              }}
+            >
+              Discard
+            </button>
+          )}
+
+          {onSave && (
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving || !isDirty}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 18px',
+                fontSize: '12px',
+                fontWeight: 700,
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: '#EA580C',
+                color: '#FFFFFF',
+                cursor: saving || !isDirty ? 'not-allowed' : 'pointer',
+                opacity: saving || !isDirty ? 0.6 : 1
+              }}
+            >
+              {saving ? 'Applying...' : 'Apply Changes'}
+            </button>
+          )}
         </div>
       </div>
 

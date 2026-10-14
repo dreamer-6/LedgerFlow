@@ -93,6 +93,8 @@ export interface SettingsViewProps {
   onCompanyDeleted?: () => void;
   onNavigateToTab?: (tab: string) => void;
   initialSection?: SettingsSectionId;
+  activeFy?: FinancialYear | null;
+  onSelectFy?: (fy: FinancialYear) => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -100,7 +102,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onCompanyUpdated,
   onCompanyDeleted,
   onNavigateToTab,
-  initialSection = 'company_profile'
+  initialSection = 'company_profile',
+  activeFy,
+  onSelectFy
 }) => {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(() => {
     const saved = sessionStorage.getItem('lf_settings_active_tab') as SettingsSectionId;
@@ -133,6 +137,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setActiveSection(id);
     sessionStorage.setItem('lf_settings_active_tab', id);
   };
+
+  useEffect(() => {
+    const handleSwitch = (e: any) => {
+      const target = e.detail as SettingsSectionId;
+      const validSections: SettingsSectionId[] = [
+        'company_profile',
+        'financial_year',
+        'accounting',
+        'ledgers_groups',
+        'vouchers',
+        'tax_gst',
+        'inventory',
+        'users',
+        'invoice_printing',
+        'backup_system'
+      ];
+      if (target && validSections.includes(target)) {
+        setActiveSection(target);
+        sessionStorage.setItem('lf_settings_active_tab', target);
+      }
+    };
+    window.addEventListener('lf_switch_settings_tab', handleSwitch);
+    return () => window.removeEventListener('lf_switch_settings_tab', handleSwitch);
+  }, []);
 
   // Financial Years State
   const [financialYears, setFinancialYears] = useState<FinancialYear[]>([]);
@@ -739,6 +767,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onRemoveLogo={handleRemoveLogo}
             onRequestDeleteModal={() => setShowDeleteModal(true)}
             userRole={userRole}
+            onSave={() => handleSaveCompany()}
+            saving={saving}
+            isDirty={isDirty}
+            saved={saved}
+            saveError={saveError}
+            onReset={handleResetForm}
           />
         )}
 
@@ -750,13 +784,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             userRole={userRole}
             onNavigateToTab={onNavigateToTab}
             currentUser={currentUser}
+            activeFy={activeFy}
+            onSelectFy={onSelectFy}
           />
         )}
 
         {activeSection === 'accounting' && (
           <AccountingPreferencesTab
+            company={company}
             formData={formData}
             onChange={handleChange}
+            onCompanyUpdated={onCompanyUpdated}
           />
         )}
 
@@ -780,6 +818,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             formData={formData}
             onChange={handleChange}
             onNavigateToTab={onNavigateToTab}
+            onSave={() => handleSaveCompany()}
+            saving={saving}
+            isDirty={isDirty}
+            saved={saved}
+            saveError={saveError}
+            onReset={handleResetForm}
           />
         )}
 
@@ -803,6 +847,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onChange={handleChange}
             onLogoUpload={handleLogoUpload}
             onRemoveLogo={handleRemoveLogo}
+            onCompanyUpdated={onCompanyUpdated}
           />
         )}
 

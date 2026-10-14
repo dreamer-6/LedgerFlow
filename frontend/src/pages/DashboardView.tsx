@@ -88,6 +88,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [cancelReason, setCancelReason] = useState<string>('Cancelled by user');
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [permanentDeleteVoucher, setPermanentDeleteVoucher] = useState<any | null>(null);
+  const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState<boolean>(false);
+  const [permanentDeleteError, setPermanentDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -118,6 +121,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       setCancelError(err.message || 'Operation failed');
     } finally {
       setIsCancelling(false);
+    }
+  };
+
+  const handleConfirmPermanentDelete = async () => {
+    if (!permanentDeleteVoucher) return;
+    try {
+      setIsPermanentlyDeleting(true);
+      setPermanentDeleteError(null);
+      await api.deleteVoucher(permanentDeleteVoucher.voucher_id, {
+        permanentDelete: true,
+        cancelReason: 'Permanent purge from dashboard'
+      });
+      setPermanentDeleteVoucher(null);
+      await loadDashboardData();
+    } catch (err: any) {
+      console.error('Failed to permanently delete voucher:', err);
+      setPermanentDeleteError(err.message || 'Permanent deletion failed');
+    } finally {
+      setIsPermanentlyDeleting(false);
     }
   };
 
@@ -1035,7 +1057,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </button>
             </div>
 
-            <div style={{ flex: 1, overflowX: 'auto' }}>
+            <div style={{ flex: 1, overflowX: 'auto', minHeight: '300px' }}>
               {recentVouchers.length > 0 ? (
                 <table className="lf-vouchers-table">
                   <thead>
@@ -1050,7 +1072,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {recentVouchers.map((v: any) => {
+                    {recentVouchers.map((v: any, idx: number) => {
+                      const isNearBottom = idx >= recentVouchers.length - 2;
                       const vType = (v.voucher_type || 'SALES').toUpperCase();
                       const typeLabel =
                         vType === 'SALES' ? 'Sales' : vType === 'PURCHASE' ? 'Purchase' : vType === 'RECEIPT' ? 'Receipt' : vType === 'PAYMENT' ? 'Payment' : 'Journal';
@@ -1113,13 +1136,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                 style={{
                                   position: 'absolute',
                                   right: 14,
-                                  top: 'calc(100% + 2px)',
+                                  top: isNearBottom ? undefined : 'calc(100% + 2px)',
+                                  bottom: isNearBottom ? '100%' : undefined,
+                                  marginBottom: isNearBottom ? 4 : undefined,
                                   background: 'var(--color-surface, #fff)',
                                   border: '1px solid var(--color-border)',
                                   borderRadius: 8,
                                   boxShadow: '0 10px 25px -5px rgba(0,0,0,0.2)',
                                   zIndex: 100,
-                                  width: 170,
+                                  width: 175,
                                   padding: 4,
                                   textAlign: 'left'
                                 }}
@@ -1136,6 +1161,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                 >
                                   <span>View / Print</span>
                                 </button>
+                                {v.is_hidden ? (
+                                  <button
+                                    type="button"
+                                    className="lf-ctrl-btn"
+                                    style={{ width: '100%', justifyContent: 'flex-start', border: 'none', borderRadius: 4, padding: '6px 10px', fontSize: '12px' }}
+                                    onClick={async () => {
+                                      setActiveMenuVoucherId(null);
+                                      await api.unhideVoucher(v.voucher_id);
+                                      await loadDashboardData();
+                                    }}
+                                  >
+                                    <span>Unhide from List</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="lf-ctrl-btn"
+                                    style={{ width: '100%', justifyContent: 'flex-start', border: 'none', borderRadius: 4, padding: '6px 10px', fontSize: '12px' }}
+                                    onClick={async () => {
+                                      setActiveMenuVoucherId(null);
+                                      await api.hideVoucher(v.voucher_id);
+                                      await loadDashboardData();
+                                    }}
+                                  >
+                                    <span>Hide from List</span>
+                                  </button>
+                                )}
                                 {v.status !== 'CANCELLED' && (
                                   <button
                                     type="button"
@@ -1148,6 +1200,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                   >
                                     <Trash2 size={13} style={{ marginRight: 6 }} />
                                     <span>{v.status === 'DRAFT' ? 'Delete Draft' : 'Cancel Voucher'}</span>
+                                  </button>
+                                )}
+                                {v.status === 'CANCELLED' && (
+                                  <button
+                                    type="button"
+                                    className="lf-ctrl-btn"
+                                    style={{ width: '100%', justifyContent: 'flex-start', border: 'none', borderRadius: 4, padding: '6px 10px', fontSize: '12px', color: '#DC2626' }}
+                                    onClick={() => {
+                                      setActiveMenuVoucherId(null);
+                                      setPermanentDeleteVoucher(v);
+                                    }}
+                                  >
+                                    <Trash2 size={13} style={{ marginRight: 6 }} />
+                                    <span>Permanently Delete</span>
                                   </button>
                                 )}
                               </div>
@@ -1404,6 +1470,100 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 disabled={isCancelling}
               >
                 {isCancelling ? 'Processing...' : cancellingVoucher.status === 'DRAFT' ? 'Delete Draft' : 'Confirm Cancellation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permanent Delete Voucher Modal */}
+      {permanentDeleteVoucher && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999
+          }}
+          onClick={() => setPermanentDeleteVoucher(null)}
+        >
+          <div
+            className="ledger-card"
+            style={{
+              width: '440px',
+              padding: '24px',
+              borderRadius: '12px',
+              background: 'var(--color-surface, #1E293B)',
+              color: 'var(--color-text, #F8FAFC)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4)',
+              border: '1px solid var(--color-border)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#DC2626'
+                }}
+              >
+                <AlertCircle size={22} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>
+                  Permanently Delete Voucher
+                </h3>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                  {permanentDeleteVoucher.voucher_number || 'Transaction'}
+                </p>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13.5px', color: 'var(--color-text)', lineHeight: 1.5, marginBottom: '16px' }}>
+              Are you sure you want to permanently delete this cancelled voucher? This action will purge all associated journal entries and record an audit tombstone. This action cannot be undone.
+            </p>
+
+            {permanentDeleteError && (
+              <div style={{ color: '#DC2626', fontSize: '12.5px', marginBottom: '14px' }}>
+                {permanentDeleteError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="lf-ctrl-btn"
+                onClick={() => setPermanentDeleteVoucher(null)}
+                disabled={isPermanentlyDeleting}
+                style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '13px' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: '6px',
+                  background: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+                onClick={handleConfirmPermanentDelete}
+                disabled={isPermanentlyDeleting}
+              >
+                {isPermanentlyDeleting ? 'Purging...' : 'Permanently Delete'}
               </button>
             </div>
           </div>

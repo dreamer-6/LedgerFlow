@@ -33,7 +33,15 @@ export class BusinessService {
       gstin: gstin ? gstin.trim() : '',
       state: state || 'Tamil Nadu',
       stateCode: stateCode || '33',
-      ownerUserId: userId
+      ownerUserId: userId,
+      addressLine1: payload.addressLine1 || payload.address_line1 || '',
+      addressLine2: payload.addressLine2 || payload.address_line2 || '',
+      city: payload.city || '',
+      pincode: payload.pincode || '',
+      phone: payload.phone || '',
+      email: payload.email || '',
+      bankName: payload.bankName || payload.bank_name || '',
+      termsAndConditions: payload.termsAndConditions || payload.terms_and_conditions || undefined
     });
 
     const bcrypt = require('bcryptjs');
@@ -50,7 +58,28 @@ export class BusinessService {
 
   static getCurrentCompanyInfo(db: DatabaseSync, companyId: string) {
     const company = db.prepare('SELECT * FROM companies WHERE company_id = ?').get(companyId);
-    const activeFy = db.prepare("SELECT * FROM financial_years WHERE company_id = ? AND status = 'OPEN' ORDER BY start_date DESC LIMIT 1").get(companyId);
+    let activeFy = db.prepare(`
+      SELECT * FROM financial_years 
+      WHERE company_id = ? AND status = 'OPEN' AND DATE('now') BETWEEN start_date AND end_date
+      ORDER BY start_date DESC LIMIT 1
+    `).get(companyId);
+
+    if (!activeFy) {
+      activeFy = db.prepare(`
+        SELECT * FROM financial_years 
+        WHERE company_id = ? AND status = 'OPEN' 
+        ORDER BY start_date DESC LIMIT 1
+      `).get(companyId);
+    }
+
+    if (!activeFy) {
+      activeFy = db.prepare(`
+        SELECT * FROM financial_years 
+        WHERE company_id = ?
+        ORDER BY start_date DESC LIMIT 1
+      `).get(companyId);
+    }
+
     return { company: company || null, activeFinancialYear: activeFy || null };
   }
 
@@ -83,12 +112,15 @@ export class BusinessService {
         pincode = ?,
         phone = ?,
         email = ?,
+        website = ?,
         bank_name = ?,
         bank_account_no = ?,
         bank_ifsc = ?,
         bank_branch = ?,
         terms_and_conditions = ?,
         mailing_name = ?, 
+        invoice_settings = ?,
+        accounting_preferences = ?,
         logo_base64 = CASE WHEN ? = 1 THEN ? ELSE logo_base64 END,
         vault_password_hash = COALESCE(?, vault_password_hash)
       WHERE company_id = ?
@@ -97,20 +129,23 @@ export class BusinessService {
       payload.legal_name || payload.company_name || existing.legal_name || existing.company_name || 'Business Enterprise',
       payload.gstin !== undefined ? (payload.gstin || null) : existing.gstin,
       payload.pan !== undefined ? (payload.pan || null) : existing.pan,
-      payload.address_line1 !== undefined ? (payload.address_line1 || existing.address_line1 || 'Main Business Office') : (existing.address_line1 || 'Main Business Office'),
+      payload.address_line1 !== undefined ? (payload.address_line1 || '') : (existing.address_line1 || ''),
       payload.address_line2 !== undefined ? (payload.address_line2 || null) : existing.address_line2,
-      payload.city !== undefined ? (payload.city || existing.city || 'Chennai') : (existing.city || 'Chennai'),
-      payload.state !== undefined ? (payload.state || existing.state || 'Tamil Nadu') : (existing.state || 'Tamil Nadu'),
-      payload.state_code !== undefined ? (payload.state_code || existing.state_code || '33') : (existing.state_code || '33'),
-      payload.pincode !== undefined ? (payload.pincode || existing.pincode || '600001') : (existing.pincode || '600001'),
+      payload.city !== undefined ? (payload.city || '') : (existing.city || ''),
+      payload.state !== undefined ? (payload.state || '') : (existing.state || ''),
+      payload.state_code !== undefined ? (payload.state_code || '') : (existing.state_code || ''),
+      payload.pincode !== undefined ? (payload.pincode || '') : (existing.pincode || ''),
       payload.phone !== undefined ? (payload.phone || null) : existing.phone,
       payload.email !== undefined ? (payload.email || null) : existing.email,
+      payload.website !== undefined ? (payload.website || null) : existing.website,
       payload.bank_name !== undefined ? (payload.bank_name || null) : existing.bank_name,
       payload.bank_account_no !== undefined ? (payload.bank_account_no || null) : existing.bank_account_no,
       payload.bank_ifsc !== undefined ? (payload.bank_ifsc || null) : existing.bank_ifsc,
       payload.bank_branch !== undefined ? (payload.bank_branch || null) : existing.bank_branch,
       payload.terms_and_conditions !== undefined ? (payload.terms_and_conditions || null) : existing.terms_and_conditions,
       payload.mailing_name || payload.company_name || existing.mailing_name || existing.company_name,
+      payload.invoice_settings !== undefined ? (typeof payload.invoice_settings === 'string' ? payload.invoice_settings : JSON.stringify(payload.invoice_settings)) : existing.invoice_settings,
+      payload.accounting_preferences !== undefined ? (typeof payload.accounting_preferences === 'string' ? payload.accounting_preferences : JSON.stringify(payload.accounting_preferences)) : existing.accounting_preferences,
       hasLogoUpdate ? 1 : 0,
       logoVal,
       vaultPasswordHash || null,
@@ -313,6 +348,221 @@ export class BusinessService {
     `).run(fyStatus, fyId, companyId);
 
     return db.prepare('SELECT * FROM financial_years WHERE fy_id = ?').get(fyId);
+  }
+
+  // --------------------------------------------------------------------------
+  // COMPANY USERS & PERMISSIONS MANAGEMENT (TASK UI-026)
+  // --------------------------------------------------------------------------
+
+  static getCompanyMembers(db: DatabaseSync, companyId: string) {
+    return db.prepare(`
+      SELECT 
+        u.user_id,
+        u.username,
+        u.email,
+        u.full_name,
+        ub.role,
+        ub.created_at as joined_on,
+        u.is_active
+      FROM user_businesses ub
+      JOIN users u ON ub.user_id = u.user_id
+      WHERE ub.company_id = ?
+      ORDER BY 
+        CASE ub.role 
+          WHEN 'OWNER' THEN 1 
+          WHEN 'ADMIN' THEN 2 
+          WHEN 'ACCOUNTANT' THEN 3 
+          ELSE 4 
+        END ASC,
+        ub.created_at ASC
+    `).all(companyId);
+  }
+
+  static addCompanyMember(
+    db: DatabaseSync,
+    companyId: string,
+    currentUserId: string,
+    currentUserRole: string,
+    payload: {
+      email?: string;
+      username?: string;
+      fullName?: string;
+      password?: string;
+      role: string;
+    }
+  ) {
+    const { role } = payload;
+    const allowedRoles = ['OWNER', 'ADMIN', 'ACCOUNTANT', 'VIEWER'];
+    if (!allowedRoles.includes(role)) {
+      throw new Error(`Invalid role '${role}'. Supported roles: ${allowedRoles.join(', ')}.`);
+    }
+
+    // Privilege escalation prevention: only existing OWNER can assign OWNER role
+    if (role === 'OWNER' && currentUserRole !== 'OWNER') {
+      throw new Error('Forbidden: Only an OWNER can assign or grant OWNER privileges.');
+    }
+
+    const email = (payload.email || '').trim().toLowerCase();
+    const username = (payload.username || email || '').trim().toLowerCase();
+    const fullName = (payload.fullName || username || 'Team Member').trim();
+
+    if (!email && !username) {
+      throw new Error('Email or username is required to add or invite a team member.');
+    }
+
+    // Find existing user in database
+    let user = db.prepare('SELECT * FROM users WHERE email = ? OR username = ?').get(email || username, username || email) as any;
+
+    if (!user) {
+      // Create new user record
+      const userId = 'usr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+      const bcrypt = require('bcryptjs');
+      const tempPassword = payload.password || crypto.randomUUID().substring(0, 10);
+      const passwordHash = bcrypt.hashSync(tempPassword, 10);
+
+      db.prepare(`
+        INSERT INTO users (user_id, username, email, password_hash, full_name, role, is_active)
+        VALUES (?, ?, ?, ?, ?, 'ACCOUNTANT', 1)
+      `).run(userId, username || ('user_' + Date.now().toString(36)), email || null, passwordHash, fullName);
+
+      user = { user_id: userId, username, email, full_name: fullName };
+    }
+
+    // Check if user is already a member of this company
+    const existingMembership = db.prepare(
+      'SELECT role FROM user_businesses WHERE user_id = ? AND company_id = ?'
+    ).get(user.user_id, companyId) as any;
+
+    if (existingMembership) {
+      throw new Error(`User '${user.full_name || user.username}' is already a member of this business (${existingMembership.role}).`);
+    }
+
+    // Insert company membership
+    db.prepare(`
+      INSERT INTO user_businesses (user_id, company_id, role)
+      VALUES (?, ?, ?)
+    `).run(user.user_id, companyId, role);
+
+    // Audit Log
+    db.prepare(`
+      INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
+      VALUES (?, ?, ?, 'USER_INVITE', 'USER', ?, ?)
+    `).run(
+      'aud_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16),
+      companyId,
+      currentUserId,
+      user.user_id,
+      JSON.stringify({ targetUserId: user.user_id, role, invitedBy: currentUserId })
+    );
+
+    return {
+      userId: user.user_id,
+      user_id: user.user_id,
+      username: user.username,
+      email: user.email,
+      fullName: user.full_name,
+      role
+    };
+  }
+
+  static updateMemberRole(
+    db: DatabaseSync,
+    companyId: string,
+    currentUserId: string,
+    currentUserRole: string,
+    targetUserId: string,
+    newRole: string
+  ) {
+    const allowedRoles = ['OWNER', 'ADMIN', 'ACCOUNTANT', 'VIEWER'];
+    if (!allowedRoles.includes(newRole)) {
+      throw new Error(`Invalid role '${newRole}'. Supported roles: ${allowedRoles.join(', ')}.`);
+    }
+
+    if (newRole === 'OWNER' && currentUserRole !== 'OWNER') {
+      throw new Error('Forbidden: Only an OWNER can grant OWNER privileges.');
+    }
+
+    const currentMembership = db.prepare(
+      'SELECT role FROM user_businesses WHERE user_id = ? AND company_id = ?'
+    ).get(targetUserId, companyId) as any;
+
+    if (!currentMembership) {
+      throw new Error('User is not a member of this company.');
+    }
+
+    // Lockout protection: Prevent demoting the last OWNER
+    if (currentMembership.role === 'OWNER' && newRole !== 'OWNER') {
+      const ownerCount = (db.prepare(
+        "SELECT COUNT(*) as c FROM user_businesses WHERE company_id = ? AND role = 'OWNER'"
+      ).get(companyId) as any)?.c || 0;
+
+      if (ownerCount <= 1) {
+        throw new Error('Operation Rejected: Cannot demote the last OWNER of this business. Doing so would leave the company without administrative ownership.');
+      }
+    }
+
+    db.prepare(`
+      UPDATE user_businesses
+      SET role = ?
+      WHERE user_id = ? AND company_id = ?
+    `).run(newRole, targetUserId, companyId);
+
+    // Audit log
+    db.prepare(`
+      INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
+      VALUES (?, ?, ?, 'USER_ROLE_CHANGE', 'USER', ?, ?)
+    `).run(
+      'aud_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16),
+      companyId,
+      currentUserId,
+      targetUserId,
+      JSON.stringify({ targetUserId, previousRole: currentMembership.role, newRole, changedBy: currentUserId })
+    );
+
+    return { success: true, targetUserId, newRole };
+  }
+
+  static removeCompanyMember(
+    db: DatabaseSync,
+    companyId: string,
+    currentUserId: string,
+    currentUserRole: string,
+    targetUserId: string
+  ) {
+    const currentMembership = db.prepare(
+      'SELECT role FROM user_businesses WHERE user_id = ? AND company_id = ?'
+    ).get(targetUserId, companyId) as any;
+
+    if (!currentMembership) {
+      throw new Error('User is not a member of this company.');
+    }
+
+    // Lockout protection: Cannot remove last OWNER
+    if (currentMembership.role === 'OWNER') {
+      const ownerCount = (db.prepare(
+        "SELECT COUNT(*) as c FROM user_businesses WHERE company_id = ? AND role = 'OWNER'"
+      ).get(companyId) as any)?.c || 0;
+
+      if (ownerCount <= 1) {
+        throw new Error('Operation Rejected: Cannot remove the last OWNER of this business. An active OWNER must always be retained.');
+      }
+    }
+
+    db.prepare('DELETE FROM user_businesses WHERE user_id = ? AND company_id = ?').run(targetUserId, companyId);
+
+    // Audit log
+    db.prepare(`
+      INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
+      VALUES (?, ?, ?, 'USER_REMOVE', 'USER', ?, ?)
+    `).run(
+      'aud_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16),
+      companyId,
+      currentUserId,
+      targetUserId,
+      JSON.stringify({ targetUserId, removedRole: currentMembership.role, removedBy: currentUserId })
+    );
+
+    return { success: true, removedUserId: targetUserId };
   }
 }
 

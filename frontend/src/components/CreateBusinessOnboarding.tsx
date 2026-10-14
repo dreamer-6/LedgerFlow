@@ -92,20 +92,20 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
   const [companyName, setCompanyName] = useState(() => initialDraft.companyName ?? '');
   const [businessType, setBusinessType] = useState(() => initialDraft.businessType ?? 'Sole Proprietorship');
   const [email, setEmail] = useState(() => initialDraft.email ?? (draftSignupUser?.email || user?.email || ''));
-  const [phone, setPhone] = useState(() => initialDraft.phone ?? '+91 98765 43210');
+  const [phone, setPhone] = useState(() => initialDraft.phone ?? '');
   const [website, setWebsite] = useState(() => initialDraft.website ?? '');
-  const [addressLine1, setAddressLine1] = useState(() => initialDraft.addressLine1 ?? '123, Main Road');
+  const [addressLine1, setAddressLine1] = useState(() => initialDraft.addressLine1 ?? '');
   const [addressLine2, setAddressLine2] = useState(() => initialDraft.addressLine2 ?? '');
-  const [city, setCity] = useState(() => initialDraft.city ?? 'Coimbatore');
+  const [city, setCity] = useState(() => initialDraft.city ?? '');
   const [state, setState] = useState(() => initialDraft.state ?? 'Tamil Nadu');
   const [stateCode, setStateCode] = useState(() => initialDraft.stateCode ?? '33');
-  const [pincode, setPincode] = useState(() => initialDraft.pincode ?? '641001');
+  const [pincode, setPincode] = useState(() => initialDraft.pincode ?? '');
   const [country, setCountry] = useState(() => initialDraft.country ?? 'India');
 
   // ──────── Step 2: Tax & Accounting Configuration ────────
-  const [isGstRegistered, setIsGstRegistered] = useState<boolean>(() => initialDraft.isGstRegistered !== undefined ? initialDraft.isGstRegistered : true);
-  const [gstin, setGstin] = useState(() => initialDraft.gstin ?? '33ABCDE1234F1Z5');
-  const [pan, setPan] = useState(() => initialDraft.pan ?? 'ABCDE1234F');
+  const [isGstRegistered, setIsGstRegistered] = useState<boolean>(() => initialDraft.isGstRegistered !== undefined ? initialDraft.isGstRegistered : false);
+  const [gstin, setGstin] = useState(() => initialDraft.gstin ?? '');
+  const [pan, setPan] = useState(() => initialDraft.pan ?? '');
   const [placeOfBusiness, setPlaceOfBusiness] = useState(() => initialDraft.placeOfBusiness ?? 'Tamil Nadu');
   const [taxTreatment, setTaxTreatment] = useState(() => initialDraft.taxTreatment ?? 'Regular');
   const [defaultTaxType, setDefaultTaxType] = useState(() => initialDraft.defaultTaxType ?? 'GST (CGST + SGST)');

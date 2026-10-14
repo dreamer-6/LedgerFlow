@@ -15,6 +15,7 @@ export interface Company {
   country: string;
   phone: string;
   email: string;
+  website?: string;
   currency: string;
   currency_symbol: string;
   bank_name?: string;
@@ -23,6 +24,8 @@ export interface Company {
   bank_branch?: string;
   terms_and_conditions?: string;
   logo_base64?: string;
+  invoice_settings?: string;
+  accounting_preferences?: string;
   role?: string;
 }
 
@@ -41,6 +44,16 @@ export interface UserSession {
   username: string;
   fullName: string;
   role: string;
+}
+
+export interface CompanyMember {
+  user_id: string;
+  username: string;
+  email: string;
+  full_name: string;
+  role: 'OWNER' | 'ADMIN' | 'ACCOUNTANT' | 'VIEWER';
+  is_active: number;
+  created_at: string;
 }
 
 export interface Party {
@@ -124,6 +137,28 @@ export interface StockItem {
   has_serial_no?: number;
   current_stock?: number;
   total_value_paise?: number;
+}
+
+export interface GodownBalanceItem {
+  godownId: string;
+  godownName: string;
+  isDefault: boolean;
+  availableStock: number;
+}
+
+export interface ItemStockBalanceResponse {
+  itemId: string;
+  itemName: string;
+  isInventoryTracked: boolean;
+  isService: boolean;
+  unitSymbol: string;
+  totalAvailableStock: number | null;
+  availableStock: number | null;
+  godownId: string | null;
+  godownBalances: GodownBalanceItem[];
+  weightedAverageRatePaise?: number;
+  totalValuePaise?: number;
+  message?: string;
 }
 
 export interface UnitMaster {
@@ -240,6 +275,11 @@ export const authStorage = {
     if (id) localStorage.setItem('lf_active_company_id', id);
     else localStorage.removeItem('lf_active_company_id');
   },
+  getSelectedFyId: () => localStorage.getItem('lf_selected_fy_id'),
+  setSelectedFyId: (id: string | null) => {
+    if (id) localStorage.setItem('lf_selected_fy_id', id);
+    else localStorage.removeItem('lf_selected_fy_id');
+  },
   getUser: (): UserSession | null => {
     try {
       const u = localStorage.getItem('lf_user');
@@ -255,6 +295,7 @@ export const authStorage = {
   clear: () => {
     localStorage.removeItem('lf_token');
     localStorage.removeItem('lf_active_company_id');
+    localStorage.removeItem('lf_selected_fy_id');
     localStorage.removeItem('lf_user');
   }
 };
@@ -421,6 +462,10 @@ export const api = {
     if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
   },
 
+  async updateCurrentCompany(data: Partial<Company>): Promise<void> {
+    return this.updateCompany(data);
+  },
+
   async deleteCompany(companyId: string, password: string): Promise<{ success: boolean; remainingBusinesses: Company[]; nextActiveCompanyId: string | null }> {
     const res = await fetch(`${API_BASE}/companies/${encodeURIComponent(companyId)}/delete`, {
       method: 'POST',
@@ -435,6 +480,43 @@ export const api = {
       authStorage.setActiveCompanyId(result.nextActiveCompanyId);
     }
     return result;
+  },
+
+  async getCompanyMembers(): Promise<CompanyMember[]> {
+    const res = await fetch(`${API_BASE}/companies/current/users`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to fetch team members'));
+    return res.json();
+  },
+
+  async addCompanyMember(data: { email: string; name?: string; role: string; tempPassword?: string }): Promise<{ user_id: string; role: string; message: string }> {
+    const res = await fetch(`${API_BASE}/companies/current/users`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to add team member'));
+    return res.json();
+  },
+
+  async updateMemberRole(userId: string, role: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/companies/current/users/${encodeURIComponent(userId)}/role`, {
+      method: 'PUT',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ role })
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to update member role'));
+    return res.json();
+  },
+
+  async removeCompanyMember(userId: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/companies/current/users/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to remove team member'));
+    return res.json();
   },
 
   async getFinancialYears(companyId?: string): Promise<FinancialYear[]> {
@@ -603,6 +685,18 @@ export const api = {
     return res.json();
   },
 
+  async getItemStockBalance(itemId: string, godownId?: string, asOfDate?: string): Promise<ItemStockBalanceResponse> {
+    const params = new URLSearchParams();
+    if (godownId) params.append('godownId', godownId);
+    if (asOfDate) params.append('asOfDate', asOfDate);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${API_BASE}/masters/items/${encodeURIComponent(itemId)}/stock-balance${qs}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to fetch stock balance'));
+    return res.json();
+  },
+
   async getStockSummary(param?: string, asOfDate?: string): Promise<StockSummaryItem[]> {
     const actualAsOfDate = asOfDate || (param && param.includes('-') && param.length === 10 ? param : undefined);
     const url = actualAsOfDate
@@ -720,9 +814,28 @@ export const api = {
     return res.json();
   },
 
-  async deleteVoucher(id: string) {
+  async deleteVoucher(id: string, payload?: { confirmVoucherNumber?: string; reason?: string; permanentDelete?: boolean; cancelReason?: string }) {
     const res = await fetch(`${API_BASE}/vouchers/${id}`, {
       method: 'DELETE',
+      headers: getHeaders(payload ? { 'Content-Type': 'application/json' } : {}),
+      body: payload ? JSON.stringify(payload) : undefined
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
+  },
+
+  async hideVoucher(id: string) {
+    const res = await fetch(`${API_BASE}/vouchers/${id}/hide`, {
+      method: 'POST',
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
+  },
+
+  async unhideVoucher(id: string) {
+    const res = await fetch(`${API_BASE}/vouchers/${id}/unhide`, {
+      method: 'POST',
       headers: getHeaders()
     });
     if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
@@ -835,11 +948,25 @@ export const api = {
     return res.json();
   },
 
-  async getSalesVouchers(fromDate?: string, toDate?: string, status?: string): Promise<any[]> {
+  async getSalesVouchers(
+    fromDate?: string,
+    toDate?: string,
+    statusOrOptions?: string | { includeHidden?: boolean; showCancelled?: boolean },
+    options?: { includeHidden?: boolean; showCancelled?: boolean }
+  ): Promise<any[]> {
+    let status: string | undefined;
+    let opts = options;
+    if (typeof statusOrOptions === 'object' && statusOrOptions !== null) {
+      opts = statusOrOptions;
+    } else if (typeof statusOrOptions === 'string') {
+      status = statusOrOptions;
+    }
     const params = new URLSearchParams({ type: 'SALES' });
     if (fromDate) params.append('fromDate', fromDate);
     if (toDate) params.append('toDate', toDate);
     if (status) params.append('status', status);
+    if (opts?.includeHidden) params.append('includeHidden', 'true');
+    if (opts?.showCancelled !== undefined) params.append('showCancelled', String(opts.showCancelled));
     const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
       headers: getHeaders()
     });
@@ -847,11 +974,25 @@ export const api = {
     return res.json();
   },
 
-  async getPurchaseVouchers(fromDate?: string, toDate?: string, status?: string): Promise<any[]> {
+  async getPurchaseVouchers(
+    fromDate?: string,
+    toDate?: string,
+    statusOrOptions?: string | { includeHidden?: boolean; showCancelled?: boolean },
+    options?: { includeHidden?: boolean; showCancelled?: boolean }
+  ): Promise<any[]> {
+    let status: string | undefined;
+    let opts = options;
+    if (typeof statusOrOptions === 'object' && statusOrOptions !== null) {
+      opts = statusOrOptions;
+    } else if (typeof statusOrOptions === 'string') {
+      status = statusOrOptions;
+    }
     const params = new URLSearchParams({ type: 'PURCHASE' });
     if (fromDate) params.append('fromDate', fromDate);
     if (toDate) params.append('toDate', toDate);
     if (status) params.append('status', status);
+    if (opts?.includeHidden) params.append('includeHidden', 'true');
+    if (opts?.showCancelled !== undefined) params.append('showCancelled', String(opts.showCancelled));
     const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
       headers: getHeaders()
     });
@@ -859,11 +1000,25 @@ export const api = {
     return res.json();
   },
 
-  async getReceiptVouchers(fromDate?: string, toDate?: string, status?: string): Promise<any[]> {
+  async getReceiptVouchers(
+    fromDate?: string,
+    toDate?: string,
+    statusOrOptions?: string | { includeHidden?: boolean; showCancelled?: boolean },
+    options?: { includeHidden?: boolean; showCancelled?: boolean }
+  ): Promise<any[]> {
+    let status: string | undefined;
+    let opts = options;
+    if (typeof statusOrOptions === 'object' && statusOrOptions !== null) {
+      opts = statusOrOptions;
+    } else if (typeof statusOrOptions === 'string') {
+      status = statusOrOptions;
+    }
     const params = new URLSearchParams({ type: 'RECEIPT' });
     if (fromDate) params.append('fromDate', fromDate);
     if (toDate) params.append('toDate', toDate);
     if (status) params.append('status', status);
+    if (opts?.includeHidden) params.append('includeHidden', 'true');
+    if (opts?.showCancelled !== undefined) params.append('showCancelled', String(opts.showCancelled));
     const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
       headers: getHeaders()
     });
@@ -871,11 +1026,25 @@ export const api = {
     return res.json();
   },
 
-  async getPaymentVouchers(fromDate?: string, toDate?: string, status?: string): Promise<any[]> {
+  async getPaymentVouchers(
+    fromDate?: string,
+    toDate?: string,
+    statusOrOptions?: string | { includeHidden?: boolean; showCancelled?: boolean },
+    options?: { includeHidden?: boolean; showCancelled?: boolean }
+  ): Promise<any[]> {
+    let status: string | undefined;
+    let opts = options;
+    if (typeof statusOrOptions === 'object' && statusOrOptions !== null) {
+      opts = statusOrOptions;
+    } else if (typeof statusOrOptions === 'string') {
+      status = statusOrOptions;
+    }
     const params = new URLSearchParams({ type: 'PAYMENT' });
     if (fromDate) params.append('fromDate', fromDate);
     if (toDate) params.append('toDate', toDate);
     if (status) params.append('status', status);
+    if (opts?.includeHidden) params.append('includeHidden', 'true');
+    if (opts?.showCancelled !== undefined) params.append('showCancelled', String(opts.showCancelled));
     const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
       headers: getHeaders()
     });
@@ -883,11 +1052,25 @@ export const api = {
     return res.json();
   },
 
-  async getJournalVouchers(fromDate?: string, toDate?: string, status?: string): Promise<any[]> {
+  async getJournalVouchers(
+    fromDate?: string,
+    toDate?: string,
+    statusOrOptions?: string | { includeHidden?: boolean; showCancelled?: boolean },
+    options?: { includeHidden?: boolean; showCancelled?: boolean }
+  ): Promise<any[]> {
+    let status: string | undefined;
+    let opts = options;
+    if (typeof statusOrOptions === 'object' && statusOrOptions !== null) {
+      opts = statusOrOptions;
+    } else if (typeof statusOrOptions === 'string') {
+      status = statusOrOptions;
+    }
     const params = new URLSearchParams({ type: 'JOURNAL' });
     if (fromDate) params.append('fromDate', fromDate);
     if (toDate) params.append('toDate', toDate);
     if (status) params.append('status', status);
+    if (opts?.includeHidden) params.append('includeHidden', 'true');
+    if (opts?.showCancelled !== undefined) params.append('showCancelled', String(opts.showCancelled));
     const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
       headers: getHeaders()
     });

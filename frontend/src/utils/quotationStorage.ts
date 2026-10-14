@@ -22,6 +22,7 @@ export interface QuotationLineItem {
   igstAmount: number;
   totalAmount: number;
   isService?: boolean;
+  dealerCost?: number;
 }
 
 export type QuotationStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'CONVERTED';

@@ -7,7 +7,7 @@ exports.initializeBusiness = initializeBusiness;
 exports.seedInitialData = seedInitialData;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 function initializeBusiness(db, options) {
-    const { companyId, companyName, legalName = companyName, gstin = '', state = 'Tamil Nadu', stateCode = '33', ownerUserId } = options;
+    const { companyId, companyName, legalName = companyName, gstin = '', state = 'Tamil Nadu', stateCode = '33', ownerUserId, addressLine1 = '', addressLine2 = '', city = '', pincode = '', country = 'India', phone = '', email = '', bankName = '', termsAndConditions = '1. Payment terms 30 days.' } = options;
     const isDefault = companyId === 'comp_default_01';
     const fyId = isDefault ? 'fy_2026_27' : `${companyId}_fy_2026_27`;
     // 1. Create Business / Company Record
@@ -23,7 +23,7 @@ function initializeBusiness(db, options) {
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?, ?, ?, ?
     )
-  `).run(companyId, companyName, legalName, gstin, gstin ? gstin.slice(2, 12) : '', '123, Commercial High Road', '', 'Chennai', state, stateCode, '600001', 'India', '+91 98765 43210', 'accounts@business.in', 'INR', '₹', 'State Bank of India', '', '', '', '1. Goods once sold will not be taken back.\n2. Payment terms 30 days.', ownerUserId || null);
+  `).run(companyId, companyName, legalName, gstin, gstin ? gstin.slice(2, 12) : '', addressLine1, addressLine2, city, state, stateCode, pincode, country, phone, email, 'INR', '₹', bankName, '', '', '', termsAndConditions, ownerUserId || null);
     // Link to user if ownerUserId is provided
     if (ownerUserId) {
         db.prepare(`

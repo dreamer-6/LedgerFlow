@@ -208,6 +208,8 @@
   --scrollbar-track:      transparent;
   --scrollbar-thumb:      #D1D5DB;
   --header-bg:            rgba(255, 255, 255, 0.95);
+  --bg-card:              #FFFFFF;
+  --border-color:         #E5E7EB;
 }
 
 /* ─── DARK MODE (LedgerFlow Dark Theme Direction) ─── */
@@ -368,6 +370,8 @@
   --scrollbar-track:        #080808;
   --scrollbar-thumb:        #292929;
   --header-bg:              #101010;
+  --bg-card:                #151515;
+  --border-color:           #292929;
 
   /* ── Charts: orange + neutral gray ── */
   --chart-sales:            #FF641F;
@@ -377,3 +381,29 @@
   --chart-receipts:         #FF641F;
   --chart-payments:         #6B7280;
 }
+
+/* ─── NATIVE FORM CONTROLS THEME & CONTRAST ─── */
+[data-theme="dark"] select,
+[data-theme="dark"] input,
+[data-theme="dark"] textarea {
+  color-scheme: dark;
+}
+
+[data-theme="dark"] option,
+[data-theme="dark"] optgroup {
+  background-color: var(--input-bg, #191919);
+  color: var(--input-text, #F5F5F5);
+}
+
+[data-theme="light"] select,
+[data-theme="light"] input,
+[data-theme="light"] textarea {
+  color-scheme: light;
+}
+
+[data-theme="light"] option,
+[data-theme="light"] optgroup {
+  background-color: #FFFFFF;
+  color: #0F172A;
+}
+

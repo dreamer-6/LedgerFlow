@@ -1,6 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { api, Company } from '../api/client';
-import { Printer, X, Download, FileText, Receipt, Trash2, AlertCircle } from 'lucide-react';
+import {
+  Printer,
+  X,
+  Download,
+  FileText,
+  Receipt,
+  Trash2,
+  AlertCircle,
+  Sliders,
+  Check,
+  ChevronDown
+} from 'lucide-react';
+import {
+  normalizeInvoiceData,
+  NormalizedInvoiceData,
+  InvoiceVisibilityOptions
+} from '../components/invoice/InvoiceAdapter';
+import {
+  InvoiceRenderer,
+  InvoiceLayoutType
+} from '../components/invoice/InvoiceRenderer';
 
 export interface InvoicePrintModalProps {
   voucherId?: string | null;
@@ -12,7 +32,7 @@ export interface InvoicePrintModalProps {
   onClose: () => void;
 }
 
-export type PaperFormat = 'A4' | 'A5_LANDSCAPE' | 'A5_PORTRAIT' | 'THERMAL';
+export type PaperFormat = 'A4' | 'A4_LANDSCAPE' | 'A5_PORTRAIT' | 'THERMAL';
 
 export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
   voucherId,
@@ -22,14 +42,43 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
 }) => {
   const [data, setData] = useState<any>(liveVoucherData || null);
   const [loading, setLoading] = useState<boolean>(!liveVoucherData && !!voucherId);
+
+  // Layout & Paper settings
+  const [layout, setLayout] = useState<InvoiceLayoutType>('Standard');
   const [format, setFormat] = useState<PaperFormat>('A4');
+  const [showPreferences, setShowPreferences] = useState<boolean>(false);
+
+  // Visibility options initialized from company.invoice_settings
+  const [visibility, setVisibility] = useState<InvoiceVisibilityOptions>(() => {
+    let saved: any = null;
+    try {
+      if (company?.invoice_settings) {
+        saved = JSON.parse(company.invoice_settings);
+      }
+    } catch {}
+    return {
+      showLogo: saved?.headerToggles?.showLogo ?? true,
+      showCompanyDetails: saved?.headerToggles?.showAddress ?? true,
+      showCustomerContact: true,
+      showHsn: saved?.dispToggles?.showHsn ?? true,
+      showUnit: saved?.dispToggles?.showUnit ?? true,
+      showTaxBreakdown: saved?.dispToggles?.showTaxBreakup ?? true,
+      showAmtWords: saved?.dispToggles?.showAmtWords ?? true,
+      showBankDetails: saved?.dispToggles?.showBank ?? true,
+      showTerms: saved?.dispToggles?.showTerms ?? true,
+      showSignature: saved?.dispToggles?.showSignature ?? true,
+      showLedgerflowWordmark: saved?.showLedgerflowWordmark ?? false
+    };
+  });
+
+  // Cancel / Delete Voucher Modal
   const [showCancelModal, setShowCancelModal] = useState<boolean>(false);
   const [cancelReason, setCancelReason] = useState<string>('Cancelled by user');
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Handle Escape key to close modal
+  // Close on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -40,6 +89,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
+  // Load voucher data
   useEffect(() => {
     if (liveVoucherData) {
       setData(liveVoucherData);
@@ -54,6 +104,16 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
         .finally(() => setLoading(false));
     }
   }, [voucherId, liveVoucherData]);
+
+  // Automatically adjust paper format when layout switches
+  const handleLayoutChange = (newLayout: InvoiceLayoutType) => {
+    setLayout(newLayout);
+    if (newLayout === 'Thermal') {
+      setFormat('THERMAL');
+    } else if (format === 'THERMAL') {
+      setFormat('A4');
+    }
+  };
 
   const handleCancelOrDeleteVoucher = async () => {
     if (!data?.voucher) return;
@@ -86,27 +146,37 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
     }
   };
 
-  const numberToWords = (num: number): string => {
-    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
-    const inWords = (n: number): string => {
-      if (n === 0) return '';
-      if (n < 20) return a[n] + ' ';
-      if (n < 100) return b[Math.floor(n / 10)] + ' ' + a[n % 10] + ' ';
-      if (n < 1000) return a[Math.floor(n / 100)] + ' Hundred ' + inWords(n % 100);
-      if (n < 100000) return inWords(Math.floor(n / 1000)) + ' Thousand ' + inWords(n % 1000);
-      if (n < 10000000) return inWords(Math.floor(n / 100000)) + ' Lakh ' + inWords(n % 100000);
-      return inWords(Math.floor(n / 10000000)) + ' Crore ' + inWords(n % 10000000);
-    };
-
-    const rupees = Math.floor(num / 100);
-    const paise = num % 100;
-    let str = 'Rupees ' + inWords(rupees).trim();
-    if (paise > 0) {
-      str += ' and ' + inWords(paise).trim() + ' Paise';
-    }
-    return str + ' Only';
+  const toggleVisibility = (key: keyof InvoiceVisibilityOptions) => {
+    setVisibility((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try {
+        let curSettings: any = {};
+        if (company?.invoice_settings) {
+          curSettings = JSON.parse(company.invoice_settings);
+        }
+        const updated = {
+          ...curSettings,
+          showLedgerflowWordmark: next.showLedgerflowWordmark,
+          dispToggles: {
+            ...curSettings.dispToggles,
+            showHsn: next.showHsn,
+            showUnit: next.showUnit,
+            showTaxBreakup: next.showTaxBreakdown,
+            showAmtWords: next.showAmtWords,
+            showBank: next.showBankDetails,
+            showTerms: next.showTerms,
+            showSignature: next.showSignature
+          },
+          headerToggles: {
+            ...curSettings.headerToggles,
+            showLogo: next.showLogo,
+            showAddress: next.showCompanyDetails
+          }
+        };
+        api.updateCurrentCompany({ invoice_settings: JSON.stringify(updated) }).catch(() => {});
+      } catch {}
+      return next;
+    });
   };
 
   if (loading || !data) {
@@ -121,35 +191,23 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
           justifyContent: 'center',
           zIndex: 110,
           color: '#FFFFFF',
-          fontFamily: 'var(--font-sans)'
+          fontFamily: 'var(--font-sans, system-ui)'
         }}
       >
-        <div style={{ background: 'var(--surface)', color: 'var(--text-primary)', padding: '24px 32px', borderRadius: '8px', border: '1px solid var(--border)' }}>
+        <div style={{ background: 'var(--surface, #1E293B)', color: 'var(--text-primary, #FFFFFF)', padding: '24px 32px', borderRadius: '8px', border: '1px solid var(--border, #334155)' }}>
           Rendering Invoice Print Preview...
         </div>
       </div>
     );
   }
 
-  const { voucher, lines } = data;
-  const isPurchase = voucher.voucher_type === 'PURCHASE';
-  const hasGstin = !isPurchase
-    ? !!(company?.gstin && company.gstin.trim() && company.gstin !== 'URP')
-    : !!(voucher.party_gstin && voucher.party_gstin.trim() && voucher.party_gstin !== 'Unregistered');
+  const normalized: NormalizedInvoiceData = normalizeInvoiceData(data, company);
 
   const getContainerWidth = () => {
-    switch (format) {
-      case 'A4':
-        return '820px';
-      case 'A5_LANDSCAPE':
-        return '820px';
-      case 'A5_PORTRAIT':
-        return '580px';
-      case 'THERMAL':
-        return '380px';
-      default:
-        return '820px';
-    }
+    if (layout === 'Thermal' || format === 'THERMAL') return '360px';
+    if (format === 'A4_LANDSCAPE') return '920px';
+    if (format === 'A5_PORTRAIT') return '580px';
+    return '820px';
   };
 
   const handlePrint = () => {
@@ -158,34 +216,37 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
 
     const pageSize =
       format === 'A4' ? 'A4 portrait'
-      : format === 'A5_LANDSCAPE' ? 'A5 landscape'
+      : format === 'A4_LANDSCAPE' ? 'A4 landscape'
       : format === 'A5_PORTRAIT' ? 'A5 portrait'
       : '80mm auto';
     const pageMargin = format === 'THERMAL' ? '2mm' : '8mm';
-    const isThermal = format === 'THERMAL';
+    const isThermal = format === 'THERMAL' || layout === 'Thermal';
 
     const iframe = document.createElement('iframe');
     iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;';
     document.body.appendChild(iframe);
 
     const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!iframeDoc) { document.body.removeChild(iframe); return; }
+    if (!iframeDoc) {
+      document.body.removeChild(iframe);
+      return;
+    }
 
     iframeDoc.open();
     iframeDoc.write(`<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>Invoice Print — ${voucher.voucher_number}</title>
+  <title>Invoice — ${normalized.voucherNumber}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
     @page { size: ${pageSize}; margin: ${pageMargin}; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: ${isThermal ? "'JetBrains Mono','Courier New',monospace" : "'Roboto','Helvetica Neue',Arial,sans-serif"};
+      font-family: ${isThermal ? "'JetBrains Mono','Courier New',monospace" : "'Inter',system-ui,sans-serif"};
       font-size: ${isThermal ? '11px' : '12px'};
-      color: #121B2E;
-      background: #fff;
+      color: #0F172A;
+      background: #FFFFFF;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -194,11 +255,11 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
       max-width: 100% !important;
       box-shadow: none !important;
       border: none !important;
-      padding: ${isThermal ? '4px' : (format === 'A5_LANDSCAPE' || format === 'A5_PORTRAIT') ? '12px 16px' : '20px 24px'} !important;
+      padding: ${isThermal ? '4px' : '16px 20px'} !important;
       border-radius: 0 !important;
     }
     table { border-collapse: collapse; width: 100%; }
-    th, td { padding: 4px 8px; }
+    th, td { padding: 6px 8px; }
   </style>
 </head>
 <body>
@@ -227,690 +288,427 @@ ${printTarget.outerHTML}
         backgroundColor: 'rgba(5, 5, 5, 0.85)',
         backdropFilter: 'blur(6px)',
         display: 'flex',
-        flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'flex-start',
+        justifyContent: 'center',
         zIndex: 110,
-        padding: '20px 12px',
-        overflowY: 'auto',
-        overflowX: 'auto'
+        padding: '16px 12px'
       }}
     >
-      {/* Dynamic Print Stylesheet for exact paper dimensions */}
-      <style>{`
-        @media print {
-          body {
-            background: #FFFFFF !important;
-            color: #000000 !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-          @page {
-            size: ${
-              format === 'A4'
-                ? 'A4 portrait'
-                : format === 'A5_LANDSCAPE'
-                ? 'A5 landscape'
-                : format === 'A5_PORTRAIT'
-                ? 'A5 portrait'
-                : '80mm auto'
-            };
-            margin: ${format === 'THERMAL' ? '2mm' : '8mm'};
-          }
-          #printable-tax-invoice {
-            width: 100% !important;
-            max-width: 100% !important;
-            min-height: auto !important;
-            box-shadow: none !important;
-            border: none !important;
-            padding: ${format === 'A5_LANDSCAPE' || format === 'A5_PORTRAIT' ? '12px 16px' : '20px 24px'} !important;
-          }
-        }
-      `}</style>
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            backgroundColor: '#10B981',
+            color: '#FFFFFF',
+            padding: '10px 20px',
+            borderRadius: '6px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            zIndex: 120,
+            fontSize: '13px',
+            fontWeight: 600
+          }}
+        >
+          {toastMessage}
+        </div>
+      )}
 
-      {/* Top Action Toolbar (Hidden during print) */}
+      {/* Viewport-Constrained Modal Container */}
       <div
-        className="no-print"
         style={{
-          width: getContainerWidth(),
-          maxWidth: '100%',
+          width: '100%',
+          maxWidth: getContainerWidth(),
+          maxHeight: 'calc(100vh - 32px)',
+          height: '100%',
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '10px',
-          marginBottom: '16px',
-          backgroundColor: 'var(--surface)',
-          padding: '10px 18px',
+          flexDirection: 'column',
           borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-          border: '1px solid var(--border)'
+          overflow: 'hidden',
+          boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6)',
+          backgroundColor: '#0F172A'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '13px' }}>
-            Preview: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--purple)' }}>{voucher.voucher_number}</span>
-          </span>
-          {/* Format / Paper Size Pills */}
-          <div style={{ display: 'flex', gap: '4px', background: 'var(--surface-elevated)', padding: '3px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
-            {[
-              { id: 'A4', label: 'A4 Standard' },
-              { id: 'A5_LANDSCAPE', label: 'A5 Landscape' },
-              { id: 'A5_PORTRAIT', label: 'A5 Portrait' },
-              { id: 'THERMAL', label: 'Thermal POS' }
-            ].map((fmt) => (
+        {/* Top Action Toolbar */}
+        <div
+          className="no-print"
+          style={{
+            flexShrink: 0,
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '10px',
+            backgroundColor: '#1E293B',
+            padding: '10px 16px',
+            borderBottom: '1px solid #334155',
+            color: '#F8FAFC',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            <div>
+              <span style={{ color: '#94A3B8', fontSize: '11px', display: 'block' }}>Voucher</span>
+              <strong style={{ color: '#F97316', fontFamily: 'monospace', fontSize: '13px' }}>
+                {normalized.voucherNumber}
+              </strong>
+            </div>
+
+          {/* Layout Selector */}
+          <div style={{ display: 'flex', gap: '3px', background: '#0F172A', padding: '3px', borderRadius: '6px' }}>
+            {(['Standard', 'Simple', 'Thermal'] as InvoiceLayoutType[]).map((tmpl) => (
               <button
-                key={fmt.id}
+                key={tmpl}
                 type="button"
-                onClick={() => setFormat(fmt.id as PaperFormat)}
+                onClick={() => handleLayoutChange(tmpl)}
                 style={{
-                  padding: '4px 8px',
+                  padding: '5px 10px',
                   fontSize: '11px',
-                  fontWeight: format === fmt.id ? 700 : 500,
+                  fontWeight: layout === tmpl ? 700 : 500,
                   borderRadius: '4px',
-                  background: format === fmt.id ? 'var(--surface)' : 'transparent',
-                  color: format === fmt.id ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  border: format === fmt.id ? '1px solid var(--border)' : '1px solid transparent',
+                  background: layout === tmpl ? '#EA580C' : 'transparent',
+                  color: layout === tmpl ? '#FFFFFF' : '#94A3B8',
+                  border: 'none',
                   cursor: 'pointer'
                 }}
               >
-                {fmt.label}
+                {tmpl === 'Standard' ? 'Standard A4' : tmpl === 'Simple' ? 'Simple' : 'Thermal POS'}
               </button>
             ))}
           </div>
+
+          {/* Paper Format (if not thermal) */}
+          {layout !== 'Thermal' && (
+            <div style={{ display: 'flex', gap: '3px', background: '#0F172A', padding: '3px', borderRadius: '6px' }}>
+              {[
+                { id: 'A4', label: 'A4 Portrait' },
+                { id: 'A4_LANDSCAPE', label: 'A4 Landscape' },
+                { id: 'A5_PORTRAIT', label: 'A5' }
+              ].map((fmt) => (
+                <button
+                  key={fmt.id}
+                  type="button"
+                  onClick={() => setFormat(fmt.id as PaperFormat)}
+                  style={{
+                    padding: '5px 8px',
+                    fontSize: '10.5px',
+                    fontWeight: format === fmt.id ? 700 : 500,
+                    borderRadius: '4px',
+                    background: format === fmt.id ? '#334155' : 'transparent',
+                    color: format === fmt.id ? '#FFFFFF' : '#94A3B8',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {fmt.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Preferences Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowPreferences((p) => !p)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '5px 10px',
+              fontSize: '11px',
+              fontWeight: 600,
+              borderRadius: '5px',
+              background: showPreferences ? '#334155' : '#0F172A',
+              color: showPreferences ? '#F97316' : '#94A3B8',
+              border: '1px solid #334155',
+              cursor: 'pointer'
+            }}
+          >
+            <Sliders size={13} />
+            <span>Options</span>
+          </button>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {voucher && voucher.status !== 'CANCELLED' && (
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {normalized.status !== 'CANCELLED' && (
             <button
               type="button"
-              className="btn-secondary"
               onClick={() => setShowCancelModal(true)}
               style={{
-                height: '34px',
-                padding: '0 12px',
-                color: '#DC2626',
+                height: '32px',
+                padding: '0 10px',
+                color: '#EF4444',
                 borderColor: 'rgba(239, 68, 68, 0.4)',
-                backgroundColor: 'rgba(239, 68, 68, 0.06)',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: '5px',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                fontSize: '12.5px',
+                gap: '5px',
+                fontSize: '12px',
                 cursor: 'pointer'
               }}
-              title={voucher.status === 'DRAFT' ? 'Delete unposted draft voucher' : 'Cancel voucher and reverse accounting effects'}
+              title={normalized.status === 'DRAFT' ? 'Delete draft voucher' : 'Cancel voucher'}
             >
-              <Trash2 size={14} />
-              <span>{voucher.status === 'DRAFT' ? 'Delete Draft' : 'Cancel Voucher'}</span>
+              <Trash2 size={13} />
+              <span>{normalized.status === 'DRAFT' ? 'Delete Draft' : 'Cancel'}</span>
             </button>
           )}
-          <button className="btn-primary" onClick={handlePrint} style={{ height: '34px', padding: '0 14px' }}>
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            style={{
+              height: '32px',
+              padding: '0 14px',
+              backgroundColor: '#EA580C',
+              color: '#FFFFFF',
+              border: 'none',
+              borderRadius: '5px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12.5px',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
             <Printer size={14} />
-            <span>Print</span>
+            <span>Print Invoice</span>
           </button>
-          <button className="btn-secondary" onClick={onClose} style={{ height: '34px', padding: '0 12px' }} title="Close Preview (Esc)">
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            style={{
+              height: '32px',
+              padding: '0 12px',
+              backgroundColor: '#0F172A',
+              color: '#F8FAFC',
+              border: '1px solid #334155',
+              borderRadius: '5px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+            title="Download PDF via browser print dialog"
+          >
+            <Download size={13} />
+            <span>PDF</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              height: '32px',
+              padding: '0 10px',
+              backgroundColor: '#334155',
+              color: '#F8FAFC',
+              border: 'none',
+              borderRadius: '5px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '12px',
+              cursor: 'pointer'
+            }}
+            title="Close Preview (Esc)"
+          >
             <X size={14} />
-            <span>Close (Esc)</span>
           </button>
         </div>
       </div>
 
-      {/* Printable Document (A4 / A5) */}
-      {format !== 'THERMAL' ? (
+      {/* Preferences Drawer */}
+      {showPreferences && (
         <div
-          id="printable-tax-invoice"
-          className="print-area"
+          className="no-print"
           style={{
             width: getContainerWidth(),
-            minHeight: format === 'A4' ? '1050px' : format === 'A5_PORTRAIT' ? '740px' : '520px',
-            backgroundColor: '#FFFFFF',
-            color: '#121B2E',
-            padding: format === 'A5_LANDSCAPE' ? '24px 28px' : format === 'A5_PORTRAIT' ? '24px 20px' : '36px 40px',
+            maxWidth: '100%',
+            backgroundColor: '#0F172A',
+            border: '1px solid #334155',
             borderRadius: '6px',
-            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4)',
-            fontFamily: 'var(--font-sans)',
-            fontSize: format === 'A5_LANDSCAPE' ? '11px' : '12px',
-            lineHeight: '1.4',
-            border: '1px solid #CBD5E1'
-          }}
-        >
-          {/* Document Title Banner: NO duplicate company name in heading! */}
-          <div style={{ textAlign: 'center', borderBottom: '2px solid #121B2E', paddingBottom: '8px', marginBottom: '14px' }}>
-            <span style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#121B2E' }}>
-              {isPurchase ? 'PURCHASE VOUCHER / BILL' : 'TAX INVOICE'}
-            </span>
-            <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>
-              {isPurchase ? '(Purchase Bill Entry / Inward Supply)' : '(Original for Recipient / Issued under Rule 46 CGST Rules)'}
-            </div>
-          </div>
-
-          {/* Company Header & Invoice Details Row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.2fr', gap: '20px', borderBottom: '1px solid #E2E8F0', paddingBottom: '14px', marginBottom: '14px' }}>
-            {/* Supplier / Seller Header */}
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                {!isPurchase && company?.logo_base64 && (
-                  <img
-                    src={company.logo_base64}
-                    alt="Company Logo"
-                    style={{ maxHeight: '60px', maxWidth: '120px', objectFit: 'contain' }}
-                  />
-                )}
-                <div style={{ fontSize: '15px', fontWeight: 700, color: '#121B2E' }}>
-                  {isPurchase ? (voucher.party_name || 'SUPPLIER') : (company?.company_name || 'ENTERPRISE')}
-                </div>
-              </div>
-              <div style={{ color: '#555F73', fontSize: '11.5px', marginTop: '3px' }}>
-                {isPurchase
-                  ? (voucher.address_line1 ? `${voucher.address_line1}, ${voucher.city || ''}` : 'Supplier Business Address')
-                  : (company?.address_line1 || 'Main Business Office, Chennai')}
-              </div>
-              <div style={{ color: '#555F73', fontSize: '11.5px' }}>
-                State: {isPurchase ? (voucher.state || 'Tamil Nadu') : (company?.state || 'Tamil Nadu')} (Code: {isPurchase ? (voucher.state_code || '33') : (company?.state_code || '33')})
-              </div>
-              {/* Only show GSTIN if company or party has a valid GSTIN; never show unregistered */}
-              {hasGstin && (
-                <div style={{ fontWeight: 600, marginTop: '4px', fontSize: '12px' }}>
-                  GSTIN: <span style={{ fontFamily: 'var(--font-mono)' }}>{isPurchase ? voucher.party_gstin : company?.gstin}</span>
-                </div>
-              )}
-              {company?.phone && !isPurchase && (
-                <div style={{ fontSize: '11.5px', color: '#555F73' }}>
-                  Phone: <strong>{company.phone}</strong> {company.email && `| Email: ${company.email}`}
-                </div>
-              )}
-            </div>
-
-            {/* Invoice Meta Box */}
-            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px' }}>
-              <div>
-                <span style={{ color: '#64748B' }}>Invoice No: </span>
-                <strong style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
-                  {voucher.reference_number || voucher.voucher_number}
-                </strong>
-              </div>
-              <div>
-                <span style={{ color: '#64748B' }}>Dated: </span>
-                <strong>{voucher.reference_date || voucher.voucher_date}</strong>
-              </div>
-              <div>
-                <span style={{ color: '#64748B' }}>Voucher Ref: </span>
-                <span style={{ fontFamily: 'var(--font-mono)' }}>{voucher.voucher_number}</span>
-              </div>
-              {voucher.payment_mode && (
-                <div>
-                  <span style={{ color: '#64748B' }}>Payment Mode: </span>
-                  <strong style={{ color: '#121B2E' }}>{voucher.payment_mode}</strong>
-                </div>
-              )}
-              <div>
-                <span style={{ color: '#64748B' }}>Place of Supply: </span>
-                <strong>{voucher.state_code || company?.state_code || '33'} - {voucher.state || company?.state || 'Tamil Nadu'}</strong>
-              </div>
-            </div>
-          </div>
-
-          {/* Bill To & Ship To Sections */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', borderBottom: '1px solid #E2E8F0', paddingBottom: '14px', marginBottom: '16px' }}>
-            <div style={{ padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
-              <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
-                {isPurchase ? 'Buyer (Bill To)' : 'Bill To (Recipient)'}
-              </div>
-              <div style={{ fontWeight: 700, fontSize: '13px' }}>
-                {isPurchase ? (company?.company_name || 'ENTERPRISE') : (voucher.party_name || 'Cash Customer / Counter Sale')}
-              </div>
-              <div style={{ color: '#555F73', fontSize: '11px', marginTop: '2px' }}>
-                {(() => {
-                  if (isPurchase) return company?.address_line1 || (company?.city ? `City: ${company.city}` : 'Chennai, Tamil Nadu');
-                  const addr = (voucher.address_line1 || '').trim();
-                  const city = (voucher.city || '').trim();
-                  const isGenericOrBlank = !addr || [
-                    'main business address',
-                    'main address',
-                    'main office',
-                    'counter sale',
-                    'counter sale / over-the-counter',
-                    'n/a',
-                    'na',
-                    'nil',
-                    'none',
-                    '-',
-                    '.'
-                  ].includes(addr.toLowerCase());
-
-                  if (!isGenericOrBlank) {
-                    return addr;
-                  }
-                  if (city) {
-                    return `City: ${city}`;
-                  }
-                  if (voucher.state) {
-                    return `State: ${voucher.state}`;
-                  }
-                  return '';
-                })()}
-              </div>
-              {((isPurchase ? company?.gstin : voucher.party_gstin) &&
-                !['URP', 'UNREGISTERED', 'N/A', 'CONSUMER', ''].includes(String(isPurchase ? company?.gstin : voucher.party_gstin).toUpperCase().trim())) && (
-                <div style={{ marginTop: '4px', fontSize: '11px' }}>
-                  <strong>GSTIN:</strong> <span style={{ fontFamily: 'var(--font-mono)' }}>{isPurchase ? company?.gstin : voucher.party_gstin}</span>
-                </div>
-              )}
-            </div>
-
-            <div style={{ padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '4px', border: '1px solid #E2E8F0' }}>
-              <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
-                {isPurchase ? 'Consignee / Warehouse' : 'Ship To (Consignee)'}
-              </div>
-              <div style={{ fontWeight: 700, fontSize: '13px' }}>
-                {voucher.party_name || 'Same as Buyer'}
-              </div>
-              <div style={{ color: '#555F73', fontSize: '11px', marginTop: '2px' }}>
-                {(() => {
-                  if (isPurchase) return voucher.narration || 'Warehouse Inward Movement';
-                  const addr = (voucher.address_line1 || '').trim();
-                  const city = (voucher.city || '').trim();
-                  const isGenericOrBlank = !addr || [
-                    'main business address',
-                    'main address',
-                    'main office',
-                    'counter sale',
-                    'counter sale / over-the-counter',
-                    'n/a',
-                    'na',
-                    'nil',
-                    'none',
-                    '-',
-                    '.'
-                  ].includes(addr.toLowerCase());
-
-                  if (!isGenericOrBlank) return 'Same as Billing Address';
-                  if (city) return `City: ${city}`;
-                  return 'Same as Billing Address';
-                })()}
-              </div>
-              <div style={{ marginTop: '4px', fontSize: '11px' }}>
-                <strong>State:</strong> {voucher.state || company?.state || 'Tamil Nadu'} (Code: {voucher.state_code || company?.state_code || '33'})
-              </div>
-            </div>
-          </div>
-
-          {/* Item Table: HSN/SAC, Quantity, Rate, Discount, Taxable Value, GST */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', fontSize: '11.5px' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#F8FAFC', borderTop: '1px solid #121B2E', borderBottom: '1px solid #121B2E' }}>
-                <th style={{ padding: '7px 8px', textAlign: 'center', width: '30px' }}>#</th>
-                <th style={{ padding: '7px 8px', textAlign: 'left' }}>Description of Goods / Services</th>
-                <th style={{ padding: '7px 8px', textAlign: 'left', width: '85px' }}>HSN/SAC</th>
-                <th style={{ padding: '7px 8px', textAlign: 'right', width: '60px' }}>Quantity</th>
-                <th style={{ padding: '7px 8px', textAlign: 'right', width: '90px' }}>Rate (₹)</th>
-                <th style={{ padding: '7px 8px', textAlign: 'center', width: '45px' }}>per</th>
-                <th style={{ padding: '7px 8px', textAlign: 'right', width: '100px' }}>Amount (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines && lines.length > 0 ? (
-                lines.map((l: any, idx: number) => {
-                  const taxableVal = (l.taxable_amount_paise || (l.rate_paise || Math.round((l.rate || 0) * 100)) * (l.quantity || 1)) / 100;
-                  const unitPrice = (l.rate_paise ? l.rate_paise / 100 : (l.rate || 0));
-                  return (
-                    <tr key={idx} style={{ borderBottom: '1px solid #E2E8F0', verticalAlign: 'top' }}>
-                      <td style={{ padding: '7px 8px', textAlign: 'center', color: '#64748B' }}>{idx + 1}</td>
-                      <td style={{ padding: '7px 8px' }}>
-                        <div style={{ fontWeight: 600, color: '#121B2E' }}>{l.item_name || l.description || 'Stock Item'}</div>
-                        {l.serial_number && (
-                          <div style={{ fontSize: '10.5px', color: '#555F73', marginTop: '2px' }}>
-                            <strong>S/N:</strong> {l.serial_number}
-                          </div>
-                        )}
-                        {l.description && l.description !== l.item_name && (
-                          <div style={{ fontSize: '10.5px', color: '#555F73', whiteSpace: 'pre-line', marginTop: '2px' }}>
-                            {l.description}
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ padding: '7px 8px', fontFamily: 'var(--font-mono)' }}>{l.hsn_sac || l.hsnSac || '85044029'}</td>
-                      <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
-                        {Number(l.quantity || 1).toFixed(2)} {l.unit_symbol || l.unit || 'NOS'}
-                      </td>
-                      <td style={{ padding: '7px 8px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
-                        {unitPrice.toFixed(2)}
-                      </td>
-                      <td style={{ padding: '7px 8px', textAlign: 'center', color: '#64748B' }}>
-                        {l.unit_symbol || l.unit || 'NOS'}
-                      </td>
-                      <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-                        {taxableVal.toFixed(2)}
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={7} style={{ padding: '14px', textAlign: 'center', color: '#94A3B8' }}>No line items added.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-
-          {/* Tax Summary & Totals */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px', marginBottom: '16px' }}>
-            {/* Amount in Words & Bank Details */}
-            <div>
-              <div style={{ padding: '10px 12px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '4px', marginBottom: '10px' }}>
-                <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' }}>
-                  Amount Chargeable (in words):
-                </div>
-                <div style={{ fontWeight: 700, fontSize: '12px', marginTop: '2px', color: '#121B2E' }}>
-                  {numberToWords(voucher.total_amount_paise || 0)}
-                </div>
-                {(voucher.cgst_amount_paise + voucher.sgst_amount_paise + voucher.igst_amount_paise) > 0 && (
-                  <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #CBD5E1', fontSize: '10.5px', color: '#555F73' }}>
-                    <strong>Tax Amount: </strong>
-                    {numberToWords(voucher.cgst_amount_paise + voucher.sgst_amount_paise + voucher.igst_amount_paise)}
-                  </div>
-                )}
-              </div>
-
-              {/* Bank Details */}
-              <div style={{ padding: '10px 12px', border: '1px solid #E2E8F0', borderRadius: '4px', fontSize: '11px' }}>
-                <div style={{ fontWeight: 700, color: '#121B2E', marginBottom: '3px' }}>
-                  {isPurchase ? "Supplier's Bank Details" : "Company's Bank Details"}
-                </div>
-                <div>Bank Name: <strong>{isPurchase ? (voucher.bank_name || 'Bank') : (company?.bank_name || 'State Bank of India')}</strong></div>
-                {company?.bank_account_no && !isPurchase && <div>A/c No: <strong>{company.bank_account_no}</strong> (IFSC: {company.bank_ifsc || 'SBIN0000123'})</div>}
-                <div>Payment Terms: <strong>{voucher.payment_mode || 'Immediate'}</strong></div>
-              </div>
-            </div>
-
-            {/* Tax Summary Box */}
-            <div style={{ border: '1px solid #E2E8F0', borderRadius: '4px', padding: '12px 14px', fontSize: '11.5px', backgroundColor: '#FAFAFA' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '7px' }}>
-                <span style={{ color: '#475569', fontWeight: 600 }}>Tax Exclusive Amount:</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                  ₹{((voucher.taxable_amount_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-              {voucher.igst_amount_paise > 0 ? (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span style={{ color: '#475569' }}>IGST:</span>
-                  <span style={{ fontFamily: 'var(--font-mono)' }}>
-                    ₹{((voucher.igst_amount_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ color: '#475569' }}>CGST:</span>
-                    <span style={{ fontFamily: 'var(--font-mono)' }}>
-                      ₹{((voucher.cgst_amount_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ color: '#475569' }}>SGST:</span>
-                    <span style={{ fontFamily: 'var(--font-mono)' }}>
-                      ₹{((voucher.sgst_amount_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                </>
-              )}
-              {voucher.round_off_paise !== 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <span style={{ color: '#64748B' }}>Round Off:</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', color: voucher.round_off_paise < 0 ? '#DC2626' : undefined }}>
-                    {voucher.round_off_paise < 0 ? `(-)₹${(Math.abs(voucher.round_off_paise) / 100).toFixed(2)}` : `₹${(voucher.round_off_paise / 100).toFixed(2)}`}
-                  </span>
-                </div>
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '2px solid #0F172A', paddingTop: '8px', marginTop: '8px', fontWeight: 700, fontSize: '15px' }}>
-                <span style={{ color: '#0F172A' }}>Total:</span>
-                <span style={{ fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
-                  ₹{((voucher.total_amount_paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Terms & Conditions & Signatory Box */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px', borderTop: '1px solid #E2E8F0', paddingTop: '14px', marginTop: '10px' }}>
-            <div>
-              <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: '4px' }}>
-                Terms & Conditions
-              </div>
-              <div style={{ fontSize: '10px', color: '#555F73', lineHeight: '1.4', whiteSpace: 'pre-line' }}>
-                {voucher.terms_conditions || '1. Goods once sold will not be returned.\n2. Subject to local jurisdiction.'}
-              </div>
-            </div>
-
-            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '70px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 600 }}>
-                for {isPurchase ? (voucher.party_name || 'SUPPLIER') : (company?.company_name || 'ENTERPRISE')}
-              </div>
-              <div style={{ fontSize: '10px', color: '#64748B', marginTop: '30px' }}>
-                Authorised Signatory
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* Thermal Slip Preview */
-        <div
-          id="printable-tax-invoice"
-          className="print-area"
-          style={{
-            width: '380px',
-            backgroundColor: '#FFFFFF',
-            color: '#121B2E',
-            padding: '20px',
-            borderRadius: '4px',
-            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.18)',
-            fontFamily: 'var(--font-mono)',
+            padding: '12px 16px',
+            marginBottom: '14px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+            gap: '8px 14px',
             fontSize: '11px',
-            lineHeight: '1.4',
-            border: '1px dashed #CBD5E1'
+            color: '#CBD5E1'
           }}
         >
-          <div style={{ textAlign: 'center', marginBottom: '12px', borderBottom: '1px dashed #94A3B8', paddingBottom: '8px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 700 }}>{company?.company_name || 'TAX INVOICE'}</div>
-            {hasGstin && (
-              <div style={{ fontSize: '10px' }}>GSTIN: {isPurchase ? voucher.party_gstin : company?.gstin}</div>
-            )}
-            <div style={{ fontSize: '11px', fontWeight: 700, marginTop: '4px' }}>
-              {isPurchase ? 'PURCHASE VOUCHER' : 'TAX INVOICE'}
-            </div>
-          </div>
-
-          <div style={{ marginBottom: '10px', fontSize: '10.5px' }}>
-            <div>Inv: <strong>{voucher.voucher_number}</strong> | {voucher.voucher_date}</div>
-            <div>Party: <strong>{voucher.party_name || 'Counter Sale'}</strong></div>
-            {(() => {
-              const addr = (voucher.address_line1 || '').trim();
-              const city = (voucher.city || '').trim();
-              const isGeneric = !addr || ['main business address', 'n/a', 'nil', '-', 'counter sale'].includes(addr.toLowerCase());
-              if (!isGeneric) return <div>Addr: {addr}</div>;
-              if (city) return <div>City: {city}</div>;
-              return null;
-            })()}
-          </div>
-
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '10px', fontSize: '10.5px' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px dashed #94A3B8' }}>
-                <th style={{ textAlign: 'left', padding: '3px 0' }}>Item</th>
-                <th style={{ textAlign: 'right', padding: '3px 0' }}>Qty</th>
-                <th style={{ textAlign: 'right', padding: '3px 0' }}>Amt</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((l: any, i: number) => (
-                <tr key={i}>
-                  <td style={{ padding: '3px 0' }}>{l.item_name || l.description}</td>
-                  <td style={{ textAlign: 'right', padding: '3px 0' }}>{l.quantity}</td>
-                  <td style={{ textAlign: 'right', padding: '3px 0' }}>₹{((l.taxable_amount_paise || (l.rate_paise || 0) * (l.quantity || 1)) / 100).toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div style={{ borderTop: '1px dashed #94A3B8', paddingTop: '6px', marginBottom: '10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Tax Exclusive Amt:</span>
-              <span>₹{((voucher.taxable_amount_paise || 0) / 100).toFixed(2)}</span>
-            </div>
-            {voucher.igst_amount_paise > 0 ? (
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>IGST:</span>
-                <span>₹{((voucher.igst_amount_paise || 0) / 100).toFixed(2)}</span>
-              </div>
-            ) : (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>CGST:</span>
-                  <span>₹{((voucher.cgst_amount_paise || 0) / 100).toFixed(2)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>SGST:</span>
-                  <span>₹{((voucher.sgst_amount_paise || 0) / 100).toFixed(2)}</span>
-                </div>
-              </>
-            )}
-            {voucher.round_off_paise !== 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>Round Off:</span>
-                <span>{voucher.round_off_paise < 0 ? `(-)₹${(Math.abs(voucher.round_off_paise) / 100).toFixed(2)}` : `₹${(voucher.round_off_paise / 100).toFixed(2)}`}</span>
-              </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '13px', marginTop: '4px' }}>
-              <span>Total:</span>
-              <span>₹{((voucher.total_amount_paise || 0) / 100).toFixed(2)}</span>
-            </div>
-          </div>
-
-          <div style={{ textAlign: 'center', fontSize: '10px', color: '#64748B', borderTop: '1px dashed #CBD5E1', paddingTop: '6px' }}>
-            Thank you for your business!
-          </div>
+          {[
+            { key: 'showLogo', label: 'Company Logo' },
+            { key: 'showCompanyDetails', label: 'Company Details' },
+            { key: 'showCustomerContact', label: 'Customer Contact' },
+            { key: 'showHsn', label: 'HSN/SAC Code' },
+            { key: 'showUnit', label: 'Unit Column' },
+            { key: 'showTaxBreakdown', label: 'Tax Breakdown' },
+            { key: 'showAmtWords', label: 'Amount in Words' },
+            { key: 'showBankDetails', label: 'Bank Details' },
+            { key: 'showTerms', label: 'Terms & Conditions' },
+            { key: 'showSignature', label: 'Signatory Block' },
+            { key: 'showLedgerflowWordmark', label: 'Show LedgerFlow Wordmark' }
+          ].map((item) => {
+            const isChecked = Boolean((visibility as any)[item.key]);
+            return (
+              <label
+                key={item.key}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => toggleVisibility(item.key as keyof InvoiceVisibilityOptions)}
+                />
+                <span>{item.label}</span>
+              </label>
+            );
+          })}
         </div>
       )}
 
-      {/* Cancellation / Deletion Modal */}
-      {showCancelModal && data?.voucher && (
+        {/* Scrollable Document Stage */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'auto',
+            width: '100%',
+            padding: '20px 12px 32px',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'flex-start',
+            backgroundColor: '#0F172A'
+          }}
+        >
+          {/* Rendered Invoice Sheet */}
+          <div
+            style={{
+              boxShadow: '0 8px 30px rgba(0, 0, 0, 0.45)',
+              borderRadius: '4px',
+              overflow: 'hidden',
+              maxWidth: '100%'
+            }}
+          >
+            <InvoiceRenderer
+              data={normalized}
+              layout={layout}
+              options={visibility}
+              id="printable-tax-invoice"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Cancel / Delete Voucher Confirmation Modal */}
+      {showCancelModal && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            backgroundColor: 'rgba(0,0,0,0.7)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 99999
+            zIndex: 130
           }}
-          onClick={() => setShowCancelModal(false)}
         >
           <div
-            className="ledger-card"
             style={{
-              width: '440px',
-              padding: '24px',
-              borderRadius: '12px',
-              background: 'var(--surface, #1E293B)',
-              color: 'var(--text-primary, #F8FAFC)',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4)',
-              border: '1px solid var(--border)'
+              backgroundColor: '#1E293B',
+              border: '1px solid #334155',
+              borderRadius: '8px',
+              padding: '20px 24px',
+              width: '420px',
+              maxWidth: '90%',
+              color: '#F8FAFC'
             }}
-            onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <div
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#DC2626'
-                }}
-              >
-                <AlertCircle size={22} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 600 }}>
-                  {data.voucher.status === 'DRAFT' ? 'Delete Draft Voucher' : 'Cancel Voucher'}
-                </h3>
-                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
-                  {data.voucher.voucher_number || 'Transaction'}
-                </p>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#EF4444', marginBottom: '12px' }}>
+              <AlertCircle size={22} />
+              <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
+                {normalized.status === 'DRAFT' ? 'Delete Draft Voucher?' : 'Cancel Posted Voucher?'}
+              </h4>
             </div>
 
-            <p style={{ fontSize: '13.5px', color: 'var(--text-primary)', lineHeight: 1.5, marginBottom: '16px' }}>
-              {data.voucher.status === 'DRAFT' ? (
-                <>Are you sure you want to permanently delete this unposted draft voucher?</>
-              ) : (
-                <>
-                  Cancelling this voucher will reverse all associated inventory movements and double-entry ledger postings in the general ledger while maintaining the audit trail.
-                </>
-              )}
+            <p style={{ fontSize: '12px', color: '#CBD5E1', marginBottom: '14px', lineHeight: 1.4 }}>
+              {normalized.status === 'DRAFT'
+                ? `This will permanently delete draft ${normalized.voucherNumber}. This action cannot be undone.`
+                : `Cancelling ${normalized.voucherNumber} will preserve the audit trail and create reversal accounting entries. Enter a cancellation reason below:`}
             </p>
 
-            {data.voucher.status !== 'DRAFT' && (
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '6px', color: 'var(--text-secondary)' }}>
-                  Cancellation Reason
-                </label>
-                <input
-                  type="text"
-                  value={cancelReason}
-                  onChange={(e) => setCancelReason(e.target.value)}
-                  placeholder="e.g. Invoiced in error, duplicate entry..."
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border)',
-                    background: 'var(--bg-canvas, #0F172A)',
-                    color: 'var(--text-primary, #fff)',
-                    fontSize: '13px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
+            {normalized.status !== 'DRAFT' && (
+              <input
+                type="text"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Reason for cancellation"
+                style={{
+                  width: '100%',
+                  padding: '8px 10px',
+                  borderRadius: '5px',
+                  border: '1px solid #475569',
+                  backgroundColor: '#0F172A',
+                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  marginBottom: '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
             )}
 
             {cancelError && (
-              <div style={{ color: '#DC2626', fontSize: '12.5px', marginBottom: '14px' }}>
+              <div style={{ color: '#EF4444', fontSize: '11px', marginBottom: '10px' }}>
                 {cancelError}
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button
                 type="button"
-                className="btn-secondary"
                 onClick={() => setShowCancelModal(false)}
-                disabled={isCancelling}
-                style={{ padding: '8px 16px', borderRadius: '6px', fontSize: '13px' }}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: '5px',
+                  border: '1px solid #475569',
+                  backgroundColor: '#334155',
+                  color: '#F8FAFC',
+                  fontSize: '12px',
+                  cursor: 'pointer'
+                }}
               >
-                Keep Voucher
+                Dismiss
               </button>
               <button
                 type="button"
-                style={{
-                  padding: '8px 18px',
-                  borderRadius: '6px',
-                  background: '#DC2626',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
                 onClick={handleCancelOrDeleteVoucher}
                 disabled={isCancelling}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '5px',
+                  border: 'none',
+                  backgroundColor: '#EF4444',
+                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
               >
-                {isCancelling ? 'Processing...' : data.voucher.status === 'DRAFT' ? 'Delete Draft' : 'Confirm Cancellation'}
+                {isCancelling ? 'Processing...' : normalized.status === 'DRAFT' ? 'Confirm Delete' : 'Confirm Cancel'}
               </button>
             </div>
           </div>

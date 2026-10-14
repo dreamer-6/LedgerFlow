@@ -85,6 +85,18 @@ function getDatabase(customPath) {
     }
     catch { }
     try {
+        db.exec('ALTER TABLE companies ADD COLUMN website TEXT;');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE companies ADD COLUMN invoice_settings TEXT;');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE companies ADD COLUMN accounting_preferences TEXT;');
+    }
+    catch { }
+    try {
         db.exec('ALTER TABLE parties ADD COLUMN banking_name TEXT;');
     }
     catch { }
@@ -123,6 +135,10 @@ function getDatabase(customPath) {
         PRIMARY KEY (user_id, company_id)
       );
     `);
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE vouchers ADD COLUMN is_hidden INTEGER DEFAULT 0;');
     }
     catch { }
     try {

@@ -11,6 +11,16 @@ const valuation_js_1 = require("../inventory/valuation.js");
 class PostingEngine {
     /**
      * Generates the next sequential voucher number
+     *
+     * NUMBERING LIFECYCLE & STATUTORY ACCOUNTING POLICY:
+     * 1. Official statutory numbers are consumed strictly upon POSTING or CANCELLATION history.
+     * 2. Unposted DRAFT vouchers use temporary 'DFT-...' numbers and do NOT consume statutory sequence numbers.
+     * 3. Deleting an eligible unposted draft releases its temporary identifier with ZERO impact on sequence;
+     *    the statutory sequence continues without gaps (e.g., if draft 001 is deleted, next voucher is 001).
+     * 4. A POSTED or CANCELLED voucher's number is PERMANENTLY CONSUMED and must NEVER be reused, even if
+     *    the voucher is purged with an audit tombstone in audit_logs (statutory tax/audit preservation).
+     * 5. Sequence is strictly tenant-isolated (by company_id), scoped by financial year (fy_id), and voucher_type.
+     * 6. Configured company numbering rules (prefix, startNumber, format) in invoice_settings are respected.
      */
     static getNextVoucherNumber(db, companyId, fyId, voucherType) {
         const prefixes = {
@@ -26,11 +36,12 @@ class PostingEngine {
             PURCHASE_RETURN: 'PRR',
             STOCK_JOURNAL: 'STK'
         };
-        let prefix = prefixes[voucherType] || 'VCH';
-        // Extract FY code (e.g. 2026-2027 -> 2627)
+        let defaultPrefix = prefixes[voucherType] || 'VCH';
+        // 1. Resolve Financial Year code (e.g. 2026-2027 -> 2627)
         let fyCode = '2627';
         if (fyId) {
-            const fy = db.prepare('SELECT name, start_date, end_date FROM financial_years WHERE fy_id = ?').get(fyId);
+            const fy = db.prepare('SELECT name, start_date, end_date FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, companyId)
+                || db.prepare('SELECT name, start_date, end_date FROM financial_years WHERE fy_id = ?').get(fyId);
             if (fy?.start_date && fy?.end_date) {
                 const sY = fy.start_date.substring(2, 4);
                 const eY = fy.end_date.substring(2, 4);
@@ -42,11 +53,46 @@ class PostingEngine {
                     fyCode = digits.slice(-4);
             }
         }
-        // For Sales Invoices, use company name initials/acronym (e.g., Dream Tech Solutions -> DTS)
-        // Formatted strictly like: DTS-2627-001; Other vouchers formatted strictly like: PUR-2627-001
-        if (voucherType === 'SALES') {
+        else {
+            const openFy = db.prepare(`
+        SELECT start_date, end_date, name FROM financial_years
+        WHERE company_id = ? AND status = 'OPEN'
+        ORDER BY start_date DESC LIMIT 1
+      `).get(companyId);
+            if (openFy?.start_date && openFy?.end_date) {
+                fyCode = `${openFy.start_date.substring(2, 4)}${openFy.end_date.substring(2, 4)}`;
+            }
+        }
+        // 2. Check for configured voucher numbering rules in company invoice_settings
+        let configuredPrefix = null;
+        let configuredStartNumber = 1;
+        let configuredFormat = null;
+        const comp = db.prepare('SELECT company_name, invoice_settings FROM companies WHERE company_id = ?').get(companyId);
+        if (comp?.invoice_settings) {
+            try {
+                const settings = JSON.parse(comp.invoice_settings);
+                const numConfig = settings.voucherNumbering?.[voucherType] || settings.voucherNumbering?.[voucherType.toLowerCase()];
+                if (numConfig) {
+                    if (typeof numConfig.prefix === 'string' && numConfig.prefix.trim()) {
+                        configuredPrefix = numConfig.prefix.trim().toUpperCase();
+                    }
+                    if (numConfig.startNumber !== undefined && !isNaN(Number(numConfig.startNumber))) {
+                        configuredStartNumber = Math.max(1, parseInt(String(numConfig.startNumber), 10));
+                    }
+                    if (typeof numConfig.format === 'string' && numConfig.format.trim()) {
+                        configuredFormat = numConfig.format.trim();
+                    }
+                }
+            }
+            catch { }
+        }
+        // 3. Determine active prefix
+        let prefix = '';
+        if (configuredPrefix) {
+            prefix = configuredPrefix.includes(fyCode) ? configuredPrefix : `${configuredPrefix}-${fyCode}`;
+        }
+        else if (voucherType === 'SALES') {
             let compAcronym = 'DTS';
-            const comp = db.prepare('SELECT company_name FROM companies WHERE company_id = ?').get(companyId);
             if (comp && comp.company_name) {
                 const words = comp.company_name.trim().split(/[\s_-]+/).filter(w => w.length > 0);
                 if (words.length > 1) {
@@ -62,26 +108,63 @@ class PostingEngine {
             prefix = 'STK';
         }
         else {
-            prefix = `${prefix}-${fyCode}`;
+            prefix = `${defaultPrefix}-${fyCode}`;
         }
-        const row = db.prepare(`
+        // 4. Retrieve ALL consumed numbers for this company, FY, and voucher type:
+        // (a) From active vouchers table: ONLY POSTED, CANCELLED, AMENDED vouchers consume statutory numbers!
+        //     Unposted DRAFT vouchers (status = 'DRAFT') DO NOT consume statutory numbers.
+        const activeRows = db.prepare(`
       SELECT voucher_number FROM vouchers
       WHERE company_id = ? AND fy_id = ? AND voucher_type = ?
-      ORDER BY rowid DESC LIMIT 1
-    `).get(companyId, fyId, voucherType);
-        let nextCounter = 1;
-        if (row && row.voucher_number) {
-            const parts = row.voucher_number.split(/[-/]/);
-            const lastNumStr = parts[parts.length - 1];
-            const parsed = parseInt(lastNumStr, 10);
-            if (!isNaN(parsed) && parsed >= 1) {
-                nextCounter = parsed + 1;
+        AND status IN ('POSTED', 'CANCELLED', 'AMENDED')
+    `).all(companyId, fyId, voucherType);
+        // (b) From audit_logs: Permanently purged vouchers with tombstone
+        //     Even if purged from vouchers table, cancelled/posted numbers MUST NEVER be reused!
+        const purgedRows = db.prepare(`
+      SELECT details FROM audit_logs
+      WHERE company_id = ? AND action = 'VOUCHER_PERMANENT_PURGE'
+    `).all(companyId);
+        const consumedNumbers = new Set();
+        for (const r of activeRows) {
+            if (r.voucher_number && !r.voucher_number.startsWith('DFT-')) {
+                consumedNumbers.add(r.voucher_number.trim());
             }
         }
-        let candidate = `${prefix}-${nextCounter.toString().padStart(3, '0')}`;
-        while (db.prepare('SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ?').get(companyId, fyId, voucherType, candidate)) {
+        for (const pr of purgedRows) {
+            try {
+                const d = JSON.parse(pr.details);
+                if (d.voucher_type === voucherType && d.voucher_number && !d.voucher_number.startsWith('DFT-')) {
+                    if (!d.fy_id || d.fy_id === fyId || d.voucher_number.includes(fyCode)) {
+                        consumedNumbers.add(d.voucher_number.trim());
+                    }
+                }
+            }
+            catch { }
+        }
+        // 5. Determine maximum used numeric counter
+        let maxCounter = configuredStartNumber - 1;
+        for (const num of consumedNumbers) {
+            const match = num.match(/(\d+)$/);
+            if (match) {
+                const parsed = parseInt(match[1], 10);
+                if (!isNaN(parsed) && parsed > maxCounter) {
+                    maxCounter = parsed;
+                }
+            }
+        }
+        let nextCounter = maxCounter + 1;
+        const padLength = (configuredFormat && configuredFormat.includes('0001')) ? 4 : 3;
+        let candidate = `${prefix}-${nextCounter.toString().padStart(padLength, '0')}`;
+        if (configuredFormat && !configuredFormat.includes('-') && !configuredFormat.includes('/')) {
+            candidate = `${prefix}${nextCounter.toString().padStart(padLength, '0')}`;
+        }
+        // 6. Guarantee candidate collision resistance against consumed numbers and any existing db row
+        while (consumedNumbers.has(candidate) ||
+            db.prepare('SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ?').get(companyId, fyId, voucherType, candidate)) {
             nextCounter++;
-            candidate = `${prefix}-${nextCounter.toString().padStart(3, '0')}`;
+            candidate = configuredFormat && !configuredFormat.includes('-') && !configuredFormat.includes('/')
+                ? `${prefix}${nextCounter.toString().padStart(padLength, '0')}`
+                : `${prefix}-${nextCounter.toString().padStart(padLength, '0')}`;
         }
         return candidate;
     }
@@ -575,7 +658,7 @@ class PostingEngine {
         const executePostingDb = () => {
             // DEF-VCH-10: Draft vouchers use temporary DFT-... number without consuming statutory sequences
             if (voucherStatus === 'DRAFT') {
-                if (input.voucherNumber?.trim()) {
+                if (input.voucherNumber?.trim() && input.voucherNumber.trim().startsWith('DFT-')) {
                     postedVoucherNumber = input.voucherNumber.trim();
                 }
                 else {
@@ -585,9 +668,15 @@ class PostingEngine {
             else {
                 // DEF-VCH-09: Explicit voucher number collision prevention
                 const explicitVNum = input.voucherNumber?.trim();
-                if (explicitVNum) {
-                    const alreadyExists = db.prepare('SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ?').get(input.companyId, fyId, input.voucherType, explicitVNum);
-                    if (alreadyExists) {
+                if (explicitVNum && !explicitVNum.startsWith('DFT-')) {
+                    const alreadyExists = db.prepare("SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ? AND status != 'DRAFT'").get(input.companyId, fyId, input.voucherType, explicitVNum);
+                    const inAudit = db.prepare(`
+            SELECT 1 FROM audit_logs
+            WHERE company_id = ? AND action = 'VOUCHER_PERMANENT_PURGE'
+              AND json_extract(details, '$.voucher_number') = ?
+              AND json_extract(details, '$.voucher_type') = ?
+          `).get(input.companyId, explicitVNum, input.voucherType);
+                    if (alreadyExists || inAudit) {
                         throw new Error(`Voucher number '${explicitVNum}' already exists for this company, financial year, and voucher type.`);
                     }
                     postedVoucherNumber = explicitVNum;
@@ -595,6 +684,12 @@ class PostingEngine {
                 else {
                     postedVoucherNumber = this.getNextVoucherNumber(db, input.companyId, fyId, input.voucherType);
                 }
+                // If an existing unposted draft holds this exact voucher number, re-key it with DFT- so the posted voucher can claim its statutory sequence
+                db.prepare(`
+          UPDATE vouchers
+          SET voucher_number = 'DFT-' || UPPER(SUBSTR(voucher_id, 5, 8))
+          WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ? AND status = 'DRAFT' AND voucher_id != ?
+        `).run(input.companyId, fyId, input.voucherType, postedVoucherNumber, voucherId);
             }
             // DEF-008-03 / DEF-008-13: Store canonical draft metadata in terms_conditions for 100% round-trip fidelity
             let storedTermsConditions = termsConditions;

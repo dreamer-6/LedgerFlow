@@ -517,7 +517,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                     color: 'var(--text-primary, #0f172a)',
                     cursor: 'pointer'
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, #f8fafc)')}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   <FileSpreadsheet size={16} color="#16a34a" />
@@ -538,7 +538,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                     color: 'var(--text-primary, #0f172a)',
                     cursor: 'pointer'
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, #f8fafc)')}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   <FileSpreadsheet size={16} color="#2563eb" />
@@ -558,9 +558,9 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                     fontSize: '13px',
                     color: 'var(--text-primary, #0f172a)',
                     cursor: 'pointer',
-                    borderTop: '1px solid #f1f5f9'
+                    borderTop: '1px solid var(--border-subtle, #f1f5f9)'
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, #f8fafc)')}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   <FileSpreadsheet size={16} color="#ff6b00" />
@@ -578,7 +578,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
               alignItems: 'center',
               gap: '8px',
               padding: '9px 16px',
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--color-surface, #ffffff)',
               color: 'var(--text-primary, #0f172a)',
               border: '1px solid var(--border-color, #e2e8f0)',
               borderRadius: 'var(--radius-md, 8px)',
@@ -587,7 +587,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
               cursor: 'pointer',
               transition: 'all 0.15s ease'
             }}
-            onMouseEnter={e => (e.currentTarget.style.borderColor = '#cbd5e1')}
+            onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-border-strong, #cbd5e1)')}
             onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-color, #e2e8f0)')}
           >
             <Printer size={16} />
@@ -805,7 +805,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
           }}
         >
-          <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(16, 185, 129, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <TrendingUp size={24} color="#10b981" />
           </div>
           <div>
@@ -835,7 +835,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
           }}
         >
-          <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(239, 68, 68, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <TrendingDown size={24} color="#ef4444" />
           </div>
           <div>
@@ -865,7 +865,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
           }}
         >
-          <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(139, 92, 246, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Users size={24} color="#8b5cf6" />
           </div>
           <div>
@@ -895,7 +895,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
             boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
           }}
         >
-          <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#fff7ed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(249, 115, 22, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Users size={24} color="#f97316" />
           </div>
           <div>
@@ -983,7 +983,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
             <div style={{ overflowX: 'auto', maxHeight: expandedSection === 'customers' ? '600px' : '380px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid var(--border-color, #e2e8f0)' }}>
+                  <tr style={{ backgroundColor: 'var(--color-surface-secondary, #f8fafc)', borderBottom: '1px solid var(--border-color, #e2e8f0)' }}>
                     <th style={{ padding: '10px 14px', width: '36px', color: 'var(--text-secondary, #475569)', fontWeight: 600 }}>#</th>
                     <th style={{ padding: '10px 14px', color: 'var(--text-secondary, #475569)', fontWeight: 600 }}>Customer Name</th>
                     <th style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-secondary, #475569)', fontWeight: 600 }}>Total (₹)</th>
@@ -1010,8 +1010,8 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                     processedCustomers.map((cust, idx) => (
                       <tr
                         key={cust.partyId}
-                        style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', transition: 'background-color 0.1s' }}
-                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                        style={{ borderBottom: '1px solid var(--border-subtle, #f1f5f9)', cursor: 'pointer', transition: 'background-color 0.1s' }}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, #f8fafc)')}
                         onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                         onClick={() => setSelectedPartyDetail(cust)}
                       >
@@ -1050,7 +1050,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                 </tbody>
                 {processedCustomers.length > 0 && (
                   <tfoot>
-                    <tr style={{ backgroundColor: '#f8fafc', borderTop: '2px solid var(--border-color, #e2e8f0)', fontWeight: 700 }}>
+                    <tr style={{ backgroundColor: 'var(--color-surface-secondary, #f8fafc)', borderTop: '2px solid var(--border-color, #e2e8f0)', fontWeight: 700 }}>
                       <td colSpan={2} style={{ padding: '12px 14px', color: 'var(--text-primary, #0f172a)' }}>Total Receivable</td>
                       <td style={{ padding: '12px 14px', textAlign: 'right', color: 'var(--text-primary, #0f172a)' }}>
                         {formatPaise(processedCustomers.reduce((acc, c) => acc + c.totalOutstandingPaise, 0))}
@@ -1135,7 +1135,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
             <div style={{ overflowX: 'auto', maxHeight: expandedSection === 'suppliers' ? '600px' : '380px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid var(--border-color, #e2e8f0)' }}>
+                  <tr style={{ backgroundColor: 'var(--color-surface-secondary, #f8fafc)', borderBottom: '1px solid var(--border-color, #e2e8f0)' }}>
                     <th style={{ padding: '10px 14px', width: '36px', color: 'var(--text-secondary, #475569)', fontWeight: 600 }}>#</th>
                     <th style={{ padding: '10px 14px', color: 'var(--text-secondary, #475569)', fontWeight: 600 }}>Supplier Name</th>
                     <th style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-secondary, #475569)', fontWeight: 600 }}>Total (₹)</th>
@@ -1162,8 +1162,8 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                     processedSuppliers.map((supp, idx) => (
                       <tr
                         key={supp.partyId}
-                        style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer', transition: 'background-color 0.1s' }}
-                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                        style={{ borderBottom: '1px solid var(--border-subtle, #f1f5f9)', cursor: 'pointer', transition: 'background-color 0.1s' }}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, #f8fafc)')}
                         onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                         onClick={() => setSelectedPartyDetail(supp)}
                       >
@@ -1202,7 +1202,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                 </tbody>
                 {processedSuppliers.length > 0 && (
                   <tfoot>
-                    <tr style={{ backgroundColor: '#f8fafc', borderTop: '2px solid var(--border-color, #e2e8f0)', fontWeight: 700 }}>
+                    <tr style={{ backgroundColor: 'var(--color-surface-secondary, #f8fafc)', borderTop: '2px solid var(--border-color, #e2e8f0)', fontWeight: 700 }}>
                       <td colSpan={2} style={{ padding: '12px 14px', color: 'var(--text-primary, #0f172a)' }}>Total Payable</td>
                       <td style={{ padding: '12px 14px', textAlign: 'right', color: 'var(--text-primary, #0f172a)' }}>
                         {formatPaise(processedSuppliers.reduce((acc, s) => acc + s.totalOutstandingPaise, 0))}

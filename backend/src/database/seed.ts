@@ -9,6 +9,15 @@ export interface BusinessInitOptions {
   state?: string;
   stateCode?: string;
   ownerUserId?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  pincode?: string;
+  country?: string;
+  phone?: string;
+  email?: string;
+  bankName?: string;
+  termsAndConditions?: string;
 }
 
 export function initializeBusiness(db: DatabaseSync, options: BusinessInitOptions) {
@@ -19,7 +28,16 @@ export function initializeBusiness(db: DatabaseSync, options: BusinessInitOption
     gstin = '',
     state = 'Tamil Nadu',
     stateCode = '33',
-    ownerUserId
+    ownerUserId,
+    addressLine1 = '',
+    addressLine2 = '',
+    city = '',
+    pincode = '',
+    country = 'India',
+    phone = '',
+    email = '',
+    bankName = '',
+    termsAndConditions = '1. Payment terms 30 days.'
   } = options;
 
   const isDefault = companyId === 'comp_default_01';
@@ -44,22 +62,22 @@ export function initializeBusiness(db: DatabaseSync, options: BusinessInitOption
     legalName,
     gstin,
     gstin ? gstin.slice(2, 12) : '',
-    '123, Commercial High Road',
-    '',
-    'Chennai',
+    addressLine1,
+    addressLine2,
+    city,
     state,
     stateCode,
-    '600001',
-    'India',
-    '+91 98765 43210',
-    'accounts@business.in',
+    pincode,
+    country,
+    phone,
+    email,
     'INR',
     '₹',
-    'State Bank of India',
+    bankName,
     '',
     '',
     '',
-    '1. Goods once sold will not be taken back.\n2. Payment terms 30 days.',
+    termsAndConditions,
     ownerUserId || null
   );
 

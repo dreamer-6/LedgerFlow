@@ -19,13 +19,25 @@ export interface TaxGstTabProps {
   formData: any;
   onChange: (field: string, val: any) => void;
   onNavigateToTab?: (tab: string) => void;
+  onSave?: () => void;
+  saving?: boolean;
+  isDirty?: boolean;
+  saved?: boolean;
+  saveError?: string | null;
+  onReset?: () => void;
 }
 
 export const TaxGstTab: React.FC<TaxGstTabProps> = ({
   company,
   formData,
   onChange,
-  onNavigateToTab
+  onNavigateToTab,
+  onSave,
+  saving = false,
+  isDirty = false,
+  saved = false,
+  saveError = null,
+  onReset
 }) => {
   const [gstRegistered, setGstRegistered] = useState(true);
   const [regType, setRegType] = useState('Regular');
@@ -133,9 +145,9 @@ export const TaxGstTab: React.FC<TaxGstTabProps> = ({
               <input
                 type="text"
                 className="form-control"
-                value={formData.gstin || '33AABCDE1234F1Z5'}
+                value={formData.gstin || ''}
                 onChange={e => onChange('gstin', e.target.value.toUpperCase())}
-                placeholder="33AAAAA0000A1Z5"
+                placeholder="e.g. 33AAAAA0000A1Z5"
                 maxLength={15}
               />
             </div>
@@ -146,9 +158,10 @@ export const TaxGstTab: React.FC<TaxGstTabProps> = ({
               </label>
               <select
                 className="form-control"
-                value={formData.state || 'Tamil Nadu'}
+                value={formData.state || ''}
                 onChange={e => onChange('state', e.target.value)}
               >
+                <option value="">Select State</option>
                 {INDIAN_STATES.map(s => (
                   <option key={s.code} value={s.name}>{s.name}</option>
                 ))}
@@ -162,7 +175,7 @@ export const TaxGstTab: React.FC<TaxGstTabProps> = ({
               <input
                 type="text"
                 className="form-control"
-                value={formData.state_code || '33'}
+                value={formData.state_code || ''}
                 readOnly
                 style={{ backgroundColor: 'var(--color-surface-muted, #F1F0ED)' }}
               />
@@ -187,9 +200,9 @@ export const TaxGstTab: React.FC<TaxGstTabProps> = ({
               <input
                 type="text"
                 className="form-control"
-                value={formData.pan || 'ABCDE1234F'}
+                value={formData.pan || ''}
                 onChange={e => onChange('pan', e.target.value.toUpperCase())}
-                placeholder="AAAAA0000A"
+                placeholder="e.g. AAAAA0000A"
                 maxLength={10}
               />
             </div>
@@ -613,6 +626,87 @@ export const TaxGstTab: React.FC<TaxGstTabProps> = ({
               <input type="checkbox" checked={opts.showGstSummary} onChange={() => toggleOpt('showGstSummary')} style={{ width: '16px', height: '16px', accentColor: '#F97316' }} />
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Save Action Bar */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '16px 20px',
+          borderRadius: '8px',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)'
+        }}
+      >
+        <div>
+          {isDirty && (
+            <span style={{ fontSize: '12px', color: '#EA580C', fontWeight: 700 }}>
+              ● Unsaved changes pending
+            </span>
+          )}
+          {saved && (
+            <span style={{ fontSize: '12px', color: '#16A34A', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              ✓ Tax & GST settings saved successfully
+            </span>
+          )}
+          {saveError && (
+            <span style={{ fontSize: '12px', color: '#DC2626', fontWeight: 600 }}>
+              {saveError}
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {onReset && (
+            <button
+              type="button"
+              onClick={onReset}
+              disabled={!isDirty || saving}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '7px 14px',
+                fontSize: '12px',
+                fontWeight: 600,
+                borderRadius: '6px',
+                border: '1px solid var(--color-border, #CBD5E1)',
+                backgroundColor: 'var(--color-surface, #FFFFFF)',
+                color: 'var(--color-text-secondary, #64748B)',
+                cursor: !isDirty || saving ? 'not-allowed' : 'pointer',
+                opacity: !isDirty || saving ? 0.6 : 1
+              }}
+            >
+              Discard
+            </button>
+          )}
+
+          {onSave && (
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving || !isDirty}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 18px',
+                fontSize: '12px',
+                fontWeight: 700,
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: '#EA580C',
+                color: '#FFFFFF',
+                cursor: saving || !isDirty ? 'not-allowed' : 'pointer',
+                opacity: saving || !isDirty ? 0.6 : 1
+              }}
+            >
+              {saving ? 'Applying...' : 'Apply Changes'}
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -65,142 +65,15 @@ export const QuotationsDashboardView: React.FC<QuotationsDashboardViewProps> = (
   const [selectedPrintQuotation, setSelectedPrintQuotation] = useState<QuotationRecord | null>(null);
 
   // Load and seed if empty
+  // Load quotations without injecting fake/synthetic sample data
   const loadQuotations = () => {
     let list = quotationStorage.getAll(companyId);
-    if (list.length === 0) {
-      // Seed initial sample quotation matching mockup if first time
-      const seed: QuotationRecord = {
-        id: 'qtn_seed_00056',
-        companyId,
-        fyId: activeFy?.fy_id || 'fy_active',
-        quotationNumber: 'QTN-2024-00056',
-        quotationDate: '2024-09-28',
-        validTill: '2024-10-05',
-        salesPerson: 'John Doe',
-        referenceNumber: 'REF-2024-88',
-        placeOfSupply: 'Tamil Nadu',
-        subject: 'Quotation for Desktop and Laptop Systems',
-        customerId: 'party_abc_enterprises',
-        customerDetails: {
-          name: 'ABC Enterprises',
-          code: 'CUS-001',
-          address: 'No. 12, Main Road, Gandhipuram, Coimbatore - 641012, Tamil Nadu, India',
-          city: 'Coimbatore',
-          state: 'Tamil Nadu',
-          gstin: '33ABCDE1234F1Z5',
-          phone: '+91 98765 43210',
-          email: 'abc@enterprises.com'
-        },
-        taxMode: 'INCLUSIVE',
-        items: [
-          {
-            id: 'row_1',
-            description: 'Dell Inspiron 3520',
-            subtext: 'S/N: D2X8K13 | Warranty: 1 Year (Dell)',
-            hsnSac: '84713010',
-            quantity: 1,
-            unit: 'NOS',
-            rate: 45000,
-            discountPercent: 0,
-            gstRate: 18,
-            taxableAmount: 38135.59,
-            cgstAmount: 3432.20,
-            sgstAmount: 3432.20,
-            igstAmount: 0,
-            totalAmount: 45000
-          },
-          {
-            id: 'row_2',
-            description: 'HP LaserJet 108w',
-            subtext: 'S/N: VNB3H921 | Warranty: 1 Year (HP)',
-            hsnSac: '84433100',
-            quantity: 1,
-            unit: 'NOS',
-            rate: 12500,
-            discountPercent: 0,
-            gstRate: 18,
-            taxableAmount: 10593.22,
-            cgstAmount: 953.39,
-            sgstAmount: 953.39,
-            igstAmount: 0,
-            totalAmount: 12500
-          },
-          {
-            id: 'row_3',
-            description: 'Logitech MK270',
-            subtext: 'S/N: NA | Warranty: 3 Years (Logitech)',
-            hsnSac: '84716660',
-            quantity: 2,
-            unit: 'NOS',
-            rate: 1200,
-            discountPercent: 0,
-            gstRate: 18,
-            taxableAmount: 2033.90,
-            cgstAmount: 183.05,
-            sgstAmount: 183.05,
-            igstAmount: 0,
-            totalAmount: 2400
-          },
-          {
-            id: 'row_4',
-            description: 'Windows 11 Pro Installation',
-            subtext: 'Service | Warranty: 15 Days Service',
-            hsnSac: '9987',
-            quantity: 1,
-            unit: 'NOS',
-            rate: 800,
-            discountPercent: 0,
-            gstRate: 18,
-            taxableAmount: 677.97,
-            cgstAmount: 61.02,
-            sgstAmount: 61.02,
-            igstAmount: 0,
-            totalAmount: 800,
-            isService: true
-          },
-          {
-            id: 'row_5',
-            description: 'Antivirus Setup',
-            subtext: 'Service | Warranty: 15 Days Service',
-            hsnSac: '9987',
-            quantity: 1,
-            unit: 'NOS',
-            rate: 500,
-            discountPercent: 0,
-            gstRate: 18,
-            taxableAmount: 423.73,
-            cgstAmount: 38.14,
-            sgstAmount: 38.14,
-            igstAmount: 0,
-            totalAmount: 500,
-            isService: true
-          }
-        ],
-        termsConditions:
-          '1. Prices are valid for 7 days from the quotation date.\n' +
-          '2. Goods once sold will not be taken back.\n' +
-          '3. Warranty as per manufacturer terms.\n' +
-          '4. Payment to be made within the agreed period.\n' +
-          '5. Subject to Coimbatore jurisdiction.',
-        notes: 'Thank you for considering our quotation. Please feel free to contact us for any clarification.',
-        transportMode: 'By Road',
-        vehicleNo: 'TN 37 AB 1234',
-        deliveryPeriod: 'Within 3-5 Working Days',
-        remark: '',
-        subtotal: 61200,
-        cgstAmount: 5508,
-        sgstAmount: 5508,
-        igstAmount: 0,
-        roundOff: 0,
-        grandTotal: 72216,
-        status: 'SENT',
-        createdAt: '2024-09-28T10:00:00.000Z',
-        updatedAt: '2024-09-28T10:00:00.000Z'
-      };
-      quotationStorage.save(seed);
-      list = [seed];
+    // Purge unwanted legacy demo seed if present
+    const cleanList = list.filter(q => q.id !== 'qtn_seed_00056');
+    if (cleanList.length !== list.length) {
+      quotationStorage.delete(companyId, 'qtn_seed_00056');
     }
-    setQuotations(list);
+    setQuotations(cleanList);
   };
 
   useEffect(() => {
@@ -360,57 +233,65 @@ export const QuotationsDashboardView: React.FC<QuotationsDashboardViewProps> = (
       {/* 4 Real-Data KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         {/* Total Quotations */}
-        <div className="lf-card" style={{ padding: '16px 20px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Total Quotations</span>
-            <FileText size={16} style={{ color: 'var(--brand-primary, #FF641F)' }} />
+        <div className="lf-card" style={{ padding: '16px 20px', borderRadius: '8px', border: '1px solid var(--border)', minHeight: '108px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0, boxSizing: 'border-box' }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Total Quotations</span>
+              <FileText size={16} style={{ color: 'var(--brand-primary, #FF641F)' }} />
+            </div>
+            <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'monospace' }}>
+              {kpis.totalQuotations}
+            </div>
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'monospace' }}>
-            {kpis.totalQuotations}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px' }}>
             Across all financial records
           </div>
         </div>
 
         {/* Total Quotation Value */}
-        <div className="lf-card" style={{ padding: '16px 20px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Total Quotation Value</span>
-            <DollarSign size={16} style={{ color: '#10B981' }} />
+        <div className="lf-card" style={{ padding: '16px 20px', borderRadius: '8px', border: '1px solid var(--border)', minHeight: '108px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0, boxSizing: 'border-box' }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Total Quotation Value</span>
+              <DollarSign size={16} style={{ color: '#10B981' }} />
+            </div>
+            <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'monospace', color: '#10B981' }}>
+              {formatINR(kpis.totalValue)}
+            </div>
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'monospace', color: '#10B981' }}>
-            {formatINR(kpis.totalValue)}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px' }}>
             Gross quotation pipeline
           </div>
         </div>
 
         {/* Pending Quotations */}
-        <div className="lf-card" style={{ padding: '16px 20px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Pending Quotations</span>
-            <Clock size={16} style={{ color: '#F59E0B' }} />
+        <div className="lf-card" style={{ padding: '16px 20px', borderRadius: '8px', border: '1px solid var(--border)', minHeight: '108px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0, boxSizing: 'border-box' }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Pending Quotations</span>
+              <Clock size={16} style={{ color: '#F59E0B' }} />
+            </div>
+            <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'monospace', color: '#F59E0B' }}>
+              {kpis.pendingCount}
+            </div>
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'monospace', color: '#F59E0B' }}>
-            {kpis.pendingCount}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px' }}>
             Draft or Sent awaiting response
           </div>
         </div>
 
         {/* Accepted Quotations */}
-        <div className="lf-card" style={{ padding: '16px 20px', borderRadius: '8px', border: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Accepted Quotations</span>
-            <CheckCheck size={16} style={{ color: '#A855F7' }} />
+        <div className="lf-card" style={{ padding: '16px 20px', borderRadius: '8px', border: '1px solid var(--border)', minHeight: '108px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0, boxSizing: 'border-box' }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>Accepted Quotations</span>
+              <CheckCheck size={16} style={{ color: '#A855F7' }} />
+            </div>
+            <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'monospace', color: '#A855F7' }}>
+              {kpis.acceptedCount}
+            </div>
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 700, fontFamily: 'monospace', color: '#A855F7' }}>
-            {kpis.acceptedCount}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '6px' }}>
             Confirmed or Converted to invoice
           </div>
         </div>
@@ -535,8 +416,8 @@ export const QuotationsDashboardView: React.FC<QuotationsDashboardViewProps> = (
       </div>
 
       {/* Register Table Card */}
-      <div className="lf-card" style={{ borderRadius: '8px', border: '1px solid var(--border)', overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
+      <div className="lf-card" style={{ borderRadius: '8px', border: '1px solid var(--border)', overflow: 'hidden', minHeight: '380px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ overflowX: 'auto', flex: 1, minHeight: '280px' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
             <thead>
               <tr style={{ background: 'var(--surface-subtle, rgba(255,255,255,0.03))', borderBottom: '1px solid var(--border)' }}>
@@ -552,7 +433,7 @@ export const QuotationsDashboardView: React.FC<QuotationsDashboardViewProps> = (
             <tbody>
               {paginatedList.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '48px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <td colSpan={7} style={{ padding: '64px 16px', textAlign: 'center', color: 'var(--text-secondary)', height: '240px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                       <FileText size={36} style={{ color: 'var(--text-tertiary, #64748B)', opacity: 0.5 }} />
                       <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>No quotations found</div>

@@ -47,6 +47,9 @@ export function getDatabase(customPath?: string): DatabaseSync {
   try { db.exec('ALTER TABLE companies ADD COLUMN mailing_name TEXT;'); } catch {}
   try { db.exec('ALTER TABLE companies ADD COLUMN vault_password_hash TEXT;'); } catch {}
   try { db.exec('ALTER TABLE companies ADD COLUMN logo_base64 TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE companies ADD COLUMN website TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE companies ADD COLUMN invoice_settings TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE companies ADD COLUMN accounting_preferences TEXT;'); } catch {}
   try { db.exec('ALTER TABLE parties ADD COLUMN banking_name TEXT;'); } catch {}
   try { db.exec('ALTER TABLE parties ADD COLUMN banking_account_no TEXT;'); } catch {}
   try { db.exec('ALTER TABLE parties ADD COLUMN banking_ifsc TEXT;'); } catch {}
@@ -73,6 +76,9 @@ export function getDatabase(customPath?: string): DatabaseSync {
         PRIMARY KEY (user_id, company_id)
       );
     `);
+  } catch {}
+  try {
+    db.exec('ALTER TABLE vouchers ADD COLUMN is_hidden INTEGER DEFAULT 0;');
   } catch {}
   try {
     db.exec('CREATE INDEX IF NOT EXISTS idx_vouchers_comp_date_status ON vouchers(company_id, voucher_date, status);');

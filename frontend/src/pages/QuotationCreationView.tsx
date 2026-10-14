@@ -7,6 +7,7 @@ import {
 } from '../utils/quotationStorage';
 import { QuickCustomerModal, QuickItemModal } from '../components/accounting';
 import { QuotationPrintModal } from './QuotationPrintModal';
+import { SmartPricingModal } from '../components/quotation/SmartPricingModal';
 import {
   FileText,
   User,
@@ -27,6 +28,7 @@ import {
   Building,
   Check,
   Search,
+  Tag,
   X
 } from 'lucide-react';
 
@@ -125,10 +127,10 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
     d.setDate(d.getDate() + 7);
     return d.toISOString().split('T')[0];
   });
-  const [salesPerson, setSalesPerson] = useState('John Doe');
+  const [salesPerson, setSalesPerson] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
   const [placeOfSupply, setPlaceOfSupply] = useState(company?.state || 'Tamil Nadu');
-  const [subject, setSubject] = useState('Quotation for Desktop and Laptop Systems');
+  const [subject, setSubject] = useState('');
 
   // Customer State
   const [parties, setParties] = useState<any[]>([]);
@@ -162,98 +164,29 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
   const [items, setItems] = useState<QuotationLineItem[]>([
     {
       id: 'item_row_1',
-      description: 'Dell Inspiron 3520',
-      subtext: 'S/N: D2X8K13 | Warranty: 1 Year (Dell)',
-      hsnSac: '84713010',
+      description: '',
+      subtext: '',
+      hsnSac: '',
       quantity: 1,
       unit: 'NOS',
-      rate: 45000,
+      rate: 0,
       discountPercent: 0,
       gstRate: 18,
-      taxableAmount: 38135.59,
-      cgstAmount: 3432.20,
-      sgstAmount: 3432.20,
+      taxableAmount: 0,
+      cgstAmount: 0,
+      sgstAmount: 0,
       igstAmount: 0,
-      totalAmount: 45000,
+      totalAmount: 0,
       isService: false
-    },
-    {
-      id: 'item_row_2',
-      description: 'HP LaserJet 108w',
-      subtext: 'S/N: VNB3H921 | Warranty: 1 Year (HP)',
-      hsnSac: '84433100',
-      quantity: 1,
-      unit: 'NOS',
-      rate: 12500,
-      discountPercent: 0,
-      gstRate: 18,
-      taxableAmount: 10593.22,
-      cgstAmount: 953.39,
-      sgstAmount: 953.39,
-      igstAmount: 0,
-      totalAmount: 12500,
-      isService: false
-    },
-    {
-      id: 'item_row_3',
-      description: 'Logitech MK270',
-      subtext: 'S/N: NA | Warranty: 3 Years (Logitech)',
-      hsnSac: '84716660',
-      quantity: 2,
-      unit: 'NOS',
-      rate: 1200,
-      discountPercent: 0,
-      gstRate: 18,
-      taxableAmount: 2033.90,
-      cgstAmount: 183.05,
-      sgstAmount: 183.05,
-      igstAmount: 0,
-      totalAmount: 2400,
-      isService: false
-    },
-    {
-      id: 'item_row_4',
-      description: 'Windows 11 Pro Installation',
-      subtext: 'Service | Warranty: 15 Days Service',
-      hsnSac: '9987',
-      quantity: 1,
-      unit: 'NOS',
-      rate: 800,
-      discountPercent: 0,
-      gstRate: 18,
-      taxableAmount: 677.97,
-      cgstAmount: 61.02,
-      sgstAmount: 61.02,
-      igstAmount: 0,
-      totalAmount: 800,
-      isService: true
-    },
-    {
-      id: 'item_row_5',
-      description: 'Antivirus Setup',
-      subtext: 'Service | Warranty: 15 Days Service',
-      hsnSac: '9987',
-      quantity: 1,
-      unit: 'NOS',
-      rate: 500,
-      discountPercent: 0,
-      gstRate: 18,
-      taxableAmount: 423.73,
-      cgstAmount: 38.14,
-      sgstAmount: 38.14,
-      igstAmount: 0,
-      totalAmount: 500,
-      isService: true
     }
   ]);
 
   // Terms and Notes
   const [termsConditions, setTermsConditions] = useState(
+    company?.terms_and_conditions ||
     '1. Prices are valid for 7 days from the quotation date.\n' +
-    '2. Goods once sold will not be taken back.\n' +
-    '3. Warranty as per manufacturer terms.\n' +
-    '4. Payment to be made within the agreed period.\n' +
-    '5. Subject to Coimbatore jurisdiction.'
+    '2. Payment terms as mutually agreed.\n' +
+    '3. Warranty as per manufacturer terms.'
   );
   const [notes, setNotes] = useState(
     'Thank you for considering our quotation. Please feel free to contact us for any clarification.'
@@ -261,8 +194,8 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
 
   // Other Info
   const [transportMode, setTransportMode] = useState('By Road');
-  const [vehicleNo, setVehicleNo] = useState('TN 37 AB 1234');
-  const [deliveryPeriod, setDeliveryPeriod] = useState('Within 3-5 Working Days');
+  const [vehicleNo, setVehicleNo] = useState('');
+  const [deliveryPeriod, setDeliveryPeriod] = useState('');
   const [remark, setRemark] = useState('');
 
   // Modals & UI States
@@ -272,6 +205,7 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
   const [itemModalTargetRowIndex, setItemModalTargetRowIndex] = useState<number | null>(null);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [previewQuotationData, setPreviewQuotationData] = useState<QuotationRecord | null>(null);
+  const [showSmartPricingModal, setShowSmartPricingModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
@@ -282,11 +216,6 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
     if (company?.company_id) {
       api.getParties('CUSTOMER').then((res) => {
         setParties(res || []);
-        // Auto-select first party or ABC Enterprises if found
-        if (res && res.length > 0 && !selectedCustomerId) {
-          const match = res.find((p: any) => p.party_name?.includes('ABC') || p.party_name?.includes('Enterprises')) || res[0];
-          selectParty(match);
-        }
       }).catch(console.error);
 
       api.getStockItems().then((res) => {
@@ -348,15 +277,22 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
   const selectParty = (party: any) => {
     setSelectedCustomerId(party.party_id);
     setCustomerSearchQuery(`${party.party_name} (${party.code || 'CUS-001'})`);
+    const partyAddr = [
+      party.address_line1,
+      party.address_line2,
+      party.city,
+      party.state ? (party.pincode ? `${party.state} - ${party.pincode}` : party.state) : party.pincode
+    ].filter(Boolean).join(', ');
+
     setCustomerDetails({
       name: party.party_name,
-      code: party.code || 'CUS-001',
-      address: party.address_line1 ? `${party.address_line1}, ${party.city || 'Coimbatore'} - ${party.pincode || '641012'}` : 'No. 12, Main Road, Gandhipuram, Coimbatore - 641012, Tamil Nadu, India',
-      city: party.city || 'Coimbatore',
-      state: party.state || 'Tamil Nadu',
-      gstin: party.gstin || '33ABCDE1234F1Z5',
-      phone: party.phone || '+91 98765 43210',
-      email: party.email || 'abc@enterprises.com'
+      code: party.code || '',
+      address: partyAddr,
+      city: party.city || '',
+      state: party.state || '',
+      gstin: party.gstin || '',
+      phone: party.phone || '',
+      email: party.email || ''
     });
     setCustomerDropdownOpen(false);
   };
@@ -405,6 +341,56 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
   const handleTaxModeChange = (mode: 'EXCLUSIVE' | 'INCLUSIVE') => {
     setTaxMode(mode);
     setItems((prev) => prev.map((l) => recalculateLine(l, mode)));
+  };
+
+  const handleApplySmartPricing = (
+    updatedRates: { id: string; rate: number; dealerCost?: number }[],
+    newTaxMode: 'EXCLUSIVE' | 'INCLUSIVE'
+  ) => {
+    setTaxMode(newTaxMode);
+    setItems((prev) => {
+      return prev.map((line) => {
+        const found = updatedRates.find((u) => u.id === line.id);
+        const rate = found ? found.rate : line.rate;
+        const dealerCost = (found && found.dealerCost !== undefined) ? found.dealerCost : line.dealerCost;
+        return recalculateLine({ ...line, rate, dealerCost }, newTaxMode);
+      });
+    });
+    setToastType('success');
+    setToastMessage('Smart pricing successfully applied to quotation.');
+  };
+
+  const handleItemDescriptionChange = (index: number, val: string) => {
+    const matched = stockItems.find(
+      (s) => s.item_name && s.item_name.trim().toLowerCase() === val.trim().toLowerCase()
+    );
+    if (matched) {
+      const purchaseRate = matched.purchase_rate_paise
+        ? matched.purchase_rate_paise / 100
+        : (Number(matched.purchase_rate) || 0);
+      const sellingRate = matched.selling_rate_paise
+        ? matched.selling_rate_paise / 100
+        : (Number(matched.selling_rate) || 0);
+      setItems((prev) => {
+        const copy = [...prev];
+        const updated: QuotationLineItem = {
+          ...copy[index],
+          itemId: matched.item_id,
+          description: matched.item_name,
+          subtext: matched.sku ? `SKU: ${matched.sku}` : copy[index].subtext,
+          hsnSac: matched.hsn_sac || copy[index].hsnSac || '84713010',
+          unit: matched.unit_symbol || copy[index].unit || 'NOS',
+          gstRate: matched.gst_rate !== undefined ? Number(matched.gst_rate) : copy[index].gstRate,
+          rate: sellingRate > 0 ? sellingRate : copy[index].rate,
+          dealerCost: purchaseRate,
+          isService: matched.item_type === 'Service'
+        };
+        copy[index] = recalculateLine(updated, taxMode);
+        return copy;
+      });
+    } else {
+      updateLineField(index, 'description', val);
+    }
   };
 
   const updateLineField = (index: number, field: keyof QuotationLineItem, val: any) => {
@@ -781,39 +767,54 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
 
               {/* Customer Metadata Preview */}
               <div style={{ background: 'var(--surface-subtle, rgba(255,255,255,0.02))', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-subtle)', fontSize: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>
-                      {customerDetails.name || 'ABC Enterprises'}
+                {customerDetails.name ? (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>
+                          {customerDetails.name}
+                        </div>
+                        {customerDetails.code && (
+                          <div style={{ fontSize: '11px', color: 'var(--brand-primary, #FF641F)', fontWeight: 600 }}>
+                            {customerDetails.code}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>GSTIN:</div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{customerDetails.gstin || 'Unregistered / —'}</div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '11px', color: 'var(--brand-primary, #FF641F)', fontWeight: 600 }}>
-                      {customerDetails.code || 'CUS-001'}
+
+                    {customerDetails.address && (
+                      <div style={{ color: 'var(--text-secondary)', marginBottom: '8px', lineHeight: 1.4 }}>
+                        {customerDetails.address}
+                      </div>
+                    )}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', borderTop: '1px solid var(--border-subtle)', paddingTop: '8px', fontSize: '11.5px' }}>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)' }}>Phone: </span>
+                        <span>{customerDetails.phone || '—'}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)' }}>Email: </span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{customerDetails.email || '—'}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: 'var(--text-secondary)' }}>State: </span>
+                        <span>{customerDetails.state || placeOfSupply || '—'}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '16px 8px', color: 'var(--text-secondary)' }}>
+                    <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>No Customer Selected</div>
+                    <div style={{ fontSize: '11px', marginTop: '2px', color: 'var(--text-muted)' }}>
+                      Search or select a customer above, or click '+ Quick Customer' to create one.
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>GSTIN:</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{customerDetails.gstin || '33ABCDE1234F1Z5'}</div>
-                  </div>
-                </div>
-
-                <div style={{ color: 'var(--text-secondary)', marginBottom: '8px', lineHeight: 1.4 }}>
-                  {customerDetails.address || 'No. 12, Main Road, Gandhipuram, Coimbatore - 641012, Tamil Nadu, India'}
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', borderTop: '1px solid var(--border-subtle)', paddingTop: '8px', fontSize: '11.5px' }}>
-                  <div>
-                    <span style={{ color: 'var(--text-secondary)' }}>Phone: </span>
-                    <span>{customerDetails.phone || '+91 98765 43210'}</span>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-secondary)' }}>Email: </span>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{customerDetails.email || 'abc@enterprises.com'}</span>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-secondary)' }}>State: </span>
-                    <span>{customerDetails.state || 'Tamil Nadu (33)'}</span>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -1047,6 +1048,31 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
                   </button>
                 </div>
 
+                {/* Smart Pricing Trigger Button */}
+                <button
+                  type="button"
+                  id="smart-pricing-trigger-btn"
+                  onClick={() => setShowSmartPricingModal(true)}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    background: 'rgba(255, 100, 31, 0.08)',
+                    color: 'var(--brand-primary, #FF641F)',
+                    border: '1px solid rgba(255, 100, 31, 0.3)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title="Open Smart Pricing & Online Price Check"
+                >
+                  <Tag size={13} />
+                  <span>Smart Pricing</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={addEmptyRow}
@@ -1100,8 +1126,9 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
                       <td style={{ padding: '8px', verticalAlign: 'top' }}>
                         <input
                           type="text"
+                          list="quotation-stock-items-datalist"
                           value={row.description}
-                          onChange={(e) => updateLineField(idx, 'description', e.target.value)}
+                          onChange={(e) => handleItemDescriptionChange(idx, e.target.value)}
                           placeholder="Item name / service description"
                           style={{
                             width: '100%',
@@ -1256,6 +1283,15 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
                 </tbody>
               </table>
             </div>
+
+            {/* Datalist for stock items autocompletion */}
+            <datalist id="quotation-stock-items-datalist">
+              {stockItems.map((s) => (
+                <option key={s.item_id || s.id} value={s.item_name}>
+                  {s.sku ? `SKU: ${s.sku} | ` : ''}Rate: ₹{s.selling_rate_paise ? s.selling_rate_paise / 100 : s.selling_rate || 0}
+                </option>
+              ))}
+            </datalist>
 
             {/* Bottom Row Add Product / Service Buttons */}
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -1727,7 +1763,8 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
               sgstAmount: 0,
               igstAmount: 0,
               totalAmount: 0,
-              isService: itemModalType === 'Service'
+              isService: itemModalType === 'Service',
+              dealerCost: (newItem.purchaseRatePaise ? newItem.purchaseRatePaise / 100 : (Number(newItem.purchaseRate) || 0))
             };
             const computed = recalculateLine(newRow, taxMode);
             setItems((prev) => [...prev, computed]);
@@ -1743,6 +1780,20 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
           quotation={previewQuotationData}
           company={company}
           onClose={() => setShowPrintModal(false)}
+        />
+      )}
+
+      {/* Smart Pricing & Online Price Check Overlay Modal */}
+      {showSmartPricingModal && (
+        <SmartPricingModal
+          isOpen={showSmartPricingModal}
+          onClose={() => setShowSmartPricingModal(false)}
+          quotationItems={items}
+          stockItemsList={stockItems}
+          currentTaxMode={taxMode}
+          companyState={company?.state || 'Tamil Nadu'}
+          placeOfSupply={placeOfSupply}
+          onApplyPricing={handleApplySmartPricing}
         />
       )}
     </div>

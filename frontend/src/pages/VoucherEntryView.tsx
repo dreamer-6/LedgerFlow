@@ -1114,7 +1114,7 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
         financialYearId: activeFy?.fy_id,
         voucherType,
         voucherDate,
-        voucherNumber,
+        voucherNumber: asDraft ? undefined : (voucherNumber || undefined),
         referenceNumber: supplierInvoiceNo,
         referenceNo: supplierInvoiceNo,
         referenceDate: supplierInvoiceDate,

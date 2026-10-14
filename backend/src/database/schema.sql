@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS companies (
     country TEXT DEFAULT 'India',
     phone TEXT,
     email TEXT,
+    website TEXT,
     currency TEXT DEFAULT 'INR',
     currency_symbol TEXT DEFAULT '₹',
     bank_name TEXT,
@@ -25,6 +26,8 @@ CREATE TABLE IF NOT EXISTS companies (
     bank_branch TEXT,
     terms_and_conditions TEXT,
     owner_user_id TEXT,
+    invoice_settings TEXT,
+    accounting_preferences TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -160,6 +163,7 @@ CREATE TABLE IF NOT EXISTS vouchers (
     cancelled_by TEXT,
     cancelled_at DATETIME,
     cancellation_reason TEXT,
+    is_hidden INTEGER DEFAULT 0,
     UNIQUE(company_id, fy_id, voucher_type, voucher_number)
 );
 
