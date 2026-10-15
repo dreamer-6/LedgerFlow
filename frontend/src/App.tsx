@@ -180,10 +180,24 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleLogout = () => {
+    authStorage.clear();
+    sessionStorage.removeItem('lf_draft_signup');
+    sessionStorage.removeItem('lf_onboarding_pending');
+    sessionStorage.removeItem('lf_onboarding_draft');
+    setDraftSignupUser(null);
+    setUser(null);
+    setIsAuthenticated(false);
+    setCompany(null);
+    setActiveFy(null);
+    navigateTo('/login');
+  };
+
   const loadCompanyData = async () => {
     let activeId = authStorage.getActiveCompanyId();
     try {
-      const bizList = await api.getBusinesses().catch(() => []);
+      const bizList = await api.getBusinesses();
+      setBusinesses(bizList);
       if (!activeId && bizList.length > 0) {
         activeId = bizList[0].company_id || (bizList[0] as any).companyId;
         if (activeId) authStorage.setActiveCompanyId(activeId);
@@ -215,8 +229,12 @@ export const App: React.FC = () => {
         }
       }
       setActiveFy(chosenFy);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load company master:', err);
+      if (err?.message?.includes('Unauthorized') || err?.message?.includes('401') || err?.message?.includes('not found or deactivated')) {
+        handleLogout();
+        return;
+      }
     } finally {
       setLoading(false);
     }
@@ -226,15 +244,27 @@ export const App: React.FC = () => {
     try {
       const list = await api.getBusinesses();
       setBusinesses(list);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load businesses:', err);
+      if (err?.message?.includes('Unauthorized') || err?.message?.includes('401') || err?.message?.includes('not found or deactivated')) {
+        handleLogout();
+      }
     }
   };
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadCompanyData();
-      loadBusinesses();
+      api.getMe()
+        .then((meData) => {
+          setUser(meData.user);
+          authStorage.setUser(meData.user);
+          setBusinesses(meData.businesses || []);
+          loadCompanyData();
+        })
+        .catch((err) => {
+          console.warn('Session verification failed, logging out:', err);
+          handleLogout();
+        });
     } else {
       setLoading(false);
     }
@@ -268,19 +298,6 @@ export const App: React.FC = () => {
       loadBusinesses();
       navigateTo('/');
     }
-  };
-
-  const handleLogout = () => {
-    authStorage.clear();
-    sessionStorage.removeItem('lf_draft_signup');
-    sessionStorage.removeItem('lf_onboarding_pending');
-    sessionStorage.removeItem('lf_onboarding_draft');
-    setDraftSignupUser(null);
-    setUser(null);
-    setIsAuthenticated(false);
-    setCompany(null);
-    setActiveFy(null);
-    navigateTo('/login');
   };
 
   const handleNavigateToBusinessSetup = (draftUser: { fullName: string; email: string; password: string }) => {
@@ -730,7 +747,7 @@ export const App: React.FC = () => {
     );
   }
 
-  if (!isAuthenticated && !currentRoute.startsWith('/business-setup')) {
+  if (!isAuthenticated && !draftSignupUser) {
     return (
       <AuthView
         initialMode={currentRoute === '/signup' ? 'SIGNUP' : 'LOGIN'}
@@ -740,21 +757,32 @@ export const App: React.FC = () => {
     );
   }
 
-  // If user is authenticated and onboarding is pending, render business setup wizard immediately
+  // If user is authenticated (or draft signup in progress) and onboarding is pending, render business setup wizard
   const isOnboardingPending =
-    sessionStorage.getItem('lf_onboarding_pending') === 'true' ||
-    currentRoute.startsWith('/business-setup') ||
-    (!loading && !company && businesses.length === 0);
+    (isAuthenticated || draftSignupUser) &&
+    (sessionStorage.getItem('lf_onboarding_pending') === 'true' ||
+      currentRoute.startsWith('/business-setup') ||
+      (!loading && !company && businesses.length === 0));
 
   if (isOnboardingPending) {
     return (
       <CreateBusinessOnboarding
         user={user}
-        draftSignupUser={null}
+        draftSignupUser={draftSignupUser}
+        onCancel={() => {
+          sessionStorage.removeItem('lf_onboarding_pending');
+          sessionStorage.removeItem('lf_onboarding_draft');
+          sessionStorage.removeItem('lf_is_new_business');
+          navigateTo('/');
+        }}
         onBusinessCreated={(newCompany) => {
           sessionStorage.removeItem('lf_onboarding_pending');
           sessionStorage.removeItem('lf_onboarding_draft');
-          setBusinesses([newCompany]);
+          sessionStorage.removeItem('lf_is_new_business');
+          setBusinesses((prev) => {
+            const exists = prev.some((b) => b.company_id === newCompany.company_id);
+            return exists ? prev : [...prev, newCompany];
+          });
           setCompany(newCompany);
           authStorage.setActiveCompanyId(newCompany.company_id);
           loadCompanyData();
@@ -1576,6 +1604,17 @@ export const App: React.FC = () => {
           setBusinesses((prev) => [...prev, newComp]);
           authStorage.setActiveCompanyId(newComp.company_id);
           loadCompanyData();
+        }}
+        onStartNewBusiness={() => {
+          setShowBusinessSwitcher(false);
+          sessionStorage.setItem('lf_onboarding_pending', 'true');
+          sessionStorage.setItem('lf_is_new_business', 'true');
+          sessionStorage.setItem('lf_onboarding_draft', JSON.stringify({
+            companyName: '',
+            email: user?.email || '',
+            phone: ''
+          }));
+          navigateTo('/business-setup?step=1');
         }}
       />
 

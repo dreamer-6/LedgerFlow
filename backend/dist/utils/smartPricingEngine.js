@@ -5,77 +5,180 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFAULT_ONLINE_REFERENCES = void 0;
+exports.getRoundingStep = getRoundingStep;
 exports.applyRounding = applyRounding;
 exports.calculateSmartPricing = calculateSmartPricing;
 exports.matchDefaultOnlineReference = matchDefaultOnlineReference;
-function applyRounding(val, method) {
+function getRoundingStep(method) {
     switch (method) {
-        case 'NEAREST_1':
-            return Math.round(val);
-        case 'ROUND_5':
-            return Math.round(val / 5) * 5;
-        case 'ROUND_10':
-            return Math.round(val / 10) * 10;
         case 'EXACT_2_DECIMALS':
+            return 0.01;
+        case 'NEAREST_1':
+            return 1;
+        case 'ROUND_5':
+            return 5;
+        case 'ROUND_10':
+            return 10;
+        case 'ROUND_50':
+            return 50;
+        case 'ROUND_100':
+            return 100;
+        default:
+            return 1;
+    }
+}
+function applyRounding(val, method) {
+    if (isNaN(val) || val <= 0)
+        return 0;
+    const valInPaise = Math.round(val * 100);
+    let stepPaise = 100;
+    switch (method) {
+        case 'EXACT_2_DECIMALS':
+            return valInPaise / 100;
+        case 'NEAREST_1':
+            stepPaise = 100;
+            break;
+        case 'ROUND_5':
+            stepPaise = 500;
+            break;
+        case 'ROUND_10':
+            stepPaise = 1000;
+            break;
+        case 'ROUND_50':
+            stepPaise = 5000;
+            break;
+        case 'ROUND_100':
+            stepPaise = 10000;
+            break;
         default:
             return Math.round(val * 100) / 100;
     }
+    // Exact halfway amounts round upward for positive values:
+    const roundedPaise = Math.floor((valInPaise + Math.floor(stepPaise / 2)) / stepPaise) * stepPaise;
+    return roundedPaise / 100;
 }
 function calculateSmartPricing(params) {
     const { items, pricingMethod, desiredProfit = 4000, targetTotal = 27848, markupPct = 20, grossMarginPct = 16.95, allocationMethod = 'PROPORTIONAL_COST', roundingMethod = 'NEAREST_1', gstMode = 'EXCLUSIVE', isInterstate = false } = params;
-    // 1. Total Dealer Cost and Total Quantity
-    const totalDealerCost = items.reduce((acc, item) => {
-        const qty = Math.max(0, Number(item.quantity) || 0);
-        const cost = Math.max(0, Number(item.dealerCost) || 0);
-        return acc + (cost * qty);
-    }, 0);
-    const totalQuantity = items.reduce((acc, item) => {
-        return acc + Math.max(0, Number(item.quantity) || 0);
-    }, 0);
-    // 2. Resolve Target Subtotal and Desired Profit
+    const warnings = [];
+    // 1. Establish Item Costs and Detect Missing Costs
+    let missingCostCount = 0;
+    const processedItems = items.map((item) => {
+        const qty = Math.max(1, Number(item.quantity) || 1);
+        const rawCost = item.dealerCost !== undefined && item.dealerCost !== null ? Number(item.dealerCost) : NaN;
+        const isCostMissing = isNaN(rawCost) || rawCost <= 0 || item.costNotSet === true;
+        if (isCostMissing) {
+            missingCostCount++;
+        }
+        const unitCost = isCostMissing ? 0 : Math.max(0, rawCost);
+        const lineCost = unitCost * qty;
+        return {
+            ...item,
+            quantity: qty,
+            unitCost,
+            lineCost,
+            isCostMissing
+        };
+    });
+    const hasMissingCosts = missingCostCount > 0;
+    const totalDealerCost = Math.round(processedItems.reduce((acc, it) => acc + it.lineCost, 0) * 100) / 100;
+    const totalQuantity = processedItems.reduce((acc, it) => acc + it.quantity, 0);
+    const itemCount = processedItems.length;
+    if (totalDealerCost === 0) {
+        warnings.push('Total dealer cost is ₹0.00. Automatic cost-based pricing requires valid dealer costs.');
+    }
+    else if (hasMissingCosts) {
+        warnings.push(`${missingCostCount} item(s) have "Cost not set". Enter unit dealer costs for full pricing accuracy.`);
+    }
+    // 2. Resolve Targets & Implied Profit
     let resolvedDesiredProfit = 0;
     let targetSellingSubtotal = 0;
-    let targetQuotationTotal = 0;
-    const totalBaseCost = totalDealerCost || 1;
-    const weightedGst = items.reduce((acc, it) => {
-        const costWeight = (Math.max(0, it.dealerCost || 0) * (it.quantity || 1)) / totalBaseCost;
-        return acc + ((it.gstRate || 18) * costWeight);
-    }, 0) || 18;
+    let targetFinalTotal = 0;
+    // Track line pre-calculated targets for Target Total in Inclusive mode with mixed tax rates
+    const lineInclusiveTargets = new Array(itemCount).fill(0);
+    const linePreTaxTargets = new Array(itemCount).fill(0);
     switch (pricingMethod) {
         case 'TARGET_PROFIT': {
             resolvedDesiredProfit = Math.max(0, Number(desiredProfit) || 0);
             targetSellingSubtotal = totalDealerCost + resolvedDesiredProfit;
-            if (gstMode === 'INCLUSIVE') {
-                targetQuotationTotal = Math.round(targetSellingSubtotal * (1 + weightedGst / 100) * 100) / 100;
-            }
             break;
         }
         case 'TARGET_TOTAL': {
             const specifiedTarget = Math.max(0, Number(targetTotal) || 0);
             if (gstMode === 'EXCLUSIVE') {
                 targetSellingSubtotal = specifiedTarget;
-                resolvedDesiredProfit = Math.max(0, targetSellingSubtotal - totalDealerCost);
+                resolvedDesiredProfit = Math.max(0, Math.round((targetSellingSubtotal - totalDealerCost) * 100) / 100);
             }
             else {
-                targetQuotationTotal = specifiedTarget;
-                targetSellingSubtotal = Math.round((specifiedTarget / (1 + weightedGst / 100)) * 100) / 100;
+                targetFinalTotal = specifiedTarget;
+                // Solving for exact pre-tax amounts across items (supporting mixed tax rates)
+                if (totalDealerCost > 0 && allocationMethod === 'PROPORTIONAL_COST') {
+                    for (let i = 0; i < itemCount; i++) {
+                        const it = processedItems[i];
+                        const weight = it.lineCost / totalDealerCost;
+                        const lineInclTarget = specifiedTarget * weight;
+                        const linePreTax = lineInclTarget / (1 + (it.gstRate || 0) / 100);
+                        lineInclusiveTargets[i] = lineInclTarget;
+                        linePreTaxTargets[i] = linePreTax;
+                    }
+                }
+                else if (allocationMethod === 'PROPORTIONAL_QTY') {
+                    const totalCostIncl = processedItems.reduce((sum, it) => sum + (it.lineCost * (1 + (it.gstRate || 0) / 100)), 0);
+                    const inclusiveProfitToDistribute = specifiedTarget - totalCostIncl;
+                    const sumQtyFactors = processedItems.reduce((sum, it) => sum + (it.quantity * (1 + (it.gstRate || 0) / 100)), 0);
+                    const unitProfitPreTax = sumQtyFactors > 0 ? inclusiveProfitToDistribute / sumQtyFactors : 0;
+                    for (let i = 0; i < itemCount; i++) {
+                        const it = processedItems[i];
+                        const linePreTax = it.lineCost + (it.quantity * unitProfitPreTax);
+                        const lineIncl = linePreTax * (1 + (it.gstRate || 0) / 100);
+                        linePreTaxTargets[i] = linePreTax;
+                        lineInclusiveTargets[i] = lineIncl;
+                    }
+                }
+                else {
+                    // EQUAL allocation
+                    const totalCostIncl = processedItems.reduce((sum, it) => sum + (it.lineCost * (1 + (it.gstRate || 0) / 100)), 0);
+                    const inclusiveProfitToDistribute = specifiedTarget - totalCostIncl;
+                    const sumItemFactors = processedItems.reduce((sum, it) => sum + (1 + (it.gstRate || 0) / 100), 0);
+                    const lineProfitPreTax = sumItemFactors > 0 ? inclusiveProfitToDistribute / sumItemFactors : 0;
+                    for (let i = 0; i < itemCount; i++) {
+                        const it = processedItems[i];
+                        const linePreTax = it.lineCost + lineProfitPreTax;
+                        const lineIncl = linePreTax * (1 + (it.gstRate || 0) / 100);
+                        linePreTaxTargets[i] = linePreTax;
+                        lineInclusiveTargets[i] = lineIncl;
+                    }
+                }
+                targetSellingSubtotal = Math.round(linePreTaxTargets.reduce((s, v) => s + v, 0) * 100) / 100;
                 resolvedDesiredProfit = Math.max(0, Math.round((targetSellingSubtotal - totalDealerCost) * 100) / 100);
             }
             break;
         }
         case 'MARKUP_PERCENT': {
             const validMarkup = Math.max(0, Number(markupPct) || 0);
+            if (totalDealerCost === 0) {
+                warnings.push('Markup % requires positive dealer cost.');
+            }
             resolvedDesiredProfit = Math.round(totalDealerCost * (validMarkup / 100) * 100) / 100;
             targetSellingSubtotal = totalDealerCost + resolvedDesiredProfit;
             break;
         }
         case 'GROSS_MARGIN_PERCENT': {
-            const validMargin = Math.min(99.99, Math.max(0, Number(grossMarginPct) || 0));
-            if (validMargin < 100 && totalDealerCost > 0) {
+            let validMargin = Number(grossMarginPct) || 0;
+            if (validMargin >= 100) {
+                warnings.push('Gross margin must be strictly less than 100%. Clamped to 99.99%.');
+                validMargin = 99.99;
+            }
+            else if (validMargin < 0) {
+                validMargin = 0;
+            }
+            if (totalDealerCost > 0 && validMargin < 100) {
                 targetSellingSubtotal = Math.round((totalDealerCost / (1 - validMargin / 100)) * 100) / 100;
-                resolvedDesiredProfit = Math.max(0, targetSellingSubtotal - totalDealerCost);
+                resolvedDesiredProfit = Math.max(0, Math.round((targetSellingSubtotal - totalDealerCost) * 100) / 100);
             }
             else {
+                if (totalDealerCost === 0) {
+                    warnings.push('Gross margin % requires positive dealer cost.');
+                }
                 targetSellingSubtotal = totalDealerCost;
                 resolvedDesiredProfit = 0;
             }
@@ -83,40 +186,52 @@ function calculateSmartPricing(params) {
         }
         case 'MANUAL':
         default: {
-            targetSellingSubtotal = items.reduce((acc, it) => {
+            targetSellingSubtotal = processedItems.reduce((acc, it) => {
                 const rate = it.manualFinalPrice !== undefined ? it.manualFinalPrice : it.currentSellingPrice;
-                return acc + (rate * (it.quantity || 1));
+                return acc + (rate * it.quantity);
             }, 0);
-            resolvedDesiredProfit = Math.max(0, targetSellingSubtotal - totalDealerCost);
+            resolvedDesiredProfit = Math.max(0, Math.round((targetSellingSubtotal - totalDealerCost) * 100) / 100);
             break;
         }
     }
-    // 3. Distribute Profit Across Items
+    // 3. Allocate Profit & Calculate Item Prices
     const calculatedItems = [];
-    const itemCount = items.length;
-    items.forEach((item) => {
-        const qty = Math.max(1, Number(item.quantity) || 1);
-        const unitCost = Math.max(0, Number(item.dealerCost) || 0);
-        const lineCost = unitCost * qty;
-        const gstRate = Number(item.gstRate) || 18;
+    for (let idx = 0; idx < itemCount; idx++) {
+        const item = processedItems[idx];
+        const qty = item.quantity;
+        const unitCost = item.unitCost;
+        const lineCost = item.lineCost;
+        const gstRate = Number(item.gstRate) || 0;
         let lineAllocatedProfit = 0;
-        if (pricingMethod === 'MARKUP_PERCENT') {
+        if (totalDealerCost === 0 && item.isCostMissing) {
+            // Missing cost and zero total dealer cost: Do not invent fake allocation!
+            lineAllocatedProfit = 0;
+        }
+        else if (pricingMethod === 'MARKUP_PERCENT') {
             const validMarkup = Math.max(0, Number(markupPct) || 0);
-            lineAllocatedProfit = (unitCost * (validMarkup / 100)) * qty;
+            lineAllocatedProfit = (lineCost * (validMarkup / 100));
         }
         else if (pricingMethod === 'GROSS_MARGIN_PERCENT') {
-            const validMargin = Math.min(99.99, Math.max(0, Number(grossMarginPct) || 0));
-            const unitSelling = validMargin < 100 ? (unitCost / (1 - validMargin / 100)) : unitCost;
-            lineAllocatedProfit = (unitSelling - unitCost) * qty;
+            let validMargin = Number(grossMarginPct) || 0;
+            if (validMargin >= 100)
+                validMargin = 99.99;
+            if (validMargin < 0)
+                validMargin = 0;
+            const lineSelling = validMargin < 100 ? (lineCost / (1 - validMargin / 100)) : lineCost;
+            lineAllocatedProfit = lineSelling - lineCost;
         }
         else if (pricingMethod === 'MANUAL') {
-            const rate = item.manualFinalPrice !== undefined ? item.manualFinalPrice : item.currentSellingPrice;
-            lineAllocatedProfit = (rate - unitCost) * qty;
+            const activeRate = item.manualFinalPrice !== undefined ? item.manualFinalPrice : item.currentSellingPrice;
+            lineAllocatedProfit = (activeRate - unitCost) * qty;
+        }
+        else if (pricingMethod === 'TARGET_TOTAL' && gstMode === 'INCLUSIVE') {
+            lineAllocatedProfit = linePreTaxTargets[idx] - lineCost;
         }
         else {
+            // TARGET_PROFIT or TARGET_TOTAL (Exclusive)
             switch (allocationMethod) {
                 case 'PROPORTIONAL_QTY': {
-                    const share = totalQuantity > 0 ? qty / totalQuantity : 1 / itemCount;
+                    const share = totalQuantity > 0 ? qty / totalQuantity : 1 / (itemCount || 1);
                     lineAllocatedProfit = resolvedDesiredProfit * share;
                     break;
                 }
@@ -131,37 +246,47 @@ function calculateSmartPricing(params) {
                         lineAllocatedProfit = resolvedDesiredProfit * share;
                     }
                     else {
-                        lineAllocatedProfit = resolvedDesiredProfit / (itemCount || 1);
+                        lineAllocatedProfit = 0;
                     }
                     break;
                 }
             }
         }
         const unitAllocatedProfit = lineAllocatedProfit / qty;
-        let rawSuggestedPrice = unitCost + unitAllocatedProfit;
-        if (gstMode === 'INCLUSIVE') {
-            rawSuggestedPrice = rawSuggestedPrice * (1 + gstRate / 100);
+        let rawSuggestedPrice = 0;
+        if (totalDealerCost === 0 && item.isCostMissing) {
+            // Preserve current quotation price when cost is not set
+            rawSuggestedPrice = item.currentSellingPrice;
+        }
+        else {
+            const unitPreTaxSelling = unitCost + unitAllocatedProfit;
+            if (gstMode === 'INCLUSIVE') {
+                rawSuggestedPrice = unitPreTaxSelling * (1 + gstRate / 100);
+            }
+            else {
+                rawSuggestedPrice = unitPreTaxSelling;
+            }
         }
         const roundedSuggestedPrice = applyRounding(rawSuggestedPrice, roundingMethod);
         const hasManualOverride = item.manualFinalPrice !== undefined;
-        const finalPrice = item.manualFinalPrice !== undefined ? item.manualFinalPrice : roundedSuggestedPrice;
+        const finalPrice = hasManualOverride ? item.manualFinalPrice : roundedSuggestedPrice;
         const totalSellingPrice = finalPrice * qty;
         let taxableAmount = 0;
         let gstAmount = 0;
         let lineTotal = 0;
         if (gstMode === 'INCLUSIVE') {
-            lineTotal = totalSellingPrice;
+            lineTotal = Math.round(totalSellingPrice * 100) / 100;
             taxableAmount = Math.round((lineTotal / (1 + gstRate / 100)) * 100) / 100;
             gstAmount = Math.round((lineTotal - taxableAmount) * 100) / 100;
         }
         else {
-            taxableAmount = totalSellingPrice;
+            taxableAmount = Math.round(totalSellingPrice * 100) / 100;
             gstAmount = Math.round((taxableAmount * (gstRate / 100)) * 100) / 100;
             lineTotal = Math.round((taxableAmount + gstAmount) * 100) / 100;
         }
-        const effectiveProfitPerUnit = (taxableAmount / qty) - unitCost;
+        const effectiveProfitPerUnit = unitCost > 0 ? (taxableAmount / qty) - unitCost : 0;
         const effectiveProfitPct = unitCost > 0 ? (effectiveProfitPerUnit / unitCost) * 100 : 0;
-        const effectiveGrossMarginPct = taxableAmount > 0 ? (effectiveProfitPerUnit / (taxableAmount / qty)) * 100 : 0;
+        const effectiveGrossMarginPct = taxableAmount > 0 && unitCost > 0 ? (effectiveProfitPerUnit / (taxableAmount / qty)) * 100 : 0;
         let onlineDiff;
         let onlineDiffPct;
         let onlineStatus = 'UNAVAILABLE';
@@ -190,6 +315,7 @@ function calculateSmartPricing(params) {
             unit: item.unit || 'NOS',
             gstRate,
             dealerCost: unitCost,
+            costNotSet: item.isCostMissing,
             totalDealerCost: lineCost,
             allocatedProfit: Math.round(lineAllocatedProfit * 100) / 100,
             unitAllocatedProfit: Math.round(unitAllocatedProfit * 100) / 100,
@@ -207,17 +333,27 @@ function calculateSmartPricing(params) {
             onlineDiffPct: onlineDiffPct !== undefined ? Math.round(onlineDiffPct * 100) / 100 : undefined,
             onlineStatus
         });
-    });
-    // 4. Deterministic Remainder Reconciliation
-    const hasAnyManualOverrides = calculatedItems.some(i => i.isManuallyOverridden);
-    if (!hasAnyManualOverrides && (pricingMethod === 'TARGET_PROFIT' || pricingMethod === 'TARGET_TOTAL')) {
+    }
+    // 4. Deterministic Remainder Reconciliation (with respect for selected rounding rule)
+    const hasAnyManualOverrides = calculatedItems.some((i) => i.isManuallyOverridden);
+    const roundingStep = getRoundingStep(roundingMethod);
+    if (!hasAnyManualOverrides &&
+        totalDealerCost > 0 &&
+        (pricingMethod === 'TARGET_PROFIT' || pricingMethod === 'TARGET_TOTAL')) {
         const rawSum = calculatedItems.reduce((acc, it) => acc + (it.finalPrice * it.quantity), 0);
         const targetToMatch = gstMode === 'INCLUSIVE'
-            ? (targetQuotationTotal || Math.round(targetSellingSubtotal * (1 + weightedGst / 100) * 100) / 100)
+            ? (targetFinalTotal || Math.round(calculatedItems.reduce((sum, it) => sum + (it.suggestedPrice * it.quantity), 0) * 100) / 100)
             : targetSellingSubtotal;
         const delta = Math.round((targetToMatch - rawSum) * 100) / 100;
-        if (Math.abs(delta) > 0 && Math.abs(delta) <= 5 && calculatedItems.length > 0) {
-            let bestIdx = 0;
+        // Reconciliation is ONLY permissible if delta can be applied without violating the rounding rule!
+        // For EXACT_2_DECIMALS: small paise adjustments (|delta| <= 10) are fine.
+        // For NEAREST_1, ROUND_5, ROUND_10, ROUND_50, ROUND_100: delta must be an exact multiple of roundingStep!
+        const isStepMultiple = Math.abs(delta) > 0 && (roundingMethod === 'EXACT_2_DECIMALS'
+            ? Math.abs(delta) <= 10
+            : (Math.abs(delta / roundingStep - Math.round(delta / roundingStep)) < 0.001 &&
+                Math.abs(delta) <= roundingStep * 2));
+        if (isStepMultiple && calculatedItems.length > 0) {
+            let bestIdx = -1;
             let maxCost = -1;
             calculatedItems.forEach((it, idx) => {
                 if (it.dealerCost > maxCost && it.quantity === 1) {
@@ -225,49 +361,71 @@ function calculateSmartPricing(params) {
                     bestIdx = idx;
                 }
             });
-            const it = calculatedItems[bestIdx];
-            const newPrice = Math.round((it.finalPrice + delta) * 100) / 100;
-            it.finalPrice = newPrice;
-            it.totalSellingPrice = newPrice * it.quantity;
-            if (gstMode === 'INCLUSIVE') {
-                it.lineTotal = it.totalSellingPrice;
-                it.taxableAmount = Math.round((it.lineTotal / (1 + it.gstRate / 100)) * 100) / 100;
-                it.gstAmount = Math.round((it.lineTotal - it.taxableAmount) * 100) / 100;
+            if (bestIdx >= 0) {
+                const it = calculatedItems[bestIdx];
+                const newPrice = Math.round((it.finalPrice + delta) * 100) / 100;
+                it.finalPrice = newPrice;
+                it.totalSellingPrice = newPrice * it.quantity;
+                if (gstMode === 'INCLUSIVE') {
+                    it.lineTotal = Math.round(it.totalSellingPrice * 100) / 100;
+                    it.taxableAmount = Math.round((it.lineTotal / (1 + it.gstRate / 100)) * 100) / 100;
+                    it.gstAmount = Math.round((it.lineTotal - it.taxableAmount) * 100) / 100;
+                }
+                else {
+                    it.taxableAmount = Math.round(it.totalSellingPrice * 100) / 100;
+                    it.gstAmount = Math.round((it.taxableAmount * (it.gstRate / 100)) * 100) / 100;
+                    it.lineTotal = Math.round((it.taxableAmount + it.gstAmount) * 100) / 100;
+                }
+                const profitPerUnit = (it.taxableAmount / it.quantity) - it.dealerCost;
+                it.effectiveProfitPct = it.dealerCost > 0 ? Math.round((profitPerUnit / it.dealerCost) * 10000) / 100 : 0;
+                it.effectiveGrossMarginPct = it.taxableAmount > 0 ? Math.round((profitPerUnit / (it.taxableAmount / it.quantity)) * 10000) / 100 : 0;
             }
-            else {
-                it.taxableAmount = it.totalSellingPrice;
-                it.gstAmount = Math.round((it.taxableAmount * (it.gstRate / 100)) * 100) / 100;
-                it.lineTotal = Math.round((it.taxableAmount + it.gstAmount) * 100) / 100;
-            }
-            const profitPerUnit = (it.taxableAmount / it.quantity) - it.dealerCost;
-            it.effectiveProfitPct = it.dealerCost > 0 ? Math.round((profitPerUnit / it.dealerCost) * 10000) / 100 : 0;
-            it.effectiveGrossMarginPct = it.taxableAmount > 0 ? Math.round((profitPerUnit / (it.taxableAmount / it.quantity)) * 10000) / 100 : 0;
         }
     }
     // 5. Aggregate Totals
-    const actualSellingSubtotal = calculatedItems.reduce((acc, it) => acc + (gstMode === 'INCLUSIVE' ? it.taxableAmount : it.totalSellingPrice), 0);
-    const actualProfit = actualSellingSubtotal - totalDealerCost;
-    const actualGstTotal = calculatedItems.reduce((acc, it) => acc + it.gstAmount, 0);
+    const actualSellingSubtotal = Math.round(calculatedItems.reduce((acc, it) => acc + (gstMode === 'INCLUSIVE' ? it.taxableAmount : it.totalSellingPrice), 0) * 100) / 100;
+    const actualProfit = Math.round((actualSellingSubtotal - totalDealerCost) * 100) / 100;
+    const actualGstTotal = Math.round(calculatedItems.reduce((acc, it) => acc + it.gstAmount, 0) * 100) / 100;
+    const rawFinalTotal = Math.round((actualSellingSubtotal + actualGstTotal) * 100) / 100;
+    const roundedGrandTotal = Math.round(rawFinalTotal);
+    const roundOff = Math.round((roundedGrandTotal - rawFinalTotal) * 100) / 100;
     const actualFinalTotal = gstMode === 'INCLUSIVE'
-        ? calculatedItems.reduce((acc, it) => acc + it.lineTotal, 0)
-        : Math.round((actualSellingSubtotal + actualGstTotal) * 100) / 100;
-    const targetFinalTotal = gstMode === 'INCLUSIVE'
-        ? (targetQuotationTotal || Math.round(targetSellingSubtotal * (1 + weightedGst / 100) * 100) / 100)
-        : Math.round((targetSellingSubtotal + actualGstTotal) * 100) / 100;
+        ? Math.round(calculatedItems.reduce((acc, it) => acc + it.lineTotal, 0) * 100) / 100
+        : rawFinalTotal;
+    if (targetFinalTotal === 0) {
+        targetFinalTotal = gstMode === 'INCLUSIVE'
+            ? actualFinalTotal
+            : Math.round((targetSellingSubtotal + actualGstTotal) * 100) / 100;
+    }
     const effectiveMarkupPct = totalDealerCost > 0
         ? Math.round((actualProfit / totalDealerCost) * 10000) / 100
         : 0;
-    const effectiveGrossMarginPct = actualSellingSubtotal > 0
+    const effectiveGrossMarginPct = actualSellingSubtotal > 0 && totalDealerCost > 0
         ? Math.round((actualProfit / actualSellingSubtotal) * 10000) / 100
         : 0;
     const compareTarget = gstMode === 'INCLUSIVE' ? targetFinalTotal : targetSellingSubtotal;
     const compareActual = gstMode === 'INCLUSIVE' ? actualFinalTotal : actualSellingSubtotal;
     const reconciliationDelta = Math.round((compareActual - compareTarget) * 100) / 100;
-    const targetAchieved = Math.abs(reconciliationDelta) <= 1.0;
-    // 6. Overall Online Comparison Aggregation
+    // Strict target achieved: within 0.01
+    // If rounding has changed the result and reconciliationDelta !== 0, do NOT report target as achieved!
+    const targetAchieved = totalDealerCost > 0 && Math.abs(reconciliationDelta) <= 0.01;
+    if (!targetAchieved && totalDealerCost > 0 && Math.abs(reconciliationDelta) > 0.01) {
+        if (hasAnyManualOverrides) {
+            warnings.push(`Manual price overrides active (Discrepancy: ${reconciliationDelta > 0 ? '+' : ''}₹${reconciliationDelta.toFixed(2)} vs target).`);
+        }
+        else {
+            const roundingLabel = roundingMethod === 'ROUND_50' ? 'Nearest ₹50' :
+                roundingMethod === 'ROUND_100' ? 'Nearest ₹100' :
+                    roundingMethod === 'ROUND_10' ? 'Nearest ₹10' :
+                        roundingMethod === 'ROUND_5' ? 'Nearest ₹5' :
+                            roundingMethod === 'EXACT_2_DECIMALS' ? 'Exact ₹0.01' : 'Nearest ₹1';
+            warnings.push(`Target differs by ${reconciliationDelta > 0 ? '+' : ''}₹${reconciliationDelta.toFixed(2)} due to ${roundingLabel} rounding.`);
+        }
+    }
+    // 6. Online Comparison
     let onlineRefTotal = 0;
     let onlineItemsCount = 0;
-    calculatedItems.forEach(it => {
+    calculatedItems.forEach((it) => {
         if (it.onlineReference && it.onlineReference.referencePrice > 0) {
             onlineRefTotal += it.onlineReference.referencePrice * it.quantity;
             onlineItemsCount++;
@@ -293,19 +451,23 @@ function calculateSmartPricing(params) {
         roundingMethod,
         gstMode,
         items: calculatedItems,
-        totalDealerCost: Math.round(totalDealerCost * 100) / 100,
+        totalDealerCost,
         desiredProfit: resolvedDesiredProfit,
-        actualProfit: Math.round(actualProfit * 100) / 100,
-        targetSellingSubtotal: Math.round(targetSellingSubtotal * 100) / 100,
-        actualSellingSubtotal: Math.round(actualSellingSubtotal * 100) / 100,
-        targetFinalTotal: Math.round(targetFinalTotal * 100) / 100,
-        actualGstTotal: Math.round(actualGstTotal * 100) / 100,
-        actualFinalTotal: Math.round(actualFinalTotal * 100) / 100,
+        actualProfit,
+        targetSellingSubtotal,
+        actualSellingSubtotal,
+        targetFinalTotal,
+        actualGstTotal,
+        roundOff,
+        actualFinalTotal,
         effectiveMarkupPct,
         effectiveGrossMarginPct,
         hasManualOverrides: hasAnyManualOverrides,
         targetAchieved,
         reconciliationDelta,
+        hasMissingCosts,
+        missingCostCount,
+        warnings,
         onlineComparison: {
             yourSellingTotal: Math.round((gstMode === 'INCLUSIVE' ? actualFinalTotal : actualSellingSubtotal) * 100) / 100,
             onlineReferenceTotal: Math.round(onlineRefTotal * 100) / 100,

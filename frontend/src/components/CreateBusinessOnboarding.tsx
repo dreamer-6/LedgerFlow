@@ -12,6 +12,7 @@ interface CreateBusinessOnboardingProps {
   draftSignupUser?: { fullName: string; email: string; password: string } | null;
   onBusinessCreated: (newCompany: Company) => void;
   onLogout: () => void;
+  onCancel?: () => void;
 }
 
 const STATE_OPTIONS = [
@@ -72,7 +73,8 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
   user,
   draftSignupUser,
   onBusinessCreated,
-  onLogout
+  onLogout,
+  onCancel
 }) => {
   const initialDraft = getStoredDraft();
 
@@ -307,10 +309,19 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
     try {
       let activeComp: Company | null = null;
       const currentActiveCompId = authStorage.getActiveCompanyId();
+      const isExplicitNewBusiness = sessionStorage.getItem('lf_is_new_business') === 'true';
 
-      if (currentActiveCompId) {
-        // User session already has an active company context (provisioned during register or pre-existing)
-        // Update it with the complete entered business, tax, and address profile
+      const accountingPrefs = {
+        enableInventory,
+        enableServiceManagement,
+        roundingMethod,
+        currency,
+        taxTreatment,
+        defaultTaxType
+      };
+
+      if (currentActiveCompId && !isExplicitNewBusiness && draftSignupUser) {
+        // User session already has an initial starter company from signup: update it
         await api.updateCompany({
           company_name: companyName.trim(),
           legal_name: companyName.trim(),
@@ -323,13 +334,15 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
           state_code: stateCode,
           pincode: pincode.trim(),
           phone: phone.trim() || undefined,
-          email: email.trim() || undefined
+          email: email.trim() || undefined,
+          website: website.trim() || undefined,
+          accounting_preferences: JSON.stringify(accountingPrefs)
         });
 
         const refreshed = await api.getCompanyAndFy();
         activeComp = refreshed.company;
       } else {
-        // Authenticated user with no active company: create and update
+        // Explicitly create a new isolated business
         const res = await api.createBusiness({
           companyName: companyName.trim(),
           legalName: companyName.trim(),
@@ -353,7 +366,9 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
             state_code: stateCode,
             pincode: pincode.trim(),
             phone: phone.trim() || undefined,
-            email: email.trim() || undefined
+            email: email.trim() || undefined,
+            website: website.trim() || undefined,
+            accounting_preferences: JSON.stringify(accountingPrefs)
           });
         } catch (updateErr) {
           console.warn('Initial updateCompany note:', updateErr);
@@ -367,6 +382,7 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
         authStorage.setActiveCompanyId(activeComp.company_id);
         sessionStorage.removeItem('lf_onboarding_pending');
         sessionStorage.removeItem('lf_onboarding_draft');
+        sessionStorage.removeItem('lf_is_new_business');
         onBusinessCreated(activeComp);
       } else {
         throw new Error('Unable to confirm business creation on the server.');
@@ -641,7 +657,7 @@ export const CreateBusinessOnboarding: React.FC<CreateBusinessOnboardingProps> =
 
               {/* Bottom Actions */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 24 }}>
-                <Button type="button" variant="ghost" onClick={onLogout}>
+                <Button type="button" variant="ghost" onClick={onCancel || onLogout}>
                   Cancel
                 </Button>
 

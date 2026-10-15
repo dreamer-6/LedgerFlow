@@ -28,7 +28,12 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // ── Initialize JWT Secret early so it fails fast if misconfigured ─────────
-jwtSecret();
+try {
+  jwtSecret();
+} catch (err: any) {
+  console.error(`[FATAL] ${err.message}`);
+  process.exit(1);
+}
 
 // ── Database & Seed ────────────────────────────────────────────────────────
 const db = getDatabase();

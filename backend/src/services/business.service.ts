@@ -4,18 +4,29 @@ import { initializeBusiness } from '../database/seed.js';
 
 export class BusinessService {
   /**
+   * Sanitizes company record to avoid exposing vault_password_hash in API responses.
+   */
+  static sanitizeCompany(company: any): any {
+    if (!company) return null;
+    const sanitized = { ...company };
+    delete sanitized.vault_password_hash;
+    return sanitized;
+  }
+
+  /**
    * Returns ONLY the companies this user has user_businesses membership in.
    * Global users.role is NEVER used to expand company visibility.
    */
   static getBusinesses(db: DatabaseSync, userId: string) {
     if (!userId) return [];
-    return db.prepare(`
+    const businesses = db.prepare(`
       SELECT c.*, ub.role
       FROM companies c
       JOIN user_businesses ub ON c.company_id = ub.company_id
       WHERE ub.user_id = ?
       ORDER BY c.created_at ASC
-    `).all(userId);
+    `).all(userId) as any[];
+    return businesses.map(b => BusinessService.sanitizeCompany(b));
   }
 
 
@@ -53,7 +64,8 @@ export class BusinessService {
       WHERE company_id = ?
     `).run(mailingName || companyName, vaultPasswordHash, logoBase64 || null, companyId);
 
-    return db.prepare('SELECT * FROM companies WHERE company_id = ?').get(companyId);
+    const comp = db.prepare('SELECT * FROM companies WHERE company_id = ?').get(companyId);
+    return BusinessService.sanitizeCompany(comp);
   }
 
   static getCurrentCompanyInfo(db: DatabaseSync, companyId: string) {
@@ -80,7 +92,7 @@ export class BusinessService {
       `).get(companyId);
     }
 
-    return { company: company || null, activeFinancialYear: activeFy || null };
+    return { company: BusinessService.sanitizeCompany(company), activeFinancialYear: activeFy || null };
   }
 
   static updateCurrentCompany(db: DatabaseSync, companyId: string, payload: any) {
@@ -162,28 +174,35 @@ export class BusinessService {
     db.exec('BEGIN TRANSACTION;');
     try {
       db.prepare('DELETE FROM audit_logs WHERE company_id = ?').run(companyId);
-      db.prepare('DELETE FROM party_addresses WHERE party_id IN (SELECT party_id FROM parties WHERE company_id = ?)').run(companyId);
-      db.prepare('DELETE FROM parties WHERE company_id = ?').run(companyId);
+      db.prepare('DELETE FROM stock_item_serials WHERE item_id IN (SELECT item_id FROM stock_items WHERE company_id = ?)').run(companyId);
+      db.prepare(`
+        DELETE FROM bill_allocations 
+        WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)
+           OR reference_voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)
+           OR ledger_id IN (SELECT ledger_id FROM ledgers WHERE company_id = ?)
+      `).run(companyId, companyId, companyId);
+      db.prepare('DELETE FROM tax_entries WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)').run(companyId);
       db.prepare(`
         DELETE FROM stock_entries 
         WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)
            OR item_id IN (SELECT item_id FROM stock_items WHERE company_id = ?)
            OR godown_id IN (SELECT godown_id FROM godowns WHERE company_id = ?)
       `).run(companyId, companyId, companyId);
-      db.prepare('DELETE FROM voucher_lines WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)').run(companyId);
       db.prepare(`
         DELETE FROM ledger_entries 
         WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)
            OR ledger_id IN (SELECT ledger_id FROM ledgers WHERE company_id = ?)
       `).run(companyId, companyId);
-      db.prepare('DELETE FROM tax_entries WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)').run(companyId);
       db.prepare(`
-        DELETE FROM bill_allocations 
+        DELETE FROM voucher_lines 
         WHERE voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)
+           OR item_id IN (SELECT item_id FROM stock_items WHERE company_id = ?)
            OR ledger_id IN (SELECT ledger_id FROM ledgers WHERE company_id = ?)
-           OR reference_voucher_id IN (SELECT voucher_id FROM vouchers WHERE company_id = ?)
-      `).run(companyId, companyId, companyId);
+           OR godown_id IN (SELECT godown_id FROM godowns WHERE company_id = ?)
+      `).run(companyId, companyId, companyId, companyId);
       db.prepare('DELETE FROM vouchers WHERE company_id = ?').run(companyId);
+      db.prepare('DELETE FROM party_addresses WHERE party_id IN (SELECT party_id FROM parties WHERE company_id = ?)').run(companyId);
+      db.prepare('DELETE FROM parties WHERE company_id = ?').run(companyId);
       db.prepare('DELETE FROM stock_items WHERE company_id = ?').run(companyId);
       db.prepare('DELETE FROM godowns WHERE company_id = ?').run(companyId);
       db.prepare('DELETE FROM units WHERE company_id = ?').run(companyId);
@@ -200,13 +219,13 @@ export class BusinessService {
       throw delErr;
     }
 
-    const remainingBusinesses = db.prepare(`
+    const remainingBusinesses = (db.prepare(`
       SELECT c.*, ub.role
       FROM companies c
       JOIN user_businesses ub ON c.company_id = ub.company_id
       WHERE ub.user_id = ?
       ORDER BY c.created_at ASC
-    `).all(userId) as any[];
+    `).all(userId) as any[]).map(b => BusinessService.sanitizeCompany(b));
 
     return {
       success: true,

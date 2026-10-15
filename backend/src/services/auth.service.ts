@@ -5,6 +5,16 @@ import { initializeBusiness } from '../database/seed.js';
 import { jwtSecret } from '../middleware/security.js';
 
 export class AuthService {
+  /**
+   * Sanitizes company record to avoid exposing vault_password_hash in API responses.
+   */
+  static sanitizeCompany(company: any): any {
+    if (!company) return null;
+    const sanitized = { ...company };
+    delete sanitized.vault_password_hash;
+    return sanitized;
+  }
+
   static register(db: DatabaseSync, payload: any) {
     const { email, password, fullName, businessName, companyName, legalName, gstin, state, stateCode } = payload;
     const finalBusinessName = (businessName || companyName || '').trim();
@@ -58,6 +68,8 @@ export class AuthService {
       ORDER BY c.created_at ASC
     `).all(userId);
 
+    const sanitizedBusinesses = businesses.map(b => AuthService.sanitizeCompany(b));
+
     return {
       token,
       user: {
@@ -67,8 +79,8 @@ export class AuthService {
         role: userRole
       },
       activeCompanyId: companyId,
-      company: businesses[0] || null,
-      businesses
+      company: sanitizedBusinesses[0] || null,
+      businesses: sanitizedBusinesses
     };
   }
 
@@ -106,6 +118,8 @@ export class AuthService {
       ORDER BY c.created_at ASC
     `).all(user.user_id) as any[];
 
+    const sanitizedBusinesses = businesses.map(b => AuthService.sanitizeCompany(b));
+
     return {
       token,
       user: {
@@ -115,8 +129,8 @@ export class AuthService {
         fullName: user.full_name,
         role: user.role
       },
-      activeCompanyId: businesses[0]?.company_id || null,
-      businesses
+      activeCompanyId: sanitizedBusinesses[0]?.company_id || null,
+      businesses: sanitizedBusinesses
     };
   }
 
@@ -147,6 +161,8 @@ export class AuthService {
       ORDER BY c.created_at ASC
     `).all(userId) as any[];
 
+    const sanitizedBusinesses = businesses.map(b => AuthService.sanitizeCompany(b));
+
     return {
       user: {
         userId: dbUser.user_id,
@@ -155,7 +171,7 @@ export class AuthService {
         fullName: dbUser.full_name,
         role: dbUser.role
       },
-      businesses
+      businesses: sanitizedBusinesses
     };
   }
 }

@@ -46,6 +46,8 @@ import {
   SecureRequest
 } from '../middleware/security.js';
 
+import { createLoginRateLimiter } from '../middleware/rateLimiter.js';
+
 export function createApiRouter(db: DatabaseSync): Router {
   const router = Router();
 
@@ -59,9 +61,15 @@ export function createApiRouter(db: DatabaseSync): Router {
   // --------------------------------------------------------------------------
   // PUBLIC ROUTES (no authentication)
   // --------------------------------------------------------------------------
+  const loginLimiter = createLoginRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    maxIpAttempts: 10,
+    maxAccountAttempts: 5
+  });
+
   const authController = new AuthController(db);
   router.post('/auth/register', authController.register);
-  router.post('/auth/login', authController.login);
+  router.post('/auth/login', loginLimiter, authController.login);
   router.post('/auth/sso', authController.sso); // Returns 501
 
   // --------------------------------------------------------------------------

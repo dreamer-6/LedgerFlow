@@ -2,8 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.resetAllData = resetAllData;
 const connection_js_1 = require("./connection.js");
-function resetAllData(db = (0, connection_js_1.getDatabase)()) {
+function resetAllData(db = (0, connection_js_1.getDatabase)(), options = {}) {
     db.exec('PRAGMA foreign_keys = OFF;');
+    db.exec('DELETE FROM audit_logs;');
+    try {
+        db.exec('DELETE FROM stock_item_serials;');
+    }
+    catch { }
     db.exec('DELETE FROM bill_allocations;');
     db.exec('DELETE FROM tax_entries;');
     db.exec('DELETE FROM stock_entries;');
@@ -13,18 +18,44 @@ function resetAllData(db = (0, connection_js_1.getDatabase)()) {
     db.exec('DELETE FROM party_addresses;');
     db.exec('DELETE FROM parties;');
     db.exec('DELETE FROM stock_items;');
-    db.exec('DELETE FROM ledgers WHERE is_party = 1;');
+    if (options.includeAccountsAndCompanies) {
+        db.exec('DELETE FROM godowns;');
+        db.exec('DELETE FROM units;');
+        db.exec('DELETE FROM financial_years;');
+        db.exec('DELETE FROM ledgers;');
+        db.exec('DELETE FROM ledger_groups;');
+        try {
+            db.exec('DELETE FROM user_businesses;');
+        }
+        catch { }
+        db.exec('DELETE FROM companies;');
+        db.exec('DELETE FROM users;');
+        try {
+            db.exec('DELETE FROM sqlite_sequence;');
+        }
+        catch { }
+    }
+    else {
+        db.exec('DELETE FROM ledgers WHERE is_party = 1;');
+    }
     db.exec('PRAGMA foreign_keys = ON;');
+    try {
+        db.exec('VACUUM;');
+    }
+    catch { }
     return {
+        users: db.prepare('SELECT COUNT(*) as c FROM users').get().c,
+        companies: db.prepare('SELECT COUNT(*) as c FROM companies').get().c,
         vouchers: db.prepare('SELECT COUNT(*) as c FROM vouchers').get().c,
         parties: db.prepare('SELECT COUNT(*) as c FROM parties').get().c,
         stock_items: db.prepare('SELECT COUNT(*) as c FROM stock_items').get().c,
         ledger_entries: db.prepare('SELECT COUNT(*) as c FROM ledger_entries').get().c,
-        core_ledgers: db.prepare('SELECT COUNT(*) as c FROM ledgers').get().c
+        ledgers: db.prepare('SELECT COUNT(*) as c FROM ledgers').get().c
     };
 }
 if (process.argv[1] && process.argv[1].includes('reset.ts')) {
-    const result = resetAllData();
+    const wipeAll = process.argv.includes('--all') || process.argv.includes('--fresh');
+    const result = resetAllData((0, connection_js_1.getDatabase)(), { includeAccountsAndCompanies: wipeAll });
     console.log('Reset complete successfully:');
     console.log(JSON.stringify(result, null, 2));
 }

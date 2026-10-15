@@ -39,6 +39,7 @@ const valuation_js_1 = require("../domain/inventory/valuation.js");
 const auth_controller_js_1 = require("../controllers/auth.controller.js");
 const business_controller_js_1 = require("../controllers/business.controller.js");
 const security_js_1 = require("../middleware/security.js");
+const rateLimiter_js_1 = require("../middleware/rateLimiter.js");
 function createApiRouter(db) {
     const router = (0, express_1.Router)();
     // Reusable middleware chains
@@ -50,9 +51,14 @@ function createApiRouter(db) {
     // --------------------------------------------------------------------------
     // PUBLIC ROUTES (no authentication)
     // --------------------------------------------------------------------------
+    const loginLimiter = (0, rateLimiter_js_1.createLoginRateLimiter)({
+        windowMs: 15 * 60 * 1000,
+        maxIpAttempts: 10,
+        maxAccountAttempts: 5
+    });
     const authController = new auth_controller_js_1.AuthController(db);
     router.post('/auth/register', authController.register);
-    router.post('/auth/login', authController.login);
+    router.post('/auth/login', loginLimiter, authController.login);
     router.post('/auth/sso', authController.sso); // Returns 501
     // --------------------------------------------------------------------------
     // AUTHENTICATED — No company context required

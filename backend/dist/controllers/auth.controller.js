@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const auth_service_js_1 = require("../services/auth.service.js");
+const rateLimiter_js_1 = require("../middleware/rateLimiter.js");
 class AuthController {
     db;
     constructor(db) {
@@ -24,9 +25,13 @@ class AuthController {
     login = (req, res) => {
         try {
             const result = auth_service_js_1.AuthService.login(this.db, req.body);
+            // Legitimate credentials: clear failed attempts
+            (0, rateLimiter_js_1.recordLoginSuccess)(req);
             res.json(result);
         }
         catch (err) {
+            // Failed login attempt: record failure
+            (0, rateLimiter_js_1.recordLoginFailure)(req);
             if (err.message.includes('Invalid') || err.message.includes('required')) {
                 res.status(401).json({ error: err.message });
             }

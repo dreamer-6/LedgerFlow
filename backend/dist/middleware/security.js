@@ -16,44 +16,64 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.jwtSecret = jwtSecret;
+exports._resetJwtSecretForTesting = _resetJwtSecretForTesting;
 exports.authenticate = authenticate;
 exports.resolveCompanyContext = resolveCompanyContext;
 exports.authorize = authorize;
 exports.assertResourceOwnership = assertResourceOwnership;
+const node_crypto_1 = __importDefault(require("node:crypto"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 // --------------------------------------------------------------------------
 // JWT_SECRET — single authoritative source
 // --------------------------------------------------------------------------
+const KNOWN_WEAK_SECRETS = new Set([
+    'secret',
+    'jwt_secret',
+    'changeme',
+    'password',
+    '12345678901234567890123456789012',
+    'default_jwt_secret_key_change_in_production'
+]);
 function getJwtSecret() {
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-        if (process.env.NODE_ENV === 'production') {
-            console.error('[FATAL] JWT_SECRET environment variable is not set. Server will not start.');
-            process.exit(1);
+    const rawSecret = process.env.JWT_SECRET;
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) {
+        if (!rawSecret || !rawSecret.trim()) {
+            throw new Error('FATAL: JWT_SECRET environment variable is required in production.');
         }
-        // Development only — generate a process-local random secret (not persisted)
-        // This means tokens from one dev process will not be valid in another, which is acceptable.
-        const devSecret = 'dev_' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-        console.warn('[SECURITY WARNING] JWT_SECRET is not set. Using a random development secret. ' +
-            'All tokens will be invalidated on server restart. Set JWT_SECRET in .env for stable development.');
-        // Cache it for the process lifetime
-        getJwtSecret._devSecret = devSecret;
-        return devSecret;
+        const trimmed = rawSecret.trim();
+        if (trimmed.length < 32) {
+            throw new Error('FATAL: JWT_SECRET in production must be at least 32 characters long for cryptographic security.');
+        }
+        if (KNOWN_WEAK_SECRETS.has(trimmed.toLowerCase())) {
+            throw new Error('FATAL: JWT_SECRET in production cannot be a known weak or placeholder default.');
+        }
+        return trimmed;
     }
-    return secret;
+    // Non-production (development / test)
+    if (rawSecret && rawSecret.trim()) {
+        return rawSecret.trim();
+    }
+    // Development only — generate a cryptographically strong 256-bit random secret
+    if (!getJwtSecret._devSecret) {
+        const devSecret = 'dev_' + node_crypto_1.default.randomBytes(32).toString('hex');
+        console.warn('[SECURITY WARNING] JWT_SECRET is not set. Generated a secure process-local random secret for development. ' +
+            'All tokens will be invalidated on server restart. Set JWT_SECRET in .env for persistent sessions.');
+        getJwtSecret._devSecret = devSecret;
+    }
+    return getJwtSecret._devSecret;
 }
 // Memoize — call once per process
 let _secret = null;
 function jwtSecret() {
     if (!_secret) {
-        if (getJwtSecret._devSecret) {
-            _secret = getJwtSecret._devSecret;
-        }
-        else {
-            _secret = getJwtSecret();
-        }
+        _secret = getJwtSecret();
     }
     return _secret;
+}
+function _resetJwtSecretForTesting() {
+    _secret = null;
+    delete getJwtSecret._devSecret;
 }
 // --------------------------------------------------------------------------
 // 1. authenticate — validates JWT, verifies user exists & active in DB, never falls back to anonymous

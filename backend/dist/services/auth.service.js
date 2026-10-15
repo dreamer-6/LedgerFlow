@@ -9,6 +9,16 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const seed_js_1 = require("../database/seed.js");
 const security_js_1 = require("../middleware/security.js");
 class AuthService {
+    /**
+     * Sanitizes company record to avoid exposing vault_password_hash in API responses.
+     */
+    static sanitizeCompany(company) {
+        if (!company)
+            return null;
+        const sanitized = { ...company };
+        delete sanitized.vault_password_hash;
+        return sanitized;
+    }
     static register(db, payload) {
         const { email, password, fullName, businessName, companyName, legalName, gstin, state, stateCode } = payload;
         const finalBusinessName = (businessName || companyName || '').trim();
@@ -49,6 +59,7 @@ class AuthService {
       WHERE ub.user_id = ?
       ORDER BY c.created_at ASC
     `).all(userId);
+        const sanitizedBusinesses = businesses.map(b => AuthService.sanitizeCompany(b));
         return {
             token,
             user: {
@@ -58,8 +69,8 @@ class AuthService {
                 role: userRole
             },
             activeCompanyId: companyId,
-            company: businesses[0] || null,
-            businesses
+            company: sanitizedBusinesses[0] || null,
+            businesses: sanitizedBusinesses
         };
     }
     static login(db, payload) {
@@ -86,6 +97,7 @@ class AuthService {
       WHERE ub.user_id = ?
       ORDER BY c.created_at ASC
     `).all(user.user_id);
+        const sanitizedBusinesses = businesses.map(b => AuthService.sanitizeCompany(b));
         return {
             token,
             user: {
@@ -95,8 +107,8 @@ class AuthService {
                 fullName: user.full_name,
                 role: user.role
             },
-            activeCompanyId: businesses[0]?.company_id || null,
-            businesses
+            activeCompanyId: sanitizedBusinesses[0]?.company_id || null,
+            businesses: sanitizedBusinesses
         };
     }
     /**
@@ -120,6 +132,7 @@ class AuthService {
       WHERE ub.user_id = ?
       ORDER BY c.created_at ASC
     `).all(userId);
+        const sanitizedBusinesses = businesses.map(b => AuthService.sanitizeCompany(b));
         return {
             user: {
                 userId: dbUser.user_id,
@@ -128,7 +141,7 @@ class AuthService {
                 fullName: dbUser.full_name,
                 role: dbUser.role
             },
-            businesses
+            businesses: sanitizedBusinesses
         };
     }
 }

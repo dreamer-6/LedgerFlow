@@ -9,6 +9,7 @@ interface BusinessSwitcherModalProps {
   activeCompanyId: string;
   onSelectBusiness: (companyId: string) => void;
   onBusinessCreated: (newCompany: Company) => void;
+  onStartNewBusiness?: () => void;
 }
 
 export const BusinessSwitcherModal: React.FC<BusinessSwitcherModalProps> = ({
@@ -17,7 +18,8 @@ export const BusinessSwitcherModal: React.FC<BusinessSwitcherModalProps> = ({
   businesses,
   activeCompanyId,
   onSelectBusiness,
-  onBusinessCreated
+  onBusinessCreated,
+  onStartNewBusiness
 }) => {
   const [view, setView] = useState<'LIST' | 'CREATE'>('LIST');
   const [companyName, setCompanyName] = useState('');
@@ -232,7 +234,15 @@ export const BusinessSwitcherModal: React.FC<BusinessSwitcherModalProps> = ({
               {/* Add New Business Button */}
               <button
                 type="button"
-                onClick={() => { setView('CREATE'); setError(null); }}
+                onClick={() => {
+                  if (onStartNewBusiness) {
+                    onClose();
+                    onStartNewBusiness();
+                  } else {
+                    setView('CREATE');
+                    setError(null);
+                  }
+                }}
                 className="btn-secondary"
                 style={{
                   width: '100%',

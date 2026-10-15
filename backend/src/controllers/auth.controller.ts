@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import { AuthService } from '../services/auth.service.js';
 import { SecureRequest } from '../middleware/security.js';
+import { recordLoginSuccess, recordLoginFailure } from '../middleware/rateLimiter.js';
 
 export class AuthController {
   constructor(private db: DatabaseSync) {}
@@ -22,8 +23,12 @@ export class AuthController {
   login = (req: Request, res: Response) => {
     try {
       const result = AuthService.login(this.db, req.body);
+      // Legitimate credentials: clear failed attempts
+      recordLoginSuccess(req);
       res.json(result);
     } catch (err: any) {
+      // Failed login attempt: record failure
+      recordLoginFailure(req);
       if (err.message.includes('Invalid') || err.message.includes('required')) {
         res.status(401).json({ error: err.message });
       } else {

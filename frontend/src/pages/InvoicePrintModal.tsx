@@ -255,8 +255,27 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
       max-width: 100% !important;
       box-shadow: none !important;
       border: none !important;
-      padding: ${isThermal ? '4px' : '16px 20px'} !important;
+      padding: 0 !important;
       border-radius: 0 !important;
+    }
+    .a4-page-sheet {
+      page-break-after: always;
+      break-after: page;
+      min-height: 297mm;
+      box-sizing: border-box;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+      padding: ${isThermal ? '4px' : '14mm 16mm'} !important;
+      box-shadow: none !important;
+      border: none !important;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .a4-page-sheet:last-child {
+      page-break-after: avoid;
+      break-after: avoid;
     }
     table { border-collapse: collapse; width: 100%; }
     th, td { padding: 6px 8px; }
@@ -335,100 +354,148 @@ ${printTarget.outerHTML}
           style={{
             flexShrink: 0,
             width: '100%',
+            height: '52px',
+            minHeight: '52px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '10px',
+            gap: '12px',
             backgroundColor: '#1E293B',
-            padding: '10px 16px',
+            padding: '0 16px',
             borderBottom: '1px solid #334155',
             color: '#F8FAFC',
             boxSizing: 'border-box'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-            <div>
-              <span style={{ color: '#94A3B8', fontSize: '11px', display: 'block' }}>Voucher</span>
-              <strong style={{ color: '#F97316', fontFamily: 'monospace', fontSize: '13px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: '#0F172A',
+                border: '1px solid #334155',
+                borderRadius: '6px',
+                padding: '4px 10px',
+                height: '32px',
+                boxSizing: 'border-box'
+              }}
+            >
+              <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>Voucher</span>
+              <strong style={{ color: '#F97316', fontFamily: 'monospace', fontSize: '12.5px' }}>
                 {normalized.voucherNumber}
               </strong>
             </div>
 
-          {/* Layout Selector */}
-          <div style={{ display: 'flex', gap: '3px', background: '#0F172A', padding: '3px', borderRadius: '6px' }}>
-            {(['Standard', 'Simple', 'Thermal'] as InvoiceLayoutType[]).map((tmpl) => (
-              <button
-                key={tmpl}
-                type="button"
-                onClick={() => handleLayoutChange(tmpl)}
-                style={{
-                  padding: '5px 10px',
-                  fontSize: '11px',
-                  fontWeight: layout === tmpl ? 700 : 500,
-                  borderRadius: '4px',
-                  background: layout === tmpl ? '#EA580C' : 'transparent',
-                  color: layout === tmpl ? '#FFFFFF' : '#94A3B8',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                {tmpl === 'Standard' ? 'Standard A4' : tmpl === 'Simple' ? 'Simple' : 'Thermal POS'}
-              </button>
-            ))}
-          </div>
-
-          {/* Paper Format (if not thermal) */}
-          {layout !== 'Thermal' && (
-            <div style={{ display: 'flex', gap: '3px', background: '#0F172A', padding: '3px', borderRadius: '6px' }}>
-              {[
-                { id: 'A4', label: 'A4 Portrait' },
-                { id: 'A4_LANDSCAPE', label: 'A4 Landscape' },
-                { id: 'A5_PORTRAIT', label: 'A5' }
-              ].map((fmt) => (
+            {/* Layout Selector */}
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                background: '#0F172A',
+                padding: '3px',
+                borderRadius: '6px',
+                border: '1px solid #334155',
+                height: '32px',
+                boxSizing: 'border-box'
+              }}
+            >
+              {(['Standard', 'Simple', 'Thermal'] as InvoiceLayoutType[]).map((tmpl) => (
                 <button
-                  key={fmt.id}
+                  key={tmpl}
                   type="button"
-                  onClick={() => setFormat(fmt.id as PaperFormat)}
+                  onClick={() => handleLayoutChange(tmpl)}
                   style={{
-                    padding: '5px 8px',
-                    fontSize: '10.5px',
-                    fontWeight: format === fmt.id ? 700 : 500,
+                    height: '24px',
+                    padding: '0 10px',
+                    fontSize: '11px',
+                    fontWeight: layout === tmpl ? 700 : 500,
                     borderRadius: '4px',
-                    background: format === fmt.id ? '#334155' : 'transparent',
-                    color: format === fmt.id ? '#FFFFFF' : '#94A3B8',
+                    background: layout === tmpl ? '#EA580C' : 'transparent',
+                    color: layout === tmpl ? '#FFFFFF' : '#94A3B8',
                     border: 'none',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    whiteSpace: 'nowrap'
                   }}
                 >
-                  {fmt.label}
+                  {tmpl === 'Standard' ? 'Standard A4' : tmpl === 'Simple' ? 'Simple' : 'Thermal POS'}
                 </button>
               ))}
             </div>
-          )}
 
-          {/* Preferences Toggle Button */}
-          <button
-            type="button"
-            onClick={() => setShowPreferences((p) => !p)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '5px 10px',
-              fontSize: '11px',
-              fontWeight: 600,
-              borderRadius: '5px',
-              background: showPreferences ? '#334155' : '#0F172A',
-              color: showPreferences ? '#F97316' : '#94A3B8',
-              border: '1px solid #334155',
-              cursor: 'pointer'
-            }}
-          >
-            <Sliders size={13} />
-            <span>Options</span>
-          </button>
-        </div>
+            {/* Paper Format (if not thermal) */}
+            {layout !== 'Thermal' && (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  background: '#0F172A',
+                  padding: '3px',
+                  borderRadius: '6px',
+                  border: '1px solid #334155',
+                  height: '32px',
+                  boxSizing: 'border-box'
+                }}
+              >
+                {[
+                  { id: 'A4', label: 'A4 Portrait' },
+                  { id: 'A4_LANDSCAPE', label: 'A4 Landscape' },
+                  { id: 'A5_PORTRAIT', label: 'A5' }
+                ].map((fmt) => (
+                  <button
+                    key={fmt.id}
+                    type="button"
+                    onClick={() => setFormat(fmt.id as PaperFormat)}
+                    style={{
+                      height: '24px',
+                      padding: '0 8px',
+                      fontSize: '10.5px',
+                      fontWeight: format === fmt.id ? 700 : 500,
+                      borderRadius: '4px',
+                      background: format === fmt.id ? '#334155' : 'transparent',
+                      color: format === fmt.id ? '#FFFFFF' : '#94A3B8',
+                      border: 'none',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {fmt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Preferences Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setShowPreferences((p) => !p)}
+              style={{
+                height: '32px',
+                padding: '0 10px',
+                fontSize: '11px',
+                fontWeight: 600,
+                borderRadius: '5px',
+                background: showPreferences ? '#334155' : '#0F172A',
+                color: showPreferences ? '#F97316' : '#94A3B8',
+                border: '1px solid #334155',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <Sliders size={13} />
+              <span>Options</span>
+            </button>
+          </div>
 
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>

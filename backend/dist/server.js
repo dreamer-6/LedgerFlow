@@ -32,7 +32,13 @@ app.use((0, cors_1.default)({
 app.use(express_1.default.json({ limit: '15mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '15mb' }));
 // ── Initialize JWT Secret early so it fails fast if misconfigured ─────────
-(0, security_js_1.jwtSecret)();
+try {
+    (0, security_js_1.jwtSecret)();
+}
+catch (err) {
+    console.error(`[FATAL] ${err.message}`);
+    process.exit(1);
+}
 // ── Database & Seed ────────────────────────────────────────────────────────
 const db = (0, connection_js_1.getDatabase)();
 (0, seed_js_1.seedInitialData)(db);
