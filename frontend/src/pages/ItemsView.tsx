@@ -384,7 +384,8 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
     setBrand('');
     setDescription('');
     setHsnSac(presetType === 'SERVICE' ? '9987' : '84713010');
-    setUnitId(units.length > 0 ? units[0].unit_id : 'unit_nos');
+    const nosUnit = units.find(u => u.symbol?.toUpperCase() === 'NOS' || u.unit_name?.toLowerCase().includes('nos') || u.unit_name?.toLowerCase().includes('number'));
+    setUnitId(nosUnit ? nosUnit.unit_id : (units.length > 0 ? units[0].unit_id : 'unit_nos'));
     setOpeningQty(presetType === 'SERVICE' ? '0' : '5');
     setOpeningRate('0');
     setReorderLevel('3');
@@ -432,8 +433,14 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
     setGodownId(godowns.length > 0 ? godowns[0].godown_id : '');
     setTrackSerial(item.has_serial_no === 1);
     setSerialNumbers(item.serial_numbers || '');
-    setWarrantyPeriod('1');
-    setWarrantyUnit('Years');
+    const wMo = Number(item.warranty_months || 0);
+    if (wMo >= 12 && wMo % 12 === 0) {
+      setWarrantyPeriod(String(wMo / 12));
+      setWarrantyUnit('Years');
+    } else {
+      setWarrantyPeriod(String(wMo));
+      setWarrantyUnit('Months');
+    }
     setWarrantyTerms('');
     setPurchaseRate(String((item.purchase_rate_paise || 0) / 100));
     setPurchaseTaxMode('EXCL');
@@ -498,12 +505,15 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
     const openingRatePaise = Math.round(parseFloat(openingRate || '0') * 100);
     const reorderLevelNum = itemType === 'SERVICE' ? 0 : parseFloat(reorderLevel || '0');
 
+    const wPeriod = parseFloat(warrantyPeriod || '0');
+    const wMonths = isNaN(wPeriod) ? 0 : Math.round(warrantyUnit === 'Years' ? wPeriod * 12 : wPeriod);
+
     const payload: CreateStockItemPayload = {
       itemName: itemName.trim(),
       itemCode: itemCode.trim() || undefined,
       sku: itemCode.trim() || undefined,
       hsnSac: hsnSac.trim() || (itemType === 'SERVICE' ? '9987' : '84713010'),
-      unitId: unitId || (units.length > 0 ? units[0].unit_id : 'unit_nos'),
+      unitId: unitId || (units.find(u => u.symbol?.toUpperCase() === 'NOS')?.unit_id || (units.length > 0 ? units[0].unit_id : 'unit_nos')),
       gstRate: Number(gstRate),
       purchaseRatePaise,
       sellingRatePaise,
@@ -512,7 +522,8 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
       reorderLevel: reorderLevelNum,
       godownId: godownId || undefined,
       serialNumbers: trackSerial && serialNumbers.trim() ? serialNumbers.trim() : undefined,
-      hasSerialNo: trackSerial
+      hasSerialNo: trackSerial,
+      warrantyMonths: wMonths
     };
 
     try {

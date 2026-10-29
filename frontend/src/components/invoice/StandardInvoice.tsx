@@ -2,7 +2,8 @@ import React, { useMemo } from 'react';
 import {
   NormalizedInvoiceData,
   InvoiceVisibilityOptions,
-  formatCurrency
+  formatCurrency,
+  formatWarrantyDisplay
 } from './InvoiceAdapter';
 import { Phone, Mail, Globe } from 'lucide-react';
 import {
@@ -33,7 +34,8 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
     showBankDetails = true,
     showTerms = true,
     showSignature = true,
-    showLedgerflowWordmark = false
+    showLedgerflowWordmark = false,
+    warrantyDisplayFormat = 'Years'
   } = options;
 
   const hasGstin = Boolean(data.companyGstin && data.companyGstin.trim());
@@ -109,7 +111,16 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
         {showCompanyDetails && (
           <>
             {data.companyAddress && (
-              <div style={{ color: '#475569', fontSize: '11px', marginBottom: '8px', whiteSpace: 'pre-line' }}>
+              <div
+                style={{
+                  color: '#475569',
+                  fontSize: '11px',
+                  marginBottom: '8px',
+                  whiteSpace: 'pre-line',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'anywhere'
+                }}
+              >
                 {data.companyAddress}
               </div>
             )}
@@ -194,11 +205,19 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
       </div>
 
       {/* Right: TAX INVOICE Header & Metadata Grid */}
-      <div style={{ textAlign: 'right' }}>
+      <div
+        style={{
+          backgroundColor: '#F8FAFC',
+          border: '1px solid #F1F5F9',
+          borderRadius: '8px',
+          padding: '14px 18px',
+          textAlign: 'left'
+        }}
+      >
         <div style={{ marginBottom: '12px' }}>
           <div
             style={{
-              fontSize: '26px',
+              fontSize: '25px',
               fontWeight: 900,
               letterSpacing: '0.5px',
               lineHeight: 1.1
@@ -218,7 +237,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
           </div>
           <div
             style={{
-              fontSize: '9.5px',
+              fontSize: '9px',
               fontWeight: 700,
               letterSpacing: '1.5px',
               color: '#94A3B8',
@@ -232,7 +251,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
         {/* Metadata Table */}
         <div
           style={{
-            display: 'inline-flex',
+            display: 'flex',
             flexDirection: 'column',
             gap: '4px',
             fontSize: '11px',
@@ -317,10 +336,10 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
   const renderParties = () => (
     <div
       style={{
-        borderTop: '1px solid #F1F5F9',
-        borderBottom: '1px solid #F1F5F9',
-        paddingTop: '12px',
-        paddingBottom: '14px',
+        backgroundColor: '#F8FAFC',
+        border: '1px solid #F1F5F9',
+        borderRadius: '8px',
+        padding: '14px 18px',
         marginBottom: '18px',
         display: 'grid',
         gridTemplateColumns: data.hasShippingAddress ? '1.1fr 1fr' : '1fr',
@@ -345,7 +364,16 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
           {data.partyName}
         </div>
         {data.partyAddress && (
-          <div style={{ color: '#475569', fontSize: '11px', marginBottom: '6px', whiteSpace: 'pre-line' }}>
+          <div
+            style={{
+              color: '#475569',
+              fontSize: '11px',
+              marginBottom: '6px',
+              whiteSpace: 'pre-line',
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere'
+            }}
+          >
             {data.partyAddress}
           </div>
         )}
@@ -375,7 +403,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
 
       {/* Ship To (Optional) */}
       {data.hasShippingAddress && (
-        <div style={{ borderLeft: '1px solid #E2E8F0', paddingLeft: '20px' }}>
+        <div style={{ borderLeft: '1px solid #E2E8F0', paddingLeft: '20px', minWidth: 0 }}>
           <div
             style={{
               fontSize: '10.5px',
@@ -391,7 +419,15 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
           <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
             {data.shipToName || data.partyName}
           </div>
-          <div style={{ color: '#475569', fontSize: '11px', whiteSpace: 'pre-line' }}>
+          <div
+            style={{
+              color: '#475569',
+              fontSize: '11px',
+              whiteSpace: 'pre-line',
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere'
+            }}
+          >
             {data.shipToAddress || data.partyAddress}
           </div>
         </div>
@@ -462,6 +498,11 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
                 {item.serialNumber && (
                   <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>
                     S/N: {item.serialNumber}
+                  </div>
+                )}
+                {Boolean(item.warrantyMonths) && (
+                  <div style={{ fontSize: '10px', color: '#475569', marginTop: '1px', fontWeight: 500 }}>
+                    Warranty: {formatWarrantyDisplay(item.warrantyMonths, warrantyDisplayFormat)}
                   </div>
                 )}
                 {item.description && (
@@ -586,23 +627,41 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
               </div>
             ))}
 
+          {data.roundOff !== undefined && Math.abs(data.roundOff) >= 0.005 && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 20px 1fr',
+                padding: '5px 12px',
+                borderBottom: '1px solid #F1F5F9',
+                color: '#475569'
+              }}
+            >
+              <span>Round Off</span>
+              <span style={{ textAlign: 'center' }}>₹</span>
+              <span style={{ textAlign: 'right', fontFamily: 'monospace', color: '#0F172A' }}>
+                {formatCurrency(data.roundOff)}
+              </span>
+            </div>
+          )}
+
           {/* Grand Total Row */}
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: '1fr 20px 1fr',
-              padding: '9px 12px',
+              padding: '10px 12px',
               backgroundColor: '#FFEDD5',
               alignItems: 'center'
             }}
           >
-            <strong style={{ fontSize: '13px', color: '#EA580C' }}>Grand Total</strong>
+            <strong style={{ fontSize: '13.5px', color: '#EA580C' }}>Grand Total</strong>
             <span style={{ textAlign: 'center', fontWeight: 800, color: '#0F172A' }}>₹</span>
             <strong
               style={{
                 textAlign: 'right',
                 fontFamily: 'monospace',
-                fontSize: '14px',
+                fontSize: '15px',
                 color: '#0F172A'
               }}
             >
@@ -614,7 +673,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
     </div>
   );
 
-  // Section 5: Terms, Bank Details, Signatory
+  // Section 5: Terms, Bank Details, Signatory (Bottom Aligned)
   const renderFooter = () => (
     <div
       style={{
@@ -624,12 +683,12 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
         gridTemplateColumns: data.hasBankDetails && showBankDetails ? '1.2fr 1.1fr 1fr' : '1.5fr 1fr',
         gap: '20px',
         fontSize: '11px',
-        alignItems: 'start'
+        alignItems: 'end'
       }}
     >
       {/* Column 1: Terms & Conditions */}
       {showTerms && (
-        <div>
+        <div style={{ alignSelf: 'end' }}>
           <div
             style={{
               fontSize: '11px',
@@ -640,7 +699,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
           >
             Terms & Conditions
           </div>
-          <div style={{ color: '#475569', whiteSpace: 'pre-line', lineHeight: 1.5 }}>
+          <div style={{ color: '#475569', whiteSpace: 'pre-line', lineHeight: 1.5, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
             {data.termsAndConditions}
           </div>
         </div>
@@ -648,7 +707,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
 
       {/* Column 2: Bank Details (Strictly if configured) */}
       {showBankDetails && data.hasBankDetails && (
-        <div>
+        <div style={{ alignSelf: 'end' }}>
           <div
             style={{
               fontSize: '11px',
@@ -699,13 +758,23 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
         </div>
       )}
 
-      {/* Column 3: Authorized Signatory */}
+      {/* Column 3: Authorized Signatory (Aligned to bottom portion of footer) */}
       {showSignature && (
-        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ height: '44px', width: '100%' }} />
+        <div
+          style={{
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            alignSelf: 'end',
+            paddingTop: '20px'
+          }}
+        >
+          <div style={{ minHeight: '48px', width: '100%' }} />
           <div
             style={{
-              width: '160px',
+              width: '180px',
               borderTop: '1px solid #94A3B8',
               paddingTop: '6px',
               fontSize: '10.5px',
@@ -728,23 +797,37 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
       className="standard-invoice-container"
       style={{
         width: '100%',
-        maxWidth: '820px',
+        maxWidth: '880px',
         margin: '0 auto',
         backgroundColor: 'transparent',
         boxSizing: 'border-box'
       }}
     >
       <style>{`
+        @page {
+          size: A4 portrait;
+          margin: 8mm 8mm;
+        }
         @media print {
+          body {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .standard-invoice-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           .a4-page-sheet {
             page-break-after: always;
             break-after: page;
-            min-height: 297mm;
+            min-height: 280mm;
             box-sizing: border-box;
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 14mm 16mm !important;
+            padding: 4mm 6mm !important;
             box-shadow: none !important;
             border: none !important;
             display: flex;
@@ -769,7 +852,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
             fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
             fontSize: '12px',
             lineHeight: 1.45,
-            padding: '36px 40px',
+            padding: '22px 26px',
             borderRadius: '4px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
             margin: '0 auto 24px auto',

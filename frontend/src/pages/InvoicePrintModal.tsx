@@ -205,9 +205,9 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
 
   const getContainerWidth = () => {
     if (layout === 'Thermal' || format === 'THERMAL') return '360px';
-    if (format === 'A4_LANDSCAPE') return '920px';
+    if (format === 'A4_LANDSCAPE') return '980px';
     if (format === 'A5_PORTRAIT') return '580px';
-    return '820px';
+    return '880px';
   };
 
   const handlePrint = () => {
@@ -261,12 +261,12 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
     .a4-page-sheet {
       page-break-after: always;
       break-after: page;
-      min-height: 297mm;
+      min-height: 280mm;
       box-sizing: border-box;
       width: 100% !important;
       max-width: 100% !important;
       margin: 0 !important;
-      padding: ${isThermal ? '4px' : '14mm 16mm'} !important;
+      padding: ${isThermal ? '4px' : '4mm 6mm'} !important;
       box-shadow: none !important;
       border: none !important;
       display: flex;
@@ -337,7 +337,7 @@ ${printTarget.outerHTML}
       <div
         style={{
           width: '100%',
-          maxWidth: getContainerWidth(),
+          maxWidth: layout === 'Thermal' || format === 'THERMAL' ? '440px' : '1180px',
           maxHeight: 'calc(100vh - 32px)',
           height: '100%',
           display: 'flex',
@@ -364,10 +364,13 @@ ${printTarget.outerHTML}
             padding: '0 16px',
             borderBottom: '1px solid #334155',
             color: '#F8FAFC',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            overflowX: 'auto'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Left Controls Section */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            {/* Voucher Badge */}
             <div
               style={{
                 display: 'inline-flex',
@@ -376,16 +379,21 @@ ${printTarget.outerHTML}
                 backgroundColor: '#0F172A',
                 border: '1px solid #334155',
                 borderRadius: '6px',
-                padding: '4px 10px',
+                padding: '0 10px',
                 height: '32px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                flexShrink: 0,
+                whiteSpace: 'nowrap'
               }}
             >
               <span style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>Voucher</span>
-              <strong style={{ color: '#F97316', fontFamily: 'monospace', fontSize: '12.5px' }}>
+              <strong style={{ color: '#F97316', fontFamily: 'monospace', fontSize: '12.5px', fontWeight: 700 }}>
                 {normalized.voucherNumber}
               </strong>
             </div>
+
+            {/* Vertical Divider */}
+            <div style={{ width: '1px', height: '20px', backgroundColor: '#334155', flexShrink: 0, margin: '0 2px' }} />
 
             {/* Layout Selector */}
             <div
@@ -398,7 +406,8 @@ ${printTarget.outerHTML}
                 borderRadius: '6px',
                 border: '1px solid #334155',
                 height: '32px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                flexShrink: 0
               }}
             >
               {(['Standard', 'Simple', 'Thermal'] as InvoiceLayoutType[]).map((tmpl) => (
@@ -427,6 +436,11 @@ ${printTarget.outerHTML}
               ))}
             </div>
 
+            {/* Vertical Divider if not thermal */}
+            {layout !== 'Thermal' && (
+              <div style={{ width: '1px', height: '20px', backgroundColor: '#334155', flexShrink: 0, margin: '0 2px' }} />
+            )}
+
             {/* Paper Format (if not thermal) */}
             {layout !== 'Thermal' && (
               <div
@@ -439,7 +453,8 @@ ${printTarget.outerHTML}
                   borderRadius: '6px',
                   border: '1px solid #334155',
                   height: '32px',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
+                  flexShrink: 0
                 }}
               >
                 {[
@@ -473,6 +488,9 @@ ${printTarget.outerHTML}
               </div>
             )}
 
+            {/* Vertical Divider */}
+            <div style={{ width: '1px', height: '20px', backgroundColor: '#334155', flexShrink: 0, margin: '0 2px' }} />
+
             {/* Preferences Toggle Button */}
             <button
               type="button"
@@ -489,7 +507,9 @@ ${printTarget.outerHTML}
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '5px'
+                gap: '5px',
+                flexShrink: 0,
+                whiteSpace: 'nowrap'
               }}
             >
               <Sliders size={13} />
@@ -497,107 +517,120 @@ ${printTarget.outerHTML}
             </button>
           </div>
 
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {normalized.status !== 'CANCELLED' && (
+          {/* Right Action Buttons */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+            {normalized.status !== 'CANCELLED' && (
+              <button
+                type="button"
+                onClick={() => setShowCancelModal(true)}
+                style={{
+                  height: '32px',
+                  padding: '0 10px',
+                  color: '#EF4444',
+                  borderColor: 'rgba(239, 68, 68, 0.4)',
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap'
+                }}
+                title={normalized.status === 'DRAFT' ? 'Delete draft voucher' : 'Cancel voucher'}
+              >
+                <Trash2 size={13} />
+                <span>{normalized.status === 'DRAFT' ? 'Delete Draft' : 'Cancel'}</span>
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={() => setShowCancelModal(true)}
+              onClick={handlePrint}
               style={{
                 height: '32px',
-                padding: '0 10px',
-                color: '#EF4444',
-                borderColor: 'rgba(239, 68, 68, 0.4)',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
+                padding: '0 14px',
+                backgroundColor: '#EA580C',
+                color: '#FFFFFF',
+                border: 'none',
                 borderRadius: '5px',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '5px',
-                fontSize: '12px',
-                cursor: 'pointer'
+                gap: '6px',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+                boxShadow: '0 2px 6px rgba(234, 88, 12, 0.35)'
               }}
-              title={normalized.status === 'DRAFT' ? 'Delete draft voucher' : 'Cancel voucher'}
             >
-              <Trash2 size={13} />
-              <span>{normalized.status === 'DRAFT' ? 'Delete Draft' : 'Cancel'}</span>
+              <Printer size={14} />
+              <span>Print Invoice</span>
             </button>
-          )}
 
-          <button
-            type="button"
-            onClick={handlePrint}
-            style={{
-              height: '32px',
-              padding: '0 14px',
-              backgroundColor: '#EA580C',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '5px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '12.5px',
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            <Printer size={14} />
-            <span>Print Invoice</span>
-          </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              style={{
+                height: '32px',
+                padding: '0 12px',
+                backgroundColor: '#0F172A',
+                color: '#F8FAFC',
+                border: '1px solid #334155',
+                borderRadius: '5px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                flexShrink: 0,
+                whiteSpace: 'nowrap'
+              }}
+              title="Download PDF via browser print dialog"
+            >
+              <Download size={13} />
+              <span>PDF</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={handlePrint}
-            style={{
-              height: '32px',
-              padding: '0 12px',
-              backgroundColor: '#0F172A',
-              color: '#F8FAFC',
-              border: '1px solid #334155',
-              borderRadius: '5px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-            title="Download PDF via browser print dialog"
-          >
-            <Download size={13} />
-            <span>PDF</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              height: '32px',
-              padding: '0 10px',
-              backgroundColor: '#334155',
-              color: '#F8FAFC',
-              border: 'none',
-              borderRadius: '5px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '12px',
-              cursor: 'pointer'
-            }}
-            title="Close Preview (Esc)"
-          >
-            <X size={14} />
-          </button>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                height: '32px',
+                padding: '0 10px',
+                backgroundColor: '#334155',
+                color: '#F8FAFC',
+                border: 'none',
+                borderRadius: '5px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                flexShrink: 0,
+                whiteSpace: 'nowrap'
+              }}
+              title="Close Preview (Esc)"
+            >
+              <X size={14} />
+              <span>Close</span>
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Preferences Drawer */}
-      {showPreferences && (
-        <div
-          className="no-print"
-          style={{
-            width: getContainerWidth(),
+        {/* Preferences Drawer */}
+        {showPreferences && (
+          <div
+            className="no-print"
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
             maxWidth: '100%',
             backgroundColor: '#0F172A',
             border: '1px solid #334155',
@@ -645,6 +678,25 @@ ${printTarget.outerHTML}
               </label>
             );
           })}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ color: '#94A3B8' }}>Warranty:</span>
+            <select
+              value={visibility.warrantyDisplayFormat || 'Years'}
+              onChange={(e) => setVisibility((prev) => ({ ...prev, warrantyDisplayFormat: e.target.value as any }))}
+              style={{
+                backgroundColor: '#1E293B',
+                color: '#F8FAFC',
+                border: '1px solid #334155',
+                borderRadius: '4px',
+                fontSize: '11px',
+                padding: '2px 6px'
+              }}
+            >
+              <option value="Years">Years (1 Year)</option>
+              <option value="Months">Months (12 Months)</option>
+              <option value="Both">Both (1 Year (12 Months))</option>
+            </select>
+          </div>
         </div>
       )}
 

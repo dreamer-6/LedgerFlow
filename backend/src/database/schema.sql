@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS stock_items (
     opening_qty NUMERIC(15,3) DEFAULT 0,
     opening_rate_paise INTEGER DEFAULT 0,
     reorder_level NUMERIC(15,3) DEFAULT 0,
+    warranty_months INTEGER DEFAULT 0,
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(company_id, item_name)
@@ -185,7 +186,8 @@ CREATE TABLE IF NOT EXISTS voucher_lines (
     sgst_amount_paise INTEGER DEFAULT 0,
     igst_amount_paise INTEGER DEFAULT 0,
     total_amount_paise INTEGER NOT NULL,
-    serial_number TEXT
+    serial_number TEXT,
+    warranty_months INTEGER DEFAULT 0
 );
 
 -- 6. DOUBLE-ENTRY LEDGER ENTRIES

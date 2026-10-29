@@ -14,6 +14,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { api, Company, FinancialYear } from '../api/client';
+import { VoucherDeleteOptionsModal } from '../components/accounting/VoucherDeleteOptionsModal';
 import {
   Plus,
   Search,
@@ -37,7 +38,8 @@ import {
   ArrowUpRight,
   BookOpen,
   Receipt,
-  FileSpreadsheet
+  FileSpreadsheet,
+  RotateCcw
 } from 'lucide-react';
 
 /* ─────────────────────────────────────────────
@@ -393,6 +395,9 @@ export interface SalesViewProps {
   activeFy: FinancialYear | null;
   onCreateInvoice: () => void;
   onViewVoucher: (id: string) => void;
+  onEditVoucher?: (id: string) => void;
+  onOpenRegister?: () => void;
+  onOpenReturn?: () => void;
   onNavigateTab?: (tab: string, subTab?: string) => void;
 }
 
@@ -401,6 +406,9 @@ export const SalesView: React.FC<SalesViewProps> = ({
   activeFy,
   onCreateInvoice,
   onViewVoucher,
+  onEditVoucher,
+  onOpenRegister,
+  onOpenReturn,
   onNavigateTab
 }) => {
   const [vouchers, setVouchers] = useState<any[]>([]);
@@ -422,6 +430,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
   const [permanentDeleteDialog, setPermanentDeleteDialog] = useState<{ id: string; number: string } | null>(null);
   const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false);
   const [permanentDeleteError, setPermanentDeleteError] = useState<string | null>(null);
+  const [deleteModalVoucher, setDeleteModalVoucher] = useState<any | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   // Dismiss dropdown on outer click
@@ -653,6 +662,33 @@ export const SalesView: React.FC<SalesViewProps> = ({
     }
   };
 
+  const handleSafeDeleteFromModal = async (reason: string) => {
+    if (!deleteModalVoucher) return;
+    const v = deleteModalVoucher;
+    if (v.status === 'POSTED') {
+      await api.cancelVoucher(v.voucher_id, reason);
+      showToast(`Invoice ${v.voucher_number} cancelled.`);
+    } else if (v.status === 'DRAFT') {
+      await api.deleteVoucher(v.voucher_id);
+      showToast(`Draft ${v.voucher_number} deleted.`);
+    } else {
+      await api.hideVoucher(v.voucher_id);
+      showToast(`Invoice ${v.voucher_number} hidden from normal lists.`);
+    }
+    await loadData();
+  };
+
+  const handlePermanentDeleteFromModal = async (reason: string) => {
+    if (!deleteModalVoucher) return;
+    const v = deleteModalVoucher;
+    await api.deleteVoucher(v.voucher_id, {
+      permanentDelete: true,
+      reason
+    });
+    showToast(`Invoice ${v.voucher_number} permanently deleted.`);
+    await loadData();
+  };
+
   return (
     <div style={{ padding: '24px 32px', maxWidth: '1440px', margin: '0 auto' }}>
       {/* Toast Notification */}
@@ -703,7 +739,41 @@ export const SalesView: React.FC<SalesViewProps> = ({
         </div>
 
         {/* Primary CTA */}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {onOpenReturn && (
+            <button
+              className="lf-btn lf-btn-secondary"
+              onClick={onOpenReturn}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '9px 14px',
+                fontSize: '12.5px',
+                fontWeight: 600
+              }}
+            >
+              <RotateCcw size={14} /> Sales Return
+            </button>
+          )}
+
+          {onOpenRegister && (
+            <button
+              className="lf-btn lf-btn-secondary"
+              onClick={onOpenRegister}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '9px 14px',
+                fontSize: '12.5px',
+                fontWeight: 600
+              }}
+            >
+              <ShoppingCart size={14} /> Sales Register
+            </button>
+          )}
+
           <button
             id="btn-create-sales-invoice"
             className="lf-btn lf-btn-primary"
@@ -1208,45 +1278,27 @@ export const SalesView: React.FC<SalesViewProps> = ({
                                       <Eye size={13} /> Hide from List
                                     </button>
                                   )}
-                                  {v.status === 'DRAFT' && (
+                                  {onEditVoucher && (v.status === 'POSTED' || v.status === 'DRAFT') && (
                                     <button
-                                      onClick={() => { handleDeleteDraft(v.voucher_id, v.voucher_number); setActionMenuId(null); }}
-                                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 14px', width: '100%', fontSize: '12.5px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger-red, #EF4444)', textAlign: 'left' }}
+                                      onClick={() => { onEditVoucher(v.voucher_id); setActionMenuId(null); }}
+                                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 14px', width: '100%', fontSize: '12.5px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', textAlign: 'left' }}
                                       onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, #F8FAFC)')}
                                       onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
                                     >
-                                      <Trash2 size={13} /> Delete Draft
+                                      <FileText size={13} /> Edit Invoice
                                     </button>
                                   )}
-                                  {v.status === 'POSTED' && (
-                                    <button
-                                      onClick={() => {
-                                        setCancelDialog({ id: v.voucher_id, number: v.voucher_number });
-                                        setCancelReason('Cancelled by user');
-                                        setCancelError(null);
-                                        setActionMenuId(null);
-                                      }}
-                                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 14px', width: '100%', fontSize: '12.5px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger-red, #EF4444)', textAlign: 'left' }}
-                                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, #F8FAFC)')}
-                                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
-                                    >
-                                      <X size={13} /> Cancel Invoice
-                                    </button>
-                                  )}
-                                  {v.status === 'CANCELLED' && (
-                                    <button
-                                      onClick={() => {
-                                        setPermanentDeleteDialog({ id: v.voucher_id, number: v.voucher_number });
-                                        setPermanentDeleteError(null);
-                                        setActionMenuId(null);
-                                      }}
-                                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 14px', width: '100%', fontSize: '12.5px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger-red, #EF4444)', textAlign: 'left' }}
-                                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, #F8FAFC)')}
-                                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
-                                    >
-                                      <Trash2 size={13} /> Permanently Delete
-                                    </button>
-                                  )}
+                                  <button
+                                    onClick={() => {
+                                      setDeleteModalVoucher(v);
+                                      setActionMenuId(null);
+                                    }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 14px', width: '100%', fontSize: '12.5px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger-red, #EF4444)', textAlign: 'left' }}
+                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, #F8FAFC)')}
+                                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
+                                  >
+                                    <Trash2 size={13} /> Delete / Cancel...
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -1559,6 +1611,16 @@ export const SalesView: React.FC<SalesViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Explicit Delete vs Permanent Delete Modal */}
+      <VoucherDeleteOptionsModal
+        isOpen={!!deleteModalVoucher}
+        voucher={deleteModalVoucher}
+        userRole="ADMIN"
+        onClose={() => setDeleteModalVoucher(null)}
+        onSafeDelete={handleSafeDeleteFromModal}
+        onPermanentDelete={handlePermanentDeleteFromModal}
+      />
     </div>
   );
 };

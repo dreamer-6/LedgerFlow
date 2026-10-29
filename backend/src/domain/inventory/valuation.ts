@@ -136,6 +136,18 @@ export class InventoryEngine {
   ): { isValid: boolean; currentQty: number; message?: string } {
     if (allowNegative) return { isValid: true, currentQty: 999999 };
 
+    // Service items do not track physical inventory and are always available
+    const itemRow = db.prepare('SELECT hsn_sac, item_name, opening_qty FROM stock_items WHERE item_id = ?').get(itemId) as any;
+    if (itemRow) {
+      const isService = Boolean(
+        (itemRow.hsn_sac && String(itemRow.hsn_sac).trim().startsWith('99')) ||
+        (itemRow.item_name && itemRow.item_name.toLowerCase().includes('service'))
+      );
+      if (isService) {
+        return { isValid: true, currentQty: 999999, message: 'Service item' };
+      }
+    }
+
     const row = db.prepare(`
       SELECT 
         COALESCE(SUM(CASE WHEN movement_type = 'IN' THEN quantity ELSE 0 END), 0) -

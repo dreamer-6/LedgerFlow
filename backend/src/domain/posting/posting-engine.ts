@@ -17,6 +17,8 @@ export interface CreateVoucherLineInput {
   cessRate?: number;
   isTaxInclusive?: boolean;
   serialNumber?: string;
+  warrantyMonths?: number;
+  isService?: boolean;
   movementType?: 'IN' | 'OUT';
 }
 
@@ -52,6 +54,13 @@ export interface CreateVoucherInput {
     referenceVoucherId?: string;
     allocationType: 'NEW_REF' | 'AGAINST_REF' | 'ADVANCE' | 'ON_ACCOUNT';
     dueDate?: string;
+  };
+  // Immediate Payment & Settlement (Phase 4)
+  immediatePayment?: {
+    mode: 'CASH' | 'BANK' | 'UPI';
+    amountPaise: number;
+    ledgerId?: string;
+    referenceNumber?: string;
   };
   createdBy?: string;
   allowNegativeStock?: boolean;
@@ -258,7 +267,7 @@ export class PostingEngine {
   private static _postVoucherInternal(
     db: DatabaseSync,
     input: CreateVoucherInput,
-    options?: { skipTransaction?: boolean; voucherId?: string }
+    options?: { skipTransaction?: boolean; voucherId?: string; excludeVoucherId?: string }
   ): {
     voucherId: string;
     voucherNumber: string;
@@ -377,9 +386,10 @@ export class PostingEngine {
       }
 
       // If item provided, retrieve item's default GST rate if not explicitly passed
+      let isServiceItem = false;
       if (line.itemId) {
-        const item = db.prepare('SELECT gst_rate, cess_rate, item_name, company_id FROM stock_items WHERE item_id = ?')
-          .get(line.itemId) as { gst_rate: number; cess_rate: number; item_name: string; company_id: string } | undefined;
+        const item = db.prepare('SELECT gst_rate, cess_rate, item_name, company_id, hsn_sac FROM stock_items WHERE item_id = ?')
+          .get(line.itemId) as { gst_rate: number; cess_rate: number; item_name: string; company_id: string; hsn_sac?: string } | undefined;
         if (!item) {
           throw new Error(`Stock item '${line.itemId}' not found.`);
         }
@@ -391,6 +401,13 @@ export class PostingEngine {
           gstRate = item.gst_rate;
           cessRate = item.cess_rate;
         }
+
+        // Service items (SAC starting with 99, or name containing service, or explicit isService flag) do not track physical inventory
+        isServiceItem = Boolean(
+          line.isService ||
+          (item.hsn_sac && String(item.hsn_sac).trim().startsWith('99')) ||
+          (item.item_name && item.item_name.toLowerCase().includes('service'))
+        );
       }
 
       const taxRes = GstEngine.calculateLineTax({
@@ -411,8 +428,8 @@ export class PostingEngine {
       // Determine valid godown
       const resolvedGodownId = line.itemId ? resolveValidGodownId(line.godownId) : null;
 
-      // Calculate Stock Movements
-      if (line.itemId && resolvedGodownId && (line.quantity || 0) > 0) {
+      // Calculate Stock Movements only for physical inventory items (services do not move stock)
+      if (line.itemId && !isServiceItem && resolvedGodownId && (line.quantity || 0) > 0) {
         const qty = Number(line.quantity);
 
         if (input.voucherType === 'SALES' || input.voucherType === 'PURCHASE_RETURN') {
@@ -475,11 +492,49 @@ export class PostingEngine {
           // 1. Try to find the cost basis from original sales voucher if referenced
           const refVchId = input.billAllocation?.referenceVoucherId || input.referenceNumber;
           if (refVchId) {
+            const origVch = db.prepare(`
+              SELECT voucher_id, voucher_number, voucher_type FROM vouchers
+              WHERE (voucher_id = ? OR voucher_number = ?) AND company_id = ?
+            `).get(refVchId, refVchId, input.companyId) as any;
+
+            if (origVch && origVch.voucher_type === 'SALES') {
+              // Validate return quantity does not exceed sold quantity minus prior returns
+              const origItemLine = db.prepare(`
+                SELECT SUM(quantity) as total_sold_qty FROM voucher_lines
+                WHERE voucher_id = ? AND item_id = ?
+              `).get(origVch.voucher_id, line.itemId) as any;
+              const soldQty = Number(origItemLine?.total_sold_qty || 0);
+
+              if (soldQty > 0) {
+                const excludeVchId = options?.excludeVoucherId || options?.voucherId;
+                const prevRetRow = db.prepare(`
+                  SELECT SUM(vl.quantity) as total_returned_qty
+                  FROM voucher_lines vl
+                  JOIN vouchers v ON vl.voucher_id = v.voucher_id
+                  WHERE (v.voucher_type = 'SALES_RETURN' OR v.voucher_type = 'CREDIT_NOTE')
+                    AND v.status != 'CANCELLED'
+                    AND (v.reference_number = ? OR v.reference_number = ? OR v.voucher_id IN (
+                      SELECT ba.voucher_id FROM bill_allocations ba WHERE ba.reference_voucher_id = ?
+                    ))
+                    AND vl.item_id = ?
+                    ${excludeVchId ? `AND v.voucher_id != '${excludeVchId}'` : ''}
+                `).get(origVch.voucher_id, origVch.voucher_number, origVch.voucher_id, line.itemId) as any;
+
+                const prevReturned = Number(prevRetRow?.total_returned_qty || 0);
+                const maxReturnable = soldQty - prevReturned;
+                if (qty > maxReturnable) {
+                  throw new Error(
+                    `Cannot return ${qty} units of item '${line.itemId}'. Original invoice '${origVch.voucher_number}' sold ${soldQty} units, of which ${prevReturned} units were already returned (maximum returnable: ${maxReturnable}).`
+                  );
+                }
+              }
+            }
+
             const refStock = db.prepare(`
               SELECT rate_paise FROM stock_entries
               WHERE voucher_id = ? AND item_id = ? AND movement_type = 'OUT'
               LIMIT 1
-            `).get(refVchId, line.itemId) as { rate_paise: number } | undefined;
+            `).get(origVch.voucher_id, line.itemId) as { rate_paise: number } | undefined;
             if (refStock && refStock.rate_paise > 0) {
               returnUnitCost = refStock.rate_paise;
             }
@@ -774,20 +829,37 @@ export class PostingEngine {
     const introducedSerials: Array<{ itemId: string; serialNumber: string }> = [];
 
     const executePostingDb = () => {
-      // DEF-VCH-10: Draft vouchers use temporary DFT-... number without consuming statutory sequences
+      // DEF-VCH-10: Draft vouchers use manual number if provided, or temporary DFT-... number without consuming statutory sequences
       if (voucherStatus === 'DRAFT') {
-        if (input.voucherNumber?.trim() && input.voucherNumber.trim().startsWith('DFT-')) {
-          postedVoucherNumber = input.voucherNumber.trim();
+        const explicitDraftNum = input.voucherNumber?.trim();
+        if (explicitDraftNum) {
+          const excludeId = options?.voucherId || (options as any)?.excludeVoucherId;
+          let checkQuery = "SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ? AND status != 'DRAFT'";
+          const checkParams: any[] = [input.companyId, fyId, input.voucherType, explicitDraftNum];
+          if (excludeId) {
+            checkQuery += " AND voucher_id != ?";
+            checkParams.push(excludeId);
+          }
+          const alreadyExists = db.prepare(checkQuery).get(...checkParams);
+          if (alreadyExists) {
+            throw new Error(`Voucher number '${explicitDraftNum}' already exists for this company, financial year, and voucher type.`);
+          }
+          postedVoucherNumber = explicitDraftNum;
         } else {
           postedVoucherNumber = `DFT-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
         }
       } else {
-        // DEF-VCH-09: Explicit voucher number collision prevention
+        // DEF-VCH-09: Explicit voucher number collision prevention (recognizes own voucher identity)
         const explicitVNum = input.voucherNumber?.trim();
         if (explicitVNum && !explicitVNum.startsWith('DFT-')) {
-          const alreadyExists = db.prepare(
-            "SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ? AND status != 'DRAFT'"
-          ).get(input.companyId, fyId, input.voucherType, explicitVNum);
+          const excludeId = options?.voucherId || (options as any)?.excludeVoucherId;
+          let checkQuery = "SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ? AND status != 'DRAFT'";
+          const checkParams: any[] = [input.companyId, fyId, input.voucherType, explicitVNum];
+          if (excludeId) {
+            checkQuery += " AND voucher_id != ?";
+            checkParams.push(excludeId);
+          }
+          const alreadyExists = db.prepare(checkQuery).get(...checkParams);
 
           const inAudit = db.prepare(`
             SELECT 1 FROM audit_logs
@@ -869,24 +941,30 @@ export class PostingEngine {
         const lineId = 'ln_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
         const lineGodownId = pl.lineInput.itemId ? resolveValidGodownId(pl.lineInput.godownId) : null;
         const lineSerial = pl.lineInput.serialNumber || (input.voucherType === 'STOCK_JOURNAL' ? pl.lineInput.movementType : null) || null;
+        let lineWarranty = 0;
+        if (pl.lineInput.itemId) {
+          const itemMeta = db.prepare('SELECT warranty_months FROM stock_items WHERE item_id = ?').get(pl.lineInput.itemId) as any;
+          lineWarranty = Number(itemMeta?.warranty_months || 0);
+        }
+
         db.prepare(`
           INSERT INTO voucher_lines (
             line_id, voucher_id, line_number, item_id, ledger_id, godown_id, description,
             quantity, rate_paise, discount_percent, discount_amount_paise,
             taxable_amount_paise, gst_rate, cgst_amount_paise, sgst_amount_paise,
-            igst_amount_paise, total_amount_paise, serial_number
+            igst_amount_paise, total_amount_paise, serial_number, warranty_months
           ) VALUES (
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?, ?
+            ?, ?, ?, ?
           )
         `).run(
           lineId, voucherId, lineNum++, pl.lineInput.itemId || null, pl.lineInput.ledgerId || null, lineGodownId, pl.lineInput.description || null,
           pl.lineInput.quantity || 0, pl.lineInput.ratePaise, pl.lineInput.discountPercent || 0, pl.taxResult.discountAmountPaise,
           pl.taxResult.taxableAmountPaise, pl.taxResult.cgstRate + pl.taxResult.sgstRate + pl.taxResult.igstRate,
           pl.taxResult.cgstAmountPaise, pl.taxResult.sgstAmountPaise, pl.taxResult.igstAmountPaise, pl.taxResult.totalAmountPaise,
-          lineSerial
+          lineSerial, lineWarranty
         );
 
         // DEF-VCH-06 & DEF-008-07: Accurate serial lifecycle tracking and validation
@@ -912,18 +990,46 @@ export class PostingEngine {
                 throw new Error(`Serial '${s}' for item '${pl.lineInput.itemId}' is not AVAILABLE (current status: ${serialRecord.status}).`);
               }
 
-              db.prepare(`UPDATE stock_item_serials SET status = 'SOLD' WHERE item_id = ? AND serial_number = ?`).run(pl.lineInput.itemId, s);
+              let saleWarrantyExpiry: string | null = null;
+              if (lineWarranty > 0 && input.voucherDate) {
+                try {
+                  const [y, m, d] = input.voucherDate.split('-').map(Number);
+                  const exp = new Date(y, m - 1 + lineWarranty, d);
+                  saleWarrantyExpiry = `${exp.getFullYear()}-${String(exp.getMonth() + 1).padStart(2, '0')}-${String(exp.getDate()).padStart(2, '0')}`;
+                } catch {}
+              }
+
+              db.prepare(`
+                UPDATE stock_item_serials
+                SET status = 'SOLD',
+                    warranty_expiry_date = COALESCE(?, warranty_expiry_date)
+                WHERE item_id = ? AND serial_number = ?
+              `).run(saleWarrantyExpiry, pl.lineInput.itemId, s);
             } else if (input.voucherType === 'PURCHASE' || input.voucherType === 'SALES_RETURN') {
+              let expiryDate: string | null = null;
+              if (lineWarranty > 0 && input.voucherDate) {
+                try {
+                  const [y, m, d] = input.voucherDate.split('-').map(Number);
+                  const exp = new Date(y, m - 1 + lineWarranty, d);
+                  expiryDate = `${exp.getFullYear()}-${String(exp.getMonth() + 1).padStart(2, '0')}-${String(exp.getDate()).padStart(2, '0')}`;
+                } catch {}
+              }
+
               const existingSerial = db.prepare('SELECT serial_id, status FROM stock_item_serials WHERE item_id = ? AND serial_number = ?')
                 .get(pl.lineInput.itemId, s) as { serial_id: string; status: string } | undefined;
               if (!existingSerial) {
-                db.prepare(`INSERT INTO stock_item_serials (serial_id, item_id, serial_number, status) VALUES (?, ?, ?, 'AVAILABLE')`)
-                  .run('ser_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16), pl.lineInput.itemId, s);
+                db.prepare(`INSERT INTO stock_item_serials (serial_id, item_id, serial_number, status, purchase_date, warranty_expiry_date) VALUES (?, ?, ?, 'AVAILABLE', ?, ?)`)
+                  .run('ser_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16), pl.lineInput.itemId, s, input.voucherDate, expiryDate);
                 introducedSerials.push({ itemId: pl.lineInput.itemId, serialNumber: s });
+              } else if (input.voucherType === 'SALES_RETURN') {
+                // A customer returning goods restores the serial back to AVAILABLE in stock
+                db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE', warranty_expiry_date = COALESCE(warranty_expiry_date, ?) WHERE item_id = ? AND serial_number = ?`)
+                  .run(expiryDate, pl.lineInput.itemId, s);
               } else {
-                // DEF-008-07: If serial is already SOLD to a customer, NEVER revert it to AVAILABLE on amendment
+                // PURCHASE: If serial is already SOLD to a customer, NEVER revert it to AVAILABLE on amendment
                 if (existingSerial.status !== 'SOLD') {
-                  db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE' WHERE item_id = ? AND serial_number = ?`).run(pl.lineInput.itemId, s);
+                  db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE', purchase_date = COALESCE(purchase_date, ?), warranty_expiry_date = COALESCE(warranty_expiry_date, ?) WHERE item_id = ? AND serial_number = ?`)
+                    .run(input.voucherDate, expiryDate, pl.lineInput.itemId, s);
                 }
               }
             }
@@ -1153,7 +1259,88 @@ export class PostingEngine {
           introducedSerials
         })
       );
+
+      // H. Immediate Payment Settlement (UI-030 Phase 4)
+      if (
+        isPosted &&
+        input.immediatePayment &&
+        typeof input.immediatePayment.amountPaise === 'number' &&
+        input.immediatePayment.amountPaise > 0 &&
+        partyLedgerId &&
+        (input.voucherType === 'SALES' || input.voucherType === 'PURCHASE')
+      ) {
+        const payMode = (input.immediatePayment.mode || 'CASH').toUpperCase() as 'CASH' | 'BANK' | 'UPI';
+        const payAmountPaise = Math.min(input.immediatePayment.amountPaise, finalVoucherTotal);
+
+        if (payAmountPaise > 0) {
+          let paymentLedgerId = input.immediatePayment.ledgerId;
+          if (!paymentLedgerId) {
+            try {
+              if (payMode === 'CASH') {
+                paymentLedgerId = findLedgerId(['led_cash'], '%Cash%');
+              } else {
+                paymentLedgerId = findLedgerId(['led_bank'], '%Bank%');
+              }
+            } catch {
+              // Fallback to cash if bank not found
+              paymentLedgerId = findLedgerId(['led_cash'], '%Cash%');
+            }
+          }
+
+          if (paymentLedgerId) {
+            if (input.voucherType === 'SALES') {
+              const res = PostingEngine.postVoucher(db, {
+                companyId: input.companyId,
+                fyId: input.fyId,
+                voucherType: 'RECEIPT',
+                voucherDate: input.voucherDate,
+                paymentMode: payMode,
+                partyId: input.partyId,
+                referenceNumber: input.immediatePayment.referenceNumber || postedVoucherNumber,
+                narration: `Immediate ${payMode} settlement for invoice ${postedVoucherNumber}`,
+                status: 'POSTED',
+                createdBy: input.createdBy,
+                lines: [],
+                customLedgerLines: [
+                  { ledgerId: paymentLedgerId, debitPaise: payAmountPaise, creditPaise: 0 },
+                  { ledgerId: partyLedgerId, debitPaise: 0, creditPaise: payAmountPaise }
+                ],
+                billAllocation: {
+                  referenceVoucherId: voucherId,
+                  allocationType: 'AGAINST_REF'
+                }
+              }, { skipTransaction: true });
+              settlementVoucherNumber = res.voucherNumber;
+            } else if (input.voucherType === 'PURCHASE') {
+              const res = PostingEngine.postVoucher(db, {
+                companyId: input.companyId,
+                fyId: input.fyId,
+                voucherType: 'PAYMENT',
+                voucherDate: input.voucherDate,
+                paymentMode: payMode,
+                partyId: input.partyId,
+                referenceNumber: input.immediatePayment.referenceNumber || postedVoucherNumber,
+                narration: `Immediate ${payMode} settlement for purchase ${postedVoucherNumber}`,
+                status: 'POSTED',
+                createdBy: input.createdBy,
+                lines: [],
+                customLedgerLines: [
+                  { ledgerId: partyLedgerId, debitPaise: payAmountPaise, creditPaise: 0 },
+                  { ledgerId: paymentLedgerId, debitPaise: 0, creditPaise: payAmountPaise }
+                ],
+                billAllocation: {
+                  referenceVoucherId: voucherId,
+                  allocationType: 'AGAINST_REF'
+                }
+              }, { skipTransaction: true });
+              settlementVoucherNumber = res.voucherNumber;
+            }
+          }
+        }
+      }
     };
+
+    let settlementVoucherNumber: string | undefined;
 
     if (options?.skipTransaction) {
       executePostingDb();
@@ -1181,7 +1368,8 @@ export class PostingEngine {
       voucherId,
       voucherNumber: postedVoucherNumber,
       totalAmountPaise: finalVoucherTotal,
-      status: voucherStatus
+      status: voucherStatus,
+      ...(settlementVoucherNumber ? { settlementVoucherNumber } : {})
     };
   }
 
@@ -1269,7 +1457,22 @@ export class PostingEngine {
             .run(s.item_id, sn);
         }
       }
-    } else if (vch.voucher_type === 'PURCHASE' || vch.voucher_type === 'SALES_RETURN') {
+    } else if (vch.voucher_type === 'SALES_RETURN') {
+      // Sales Return cancelled: serials that were returned to stock should be reverted to SOLD
+      const returnedSerials = db.prepare(`
+        SELECT item_id, serial_number
+        FROM voucher_lines
+        WHERE voucher_id = ? AND item_id IS NOT NULL AND serial_number IS NOT NULL
+      `).all(voucherId) as Array<{ item_id: string; serial_number: string }>;
+
+      for (const s of returnedSerials) {
+        const serialsArr = s.serial_number.split(',').map((sn: string) => sn.trim()).filter(Boolean);
+        for (const sn of serialsArr) {
+          db.prepare(`UPDATE stock_item_serials SET status = 'SOLD' WHERE item_id = ? AND serial_number = ? AND status = 'AVAILABLE'`)
+            .run(s.item_id, sn);
+        }
+      }
+    } else if (vch.voucher_type === 'PURCHASE') {
       // Inward voucher cancelled: only remove serial records introduced by this voucher
       let introducedSerials: Array<{ itemId: string; serialNumber: string }> = [];
       const auditRow = db.prepare(`
@@ -1446,13 +1649,24 @@ export class PostingEngine {
       );
 
       // 4. Post replacement internally (within this immediate transaction)
+      // If the amendment input forwarded the original voucher's number (common in UI form submissions),
+      // clear it so the replacement voucher is automatically allocated the next sequential statutory number.
+      let replacementVoucherNumber = replacementInput.voucherNumber;
+      if (replacementVoucherNumber && replacementVoucherNumber.trim() === original.voucher_number) {
+        replacementVoucherNumber = undefined;
+      }
+
       const replacementPayload: CreateVoucherInput = {
         ...replacementInput,
+        voucherNumber: replacementVoucherNumber,
         status: 'POSTED',
         referenceNumber: replacementInput.referenceNumber || `AMEND-${original.voucher_number}`
       };
 
-      const result = this._postVoucherInternal(db, replacementPayload, { skipTransaction: true });
+      const result = this._postVoucherInternal(db, replacementPayload, {
+        skipTransaction: true,
+        excludeVoucherId: originalVoucherId
+      });
 
       // 5. Invariant check: Assert net post-amendment balance >= 0 for all affected items/godowns
       if (replacementInput.allowNegativeStock !== true) {
@@ -1758,6 +1972,256 @@ export class PostingEngine {
           db.exec('RELEASE SAVEPOINT sp_record_opening_stock;');
         } catch (_) {}
       }
+      throw err;
+    }
+  }
+
+  /**
+   * UI-031: Update Draft Voucher in-place
+   * Updates an unposted draft without consuming a new sequence number.
+   */
+  public static updateDraftVoucher(
+    db: DatabaseSync,
+    voucherId: string,
+    input: CreateVoucherInput
+  ): {
+    voucherId: string;
+    voucherNumber: string;
+    totalAmountPaise: number;
+    status: 'DRAFT';
+  } {
+    db.exec('BEGIN IMMEDIATE;');
+    try {
+      const vch = db.prepare(`
+        SELECT v.*, fy.status as fy_status, fy.start_date, fy.end_date
+        FROM vouchers v
+        JOIN financial_years fy ON v.fy_id = fy.fy_id
+        WHERE v.voucher_id = ?
+      `).get(voucherId) as any;
+
+      if (!vch) {
+        throw new Error(`Voucher with ID '${voucherId}' not found.`);
+      }
+
+      if (vch.company_id !== input.companyId) {
+        throw new Error(`Security violation: Voucher '${voucherId}' does not belong to company '${input.companyId}'.`);
+      }
+
+      if (vch.status !== 'DRAFT') {
+        throw new Error(`Cannot update voucher '${vch.voucher_number}': current status is ${vch.status}. Only DRAFT vouchers can be updated in-place.`);
+      }
+
+      if (vch.fy_status !== 'OPEN') {
+        throw new Error(`Cannot update draft voucher: Financial Year status is ${vch.fy_status}. Updating prohibited.`);
+      }
+
+      // Company state for GST Place of Supply
+      const company = db.prepare('SELECT state_code, company_name FROM companies WHERE company_id = ?')
+        .get(input.companyId) as { state_code: string; company_name: string } | undefined;
+      if (!company) throw new Error(`Company '${input.companyId}' not found.`);
+
+      let placeOfSupplyStateCode = company.state_code;
+      if (input.partyId) {
+        const party = db.prepare(`
+          SELECT p.ledger_id, p.company_id, pa.state_code
+          FROM parties p
+          LEFT JOIN party_addresses pa ON p.party_id = pa.party_id
+          WHERE p.party_id = ?
+        `).get(input.partyId) as { ledger_id: string; company_id: string; state_code?: string } | undefined;
+
+        if (party && party.state_code) {
+          placeOfSupplyStateCode = party.state_code;
+        }
+      }
+
+      // Process lines & compute taxes
+      const taxResults: LineTaxCalculationResult[] = [];
+      const processedLines: Array<{
+        lineInput: CreateVoucherLineInput;
+        taxResult: LineTaxCalculationResult;
+      }> = [];
+
+      for (const line of input.lines) {
+        let gstRate = line.gstRate ?? 18;
+        let cessRate = line.cessRate ?? 0;
+
+        if (line.itemId) {
+          const item = db.prepare('SELECT gst_rate, cess_rate FROM stock_items WHERE item_id = ?')
+            .get(line.itemId) as { gst_rate: number; cess_rate: number } | undefined;
+          if (item && line.gstRate === undefined) {
+            gstRate = item.gst_rate;
+            cessRate = item.cess_rate;
+          }
+        }
+
+        const taxRes = GstEngine.calculateLineTax({
+          quantity: line.quantity || 1,
+          ratePaise: line.ratePaise,
+          discountPercent: line.discountPercent,
+          discountAmountPaise: line.discountAmountPaise,
+          isTaxInclusive: line.isTaxInclusive,
+          gstRate,
+          cessRate,
+          sellerStateCode: company.state_code,
+          placeOfSupplyStateCode
+        });
+
+        taxResults.push(taxRes);
+        processedLines.push({ lineInput: line, taxResult: taxRes });
+      }
+
+      const voucherTotals = GstEngine.calculateVoucherTotals(taxResults);
+      let finalVoucherTotal = voucherTotals.totalAmountPaise;
+
+      if (finalVoucherTotal === 0 && input.customLedgerLines && input.customLedgerLines.length > 0) {
+        finalVoucherTotal = input.customLedgerLines.reduce((sum, l) => sum + (l.debitPaise || 0), 0);
+      }
+
+      // Metadata to preserve draft reconstitution fidelity
+      let storedTermsConditions = input.termsConditions || null;
+      const draftMeta = {
+        _draftMeta: {
+          originalTerms: input.termsConditions,
+          billAllocation: input.billAllocation,
+          customLedgerLines: input.customLedgerLines,
+          lines: input.lines.map(l => ({
+            itemId: l.itemId,
+            ledgerId: l.ledgerId,
+            godownId: l.godownId,
+            description: l.description,
+            quantity: l.quantity,
+            ratePaise: l.ratePaise,
+            discountPercent: l.discountPercent,
+            discountAmountPaise: l.discountAmountPaise,
+            gstRate: l.gstRate,
+            cessRate: l.cessRate,
+            isTaxInclusive: l.isTaxInclusive,
+            serialNumber: l.serialNumber,
+            movementType: l.movementType
+          }))
+        }
+      };
+      storedTermsConditions = JSON.stringify(draftMeta);
+
+      // Validate candidate voucher number if updated, recognizing own voucher identity
+      let targetVoucherNumber = vch.voucher_number;
+      if (input.voucherNumber && input.voucherNumber.trim() && input.voucherNumber.trim() !== vch.voucher_number) {
+        const candidate = input.voucherNumber.trim();
+        const existing = db.prepare(
+          "SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ? AND voucher_id != ?"
+        ).get(input.companyId, vch.fy_id, vch.voucher_type, candidate, voucherId);
+
+        const inAudit = db.prepare(`
+          SELECT 1 FROM audit_logs
+          WHERE company_id = ? AND action = 'VOUCHER_PERMANENT_PURGE'
+            AND json_extract(details, '$.voucher_number') = ?
+            AND json_extract(details, '$.voucher_type') = ?
+        `).get(input.companyId, candidate, vch.voucher_type);
+
+        if (existing || inAudit) {
+          throw new Error(`Voucher number '${candidate}' already exists for this company, financial year, and voucher type.`);
+        }
+        targetVoucherNumber = candidate;
+      }
+
+      // Update vouchers table in-place (recognizing existing voucher identity)
+      db.prepare(`
+        UPDATE vouchers SET
+          voucher_number = ?,
+          voucher_date = ?,
+          reference_number = ?,
+          reference_date = ?,
+          payment_mode = ?,
+          terms_conditions = ?,
+          party_id = ?,
+          narration = ?,
+          taxable_amount_paise = ?,
+          cgst_amount_paise = ?,
+          sgst_amount_paise = ?,
+          igst_amount_paise = ?,
+          round_off_paise = ?,
+          total_amount_paise = ?
+        WHERE voucher_id = ?
+      `).run(
+        targetVoucherNumber,
+        input.voucherDate || vch.voucher_date,
+        input.referenceNumber || null,
+        input.referenceDate || null,
+        input.paymentMode || vch.payment_mode || null,
+        storedTermsConditions,
+        input.partyId || null,
+        input.narration || null,
+        voucherTotals.taxableAmountPaise,
+        voucherTotals.cgstAmountPaise,
+        voucherTotals.sgstAmountPaise,
+        voucherTotals.igstAmountPaise,
+        voucherTotals.roundOffPaise,
+        finalVoucherTotal,
+        voucherId
+      );
+
+      // Delete old voucher lines
+      db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(voucherId);
+
+      // Insert new voucher lines
+      let lineNum = 1;
+      for (const pl of processedLines) {
+        const lineId = 'ln_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+        const lineSerial = pl.lineInput.serialNumber || (input.voucherType === 'STOCK_JOURNAL' ? pl.lineInput.movementType : null) || null;
+        let lineWarranty = 0;
+        if (pl.lineInput.itemId) {
+          const itemMeta = db.prepare('SELECT warranty_months FROM stock_items WHERE item_id = ?').get(pl.lineInput.itemId) as any;
+          lineWarranty = Number(itemMeta?.warranty_months || 0);
+        }
+
+        db.prepare(`
+          INSERT INTO voucher_lines (
+            line_id, voucher_id, line_number, item_id, ledger_id, godown_id, description,
+            quantity, rate_paise, discount_percent, discount_amount_paise,
+            taxable_amount_paise, gst_rate, cgst_amount_paise, sgst_amount_paise,
+            igst_amount_paise, total_amount_paise, serial_number, warranty_months
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?
+          )
+        `).run(
+          lineId, voucherId, lineNum++, pl.lineInput.itemId || null, pl.lineInput.ledgerId || null, pl.lineInput.godownId || null, pl.lineInput.description || null,
+          pl.lineInput.quantity || 0, pl.lineInput.ratePaise, pl.lineInput.discountPercent || 0, pl.taxResult.discountAmountPaise,
+          pl.taxResult.taxableAmountPaise, pl.taxResult.cgstRate + pl.taxResult.sgstRate + pl.taxResult.igstRate,
+          pl.taxResult.cgstAmountPaise, pl.taxResult.sgstAmountPaise, pl.taxResult.igstAmountPaise, pl.taxResult.totalAmountPaise,
+          lineSerial, lineWarranty
+        );
+      }
+
+      // Audit log entry
+      db.prepare(`
+        INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
+        VALUES (?, ?, ?, 'UPDATE_DRAFT_VOUCHER', 'VOUCHER', ?, ?)
+      `).run(
+        'aud_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16),
+        input.companyId,
+        input.createdBy || 'system',
+        voucherId,
+        JSON.stringify({
+          voucherNumber: vch.voucher_number,
+          totalAmountPaise: finalVoucherTotal,
+          linesCount: input.lines.length,
+          status: 'DRAFT'
+        })
+      );
+
+      db.exec('COMMIT;');
+
+      return {
+        voucherId,
+        voucherNumber: vch.voucher_number,
+        totalAmountPaise: finalVoucherTotal,
+        status: 'DRAFT'
+      };
+    } catch (err: any) {
+      try { db.exec('ROLLBACK;'); } catch (_) {}
       throw err;
     }
   }

@@ -23,7 +23,10 @@ import {
   CircleDollarSign,
   Settings,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  RotateCcw,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 export interface SidebarProps {
@@ -35,8 +38,8 @@ export interface SidebarProps {
   setVoucherInitialType?: (type: string) => void;
   mastersSubTab?: string;
   setMastersSubTab?: (tab: string) => void;
-  salesViewMode?: 'dashboard' | 'create';
-  setSalesViewMode?: (mode: 'dashboard' | 'create') => void;
+  salesViewMode?: 'dashboard' | 'create' | 'register' | 'view_invoice' | 'return';
+  setSalesViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view_invoice' | 'return') => void;
   quotationViewMode?: 'dashboard' | 'create';
   setQuotationViewMode?: (mode: 'dashboard' | 'create') => void;
   purchaseViewMode?: 'dashboard' | 'create';
@@ -77,6 +80,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed = false,
   onToggleCollapse
 }) => {
+  const [isSalesExpanded, setIsSalesExpanded] = React.useState<boolean>(activeTab === 'sales');
+
+  React.useEffect(() => {
+    if (activeTab === 'sales') {
+      setIsSalesExpanded(true);
+    }
+  }, [activeTab]);
   const handleNav = (
     tab: string,
     opts?: {
@@ -229,17 +239,144 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ) : (
               <div className="nav-section-divider" />
             )}
-            {renderItem(
-              'sales-module',
-              'Sales',
-              <ShoppingCart size={16} />,
-              activeTab === 'sales' || (activeTab === 'vouchers' && (window as any)._currentVoucherType === 'SALES'),
-              () => {
-                setActiveTab('sales');
-                if (setSalesViewMode) setSalesViewMode('dashboard');
-                if (onClose) onClose();
-              },
-              'Alt+S'
+            {isCollapsed ? (
+              renderItem(
+                'sales-module',
+                'Sales',
+                <ShoppingCart size={20} />,
+                activeTab === 'sales',
+                () => {
+                  setActiveTab('sales');
+                  if (setSalesViewMode) setSalesViewMode('dashboard');
+                  if (onClose) onClose();
+                },
+                'Alt+S'
+              )
+            ) : (
+              <>
+                <div
+                  onClick={() => {
+                    if (activeTab !== 'sales') {
+                      setActiveTab('sales');
+                      if (setSalesViewMode) setSalesViewMode('dashboard');
+                      setIsSalesExpanded(true);
+                    } else {
+                      setIsSalesExpanded(prev => !prev);
+                    }
+                  }}
+                  className={`nav-item ${activeTab === 'sales' ? 'active' : ''}`}
+                  title="Sales (Alt+S)"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                    <span className="nav-icon"><ShoppingCart size={16} /></span>
+                    <span style={{ flex: 1, lineHeight: 1.3, fontWeight: activeTab === 'sales' ? 600 : 500 }}>Sales</span>
+                  </div>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsSalesExpanded(prev => !prev);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '2px',
+                      color: 'var(--text-muted, #94A3B8)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {isSalesExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </div>
+                </div>
+
+                {/* Collapsible Submenu */}
+                {isSalesExpanded && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      marginTop: '2px',
+                      marginBottom: '4px',
+                      paddingLeft: '24px'
+                    }}
+                  >
+                    <div
+                      onClick={() => {
+                        setActiveTab('sales');
+                        if (setSalesViewMode) setSalesViewMode('dashboard');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'sales' && salesViewMode === 'dashboard' ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'sales' && salesViewMode === 'dashboard' ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Sales Dashboard</span>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setActiveTab('sales');
+                        if (setSalesViewMode) setSalesViewMode('create');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'sales' && salesViewMode === 'create' ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'sales' && salesViewMode === 'create' ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Sales Invoice</span>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setActiveTab('sales');
+                        if (setSalesViewMode) setSalesViewMode('register');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'sales' && (salesViewMode === 'register' || salesViewMode === 'view_invoice') ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'sales' && (salesViewMode === 'register' || salesViewMode === 'view_invoice') ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Sales Register</span>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setActiveTab('sales');
+                        if (setSalesViewMode) setSalesViewMode('return');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'sales' && salesViewMode === 'return' ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'sales' && salesViewMode === 'return' ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Sales Return</span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             {renderItem(
               'purchase-module',

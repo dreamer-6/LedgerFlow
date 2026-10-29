@@ -80,7 +80,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [pnlData, setPnlData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<'Last 6 Months' | 'This FY' | 'Last 12 Months'>('Last 6 Months');
+
+  const todayDefault = currentDate || new Date().toISOString().split('T')[0];
+  const [scope, setScope] = useState<'Financial Year' | 'Single Day' | 'Custom Date Range'>('Financial Year');
+  const [selectedDate, setSelectedDate] = useState<string>(todayDefault);
+  const [customFromDate, setCustomFromDate] = useState<string>(todayDefault);
+  const [customToDate, setCustomToDate] = useState<string>(todayDefault);
+
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
   const [isFullscreenChart, setIsFullscreenChart] = useState(false);
   const [activeMenuVoucherId, setActiveMenuVoucherId] = useState<string | null>(null);
@@ -143,21 +149,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   };
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (
+    currentScope = scope,
+    sDate = selectedDate,
+    fDate = customFromDate,
+    tDate = customToDate
+  ) => {
     if (!companyId) return;
     setLoading(true);
     setError(null);
     try {
       const todayStr = currentDate || new Date().toISOString().split('T')[0];
-      const fyStart = activeFy?.start_date || '2024-04-01';
+      const fyStart = activeFy?.start_date || '2026-04-01';
 
-      // Parallel fetch of dashboard summary and profit & loss report
+      let qPeriod = currentScope;
+      let qFromDate: string | undefined;
+      let qToDate: string | undefined;
+
+      if (currentScope === 'Single Day') {
+        qFromDate = sDate || todayStr;
+        qToDate = sDate || todayStr;
+      } else if (currentScope === 'Custom Date Range') {
+        qFromDate = fDate || todayStr;
+        qToDate = tDate || todayStr;
+      } else {
+        qPeriod = 'Financial Year';
+      }
+
+      const fyEnd = activeFy?.end_date || '2027-03-31';
+
+      // Parallel fetch of dashboard summary (scoped by selected period and active FY) and profit & loss report
       const [dashRes, pnlRes] = await Promise.all([
-        api.getDashboard(companyId).catch((err) => {
+        api.getDashboard(companyId, qPeriod, qFromDate, qToDate, activeFy?.fy_id).catch((err) => {
           console.warn('Dashboard summary fetch failed:', err);
           return null;
         }),
-        api.getProfitAndLoss(companyId, fyStart, todayStr).catch((err) => {
+        api.getProfitAndLoss(companyId, qFromDate || fyStart, qToDate || (currentScope === 'Financial Year' ? fyEnd : todayStr)).catch((err) => {
           console.warn('P&L report fetch failed:', err);
           return null;
         })
@@ -178,8 +205,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   useEffect(() => {
-    loadDashboardData();
-  }, [companyId, activeFy?.fy_id, currentDate]);
+    loadDashboardData(scope, selectedDate, customFromDate, customToDate);
+  }, [companyId, activeFy?.fy_id, scope, selectedDate, customFromDate, customToDate]);
 
   // Authenticated user greeting based on time of day
   const greeting = useMemo(() => {
@@ -190,67 +217,63 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return `${timeGreeting}, ${firstName} 👋`;
   }, [user]);
 
-  // Extract financial metrics from real backend responses
+  // Extract financial metrics strictly from real backend calculations
   const totalSalesPaise = useMemo(() => {
-    if (pnlData?.tradingIncomePaise != null && pnlData.tradingIncomePaise > 0) {
-      return pnlData.tradingIncomePaise;
-    }
-    return data?.todaySalesPaise ?? 0;
-  }, [pnlData, data]);
+    return data?.totalSalesPaise ?? 0;
+  }, [data]);
 
   const totalPurchasePaise = useMemo(() => {
-    if (pnlData?.tradingExpensePaise != null && pnlData.tradingExpensePaise > 0) {
-      return pnlData.tradingExpensePaise;
-    }
-    return data?.todayPurchasesPaise ?? 0;
-  }, [pnlData, data]);
+    return data?.totalPurchasesPaise ?? 0;
+  }, [data]);
 
   const receivablesPaise = data?.receivablesPaise ?? 0;
   const payablesPaise = data?.payablesPaise ?? 0;
   const serviceIncomePaise = pnlData?.indirectIncomePaise ?? 0;
   const cashBankPaise = data?.cashBankPaise ?? 0;
 
-  // Process trend data for the 6-month grouped bar chart
+  // Process trend data for the period grouped bar chart
   const { chartBars, yMax, yLabels, salesTrendPct, purchaseTrendPct } = useMemo(() => {
-    const rawTrend: { month: string; voucher_type: string; total: number }[] = data?.trendData || [];
+    const rawTrend: Array<{ month: string; salesPaise?: number; purchasePaise?: number; total?: number; voucher_type?: string }> = data?.trendData || [];
     const trendMap: Record<string, { s: number; p: number }> = {};
 
     rawTrend.forEach((r) => {
       if (!trendMap[r.month]) trendMap[r.month] = { s: 0, p: 0 };
-      if (r.voucher_type === 'SALES') trendMap[r.month].s = r.total;
-      if (r.voucher_type === 'PURCHASE') trendMap[r.month].p = r.total;
+      if (r.salesPaise !== undefined) trendMap[r.month].s = r.salesPaise;
+      else if (r.voucher_type === 'SALES') trendMap[r.month].s = r.total || 0;
+
+      if (r.purchasePaise !== undefined) trendMap[r.month].p = r.purchasePaise;
+      else if (r.voucher_type === 'PURCHASE') trendMap[r.month].p = r.total || 0;
     });
 
-    const sortedMonths = Object.keys(trendMap).sort();
+    const orderedMonths: string[] = [];
+    rawTrend.forEach((r) => {
+      if (!orderedMonths.includes(r.month)) orderedMonths.push(r.month);
+    });
 
     // Determine month-over-month trend legitimately from real data
     let sTrend: number | null = null;
     let pTrend: number | null = null;
-    if (sortedMonths.length >= 2) {
-      const currMo = sortedMonths[sortedMonths.length - 1];
-      const prevMo = sortedMonths[sortedMonths.length - 2];
-      const prevS = trendMap[prevMo].s;
-      const currS = trendMap[currMo].s;
+    if (orderedMonths.length >= 2) {
+      const currMo = orderedMonths[orderedMonths.length - 1];
+      const prevMo = orderedMonths[orderedMonths.length - 2];
+      const prevS = trendMap[prevMo]?.s ?? 0;
+      const currS = trendMap[currMo]?.s ?? 0;
       if (prevS > 0) {
         sTrend = Math.round(((currS - prevS) / prevS) * 1000) / 10;
       }
-      const prevP = trendMap[prevMo].p;
-      const currP = trendMap[currMo].p;
+      const prevP = trendMap[prevMo]?.p ?? 0;
+      const currP = trendMap[currMo]?.p ?? 0;
       if (prevP > 0) {
         pTrend = Math.round(((currP - prevP) / prevP) * 1000) / 10;
       }
     }
 
-    // Build the 6 months list (either recent 6 months with data or previous 6 calendar months)
-    let monthsToDisplay: string[] = [];
-    if (sortedMonths.length > 0) {
-      monthsToDisplay = sortedMonths.slice(-6);
-    }
-
-    if (monthsToDisplay.length < 6) {
+    let monthsToDisplay: string[] = orderedMonths;
+    if (monthsToDisplay.length === 0) {
+      const count = 12;
       const today = new Date();
       const filler: string[] = [];
-      for (let i = 5; i >= 0; i--) {
+      for (let i = count - 1; i >= 0; i--) {
         const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -272,23 +295,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       };
     });
 
-    const maxValPaise = Math.max(...bars.map((b) => Math.max(b.salesPaise, b.purchasePaise)), 10000000); // min 1L for scale
-    const maxRupees = maxValPaise / 100;
+    const rawMax = Math.max(...bars.map((b) => Math.max(b.salesPaise, b.purchasePaise)), 0);
+    const maxValPaise = rawMax > 0 ? rawMax : 500000;
+    const maxRupees = Math.round(maxValPaise / 100);
 
-    // Y-Axis scale formatted in Lakhs (L) or Thousands (K)
+    // Adaptive Rupee axis formatting per UI-031:
+    // - Full rupee amounts visible under ₹1,00,000 (e.g. ₹850, ₹12,500, ₹85,000)
+    // - Abbreviate to Lakhs (₹X.XL) only when >= ₹1,00,000
+    // - Abbreviate to Crores (₹X.XCr) only when >= ₹1,00,00,000
+    // - Unrounded data preserved in underlying items and tooltips
     const formatScaleLabel = (rupees: number) => {
-      if (rupees >= 100000) {
-        const l = rupees / 100000;
-        return `${Number.isInteger(l) ? l : l.toFixed(1)}L`;
+      if (rupees === 0) return '₹0';
+      const abs = Math.abs(rupees);
+      const prefix = rupees < 0 ? '-₹' : '₹';
+      if (abs >= 10000000) {
+        const cr = abs / 10000000;
+        return `${prefix}${Number.isInteger(cr) ? cr : cr.toFixed(1).replace(/\.0$/, '')}Cr`;
       }
-      if (rupees >= 1000) {
-        const k = rupees / 1000;
-        return `${Number.isInteger(k) ? k : k.toFixed(0)}K`;
+      if (abs >= 100000) {
+        const l = abs / 100000;
+        return `${prefix}${Number.isInteger(l) ? l : l.toFixed(1).replace(/\.0$/, '')}L`;
       }
-      return rupees === 0 ? '0' : String(rupees);
+      return `${prefix}${abs.toLocaleString('en-IN')}`;
     };
 
-    const yLevels = [1, 0.75, 0.5, 0.25, 0].map((step) => formatScaleLabel(maxRupees * step));
+    const yLevels = [1, 0.75, 0.5, 0.25, 0].map((step) => formatScaleLabel(Math.round(maxRupees * step)));
 
     return {
       chartBars: bars,
@@ -297,22 +328,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       salesTrendPct: sTrend,
       purchaseTrendPct: pTrend
     };
-  }, [data]);
+  }, [data, scope]);
 
-  // Business Health status indicators
-  // CRITICAL REQUIREMENT 10: Backend currently does not provide an official health rating score.
-  // We do NOT invent a synthetic accounting health score formula.
-  // Real financial breakdown indicators are displayed, and score shows '--' (Pending).
-  const { hasAnyTransactions, healthScoreDisplay, healthStatusText, healthDescText, salesShare, purchaseShare, recvShare, payShare, svcShare } = useMemo(() => {
+  // Business Health status indicators based on real explainable measures
+  const { hasAnyTransactions, healthScoreDisplay, healthStatusText, healthDescText, healthArcOffset, salesShare, purchaseShare, recvShare, payShare, svcShare } = useMemo(() => {
     const totalBenchmark = Math.max(totalSalesPaise, 1);
     const hasTransactions = totalSalesPaise > 0 || totalPurchasePaise > 0 || receivablesPaise > 0 || payablesPaise > 0;
 
-    let statusText = 'Welcome to LedgerFlow! ✨';
-    let descText = 'Post your first sales and purchase vouchers to activate live business health tracking.';
+    const bHealth = data?.businessHealth;
+    const score = bHealth?.score;
 
-    if (hasTransactions) {
-      statusText = 'Operating Metrics Active ✨';
-      descText = 'Double-entry books are active and balanced. Credit scoring model is pending backend analytics integration.';
+    let scoreDisplay = '--';
+    let statusText = 'No Activity';
+    let descText = 'No transactions recorded for the selected period.';
+    let arcOffset = 235.6; // empty
+
+    if (score !== undefined && score !== null) {
+      scoreDisplay = String(score);
+      statusText = bHealth.statusText || 'Operating Metrics Active';
+      descText = bHealth.descText || 'Double-entry books are active and balanced.';
+      arcOffset = 235.6 * (1 - Math.min(100, Math.max(0, score)) / 100);
+    } else if (hasTransactions) {
+      statusText = 'Operating Metrics Active';
+      descText = 'Double-entry books are active and balanced.';
     }
 
     const calcShare = (val: number) => {
@@ -323,16 +361,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
     return {
       hasAnyTransactions: hasTransactions,
-      healthScoreDisplay: '--',
+      healthScoreDisplay: scoreDisplay,
       healthStatusText: statusText,
       healthDescText: descText,
+      healthArcOffset: arcOffset,
       salesShare: totalSalesPaise > 0 ? '100%' : '--',
       purchaseShare: calcShare(totalPurchasePaise),
       recvShare: calcShare(receivablesPaise),
       payShare: calcShare(payablesPaise),
       svcShare: calcShare(serviceIncomePaise)
     };
-  }, [totalSalesPaise, totalPurchasePaise, receivablesPaise, payablesPaise, serviceIncomePaise]);
+  }, [data, totalSalesPaise, totalPurchasePaise, receivablesPaise, payablesPaise, serviceIncomePaise]);
 
   // Dynamic miniature sparkline indicators derived strictly from real period data
   const { salesSparkline, purchaseSparkline, totalChartVolume } = useMemo(() => {
@@ -459,7 +498,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <button
             type="button"
             className="lf-ctrl-btn"
-            onClick={loadDashboardData}
+            onClick={() => loadDashboardData()}
             style={{ padding: '8px 18px', background: 'var(--color-primary)', color: '#fff', border: 'none', fontWeight: 600, display: 'inline-flex', margin: '0 auto' }}
           >
             <RefreshCw size={14} /> Retry Connection
@@ -483,12 +522,122 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
           </div>
 
-          <div className="lf-dashboard-date-indicator">
-            <div className="lf-dashboard-date-badge">
-              <Calendar size={15} style={{ color: 'var(--color-text-muted, #94A3B8)' }} />
-              <span>Today, {formatDateDisplay(currentDate)}</span>
+          <div className="lf-dashboard-scope-controls" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+            {/* Filter Scope Switcher Tabs */}
+            <div
+              className="lf-scope-tabs"
+              style={{
+                display: 'inline-flex',
+                backgroundColor: 'var(--color-surface-secondary, #1E293B)',
+                padding: '3px',
+                borderRadius: '8px',
+                border: '1px solid var(--color-border, #334155)',
+                gap: '3px'
+              }}
+            >
+              {(['Financial Year', 'Single Day', 'Custom Date Range'] as const).map((tab) => {
+                const isActive = scope === tab;
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setScope(tab)}
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: '11.5px',
+                      fontWeight: isActive ? 700 : 500,
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      backgroundColor: isActive ? 'var(--color-primary, #EA580C)' : 'transparent',
+                      color: isActive ? '#FFFFFF' : 'var(--color-text-secondary, #94A3B8)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {tab}
+                  </button>
+                );
+              })}
             </div>
-            <span className="lf-dashboard-date-subtext">Compared to previous period</span>
+
+            {/* Sub-controls based on active scope */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: 'var(--color-text-secondary)' }}>
+              {scope === 'Financial Year' && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <Calendar size={13} style={{ color: 'var(--color-primary, #EA580C)' }} />
+                  <span style={{ fontWeight: 600 }}>
+                    FY {activeFy?.name || '2026-27'} ({activeFy?.start_date ? formatDateDisplay(activeFy.start_date) : '01 Apr 2026'} – {activeFy?.end_date ? formatDateDisplay(activeFy.end_date) : '31 Mar 2027'})
+                  </span>
+                  <span style={{ opacity: 0.5, margin: '0 2px' }}>•</span>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Today: {formatDateDisplay(selectedDate)}</span>
+                </div>
+              )}
+
+              {scope === 'Single Day' && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <Calendar size={13} style={{ color: 'var(--color-primary, #EA580C)' }} />
+                  <span>Date:</span>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => {
+                      if (e.target.value) setSelectedDate(e.target.value);
+                    }}
+                    style={{
+                      backgroundColor: 'var(--input-bg, #0F172A)',
+                      color: 'var(--input-text, #F8FAFC)',
+                      border: '1px solid var(--color-border, #334155)',
+                      borderRadius: '5px',
+                      padding: '3px 8px',
+                      fontSize: '11.5px',
+                      outline: 'none'
+                    }}
+                  />
+                  {selectedDate === todayDefault && (
+                    <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 600 }}>(Today)</span>
+                  )}
+                </div>
+              )}
+
+              {scope === 'Custom Date Range' && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <span>From:</span>
+                  <input
+                    type="date"
+                    value={customFromDate}
+                    onChange={(e) => {
+                      if (e.target.value) setCustomFromDate(e.target.value);
+                    }}
+                    style={{
+                      backgroundColor: 'var(--input-bg, #0F172A)',
+                      color: 'var(--input-text, #F8FAFC)',
+                      border: '1px solid var(--color-border, #334155)',
+                      borderRadius: '5px',
+                      padding: '3px 8px',
+                      fontSize: '11.5px',
+                      outline: 'none'
+                    }}
+                  />
+                  <span>To:</span>
+                  <input
+                    type="date"
+                    value={customToDate}
+                    onChange={(e) => {
+                      if (e.target.value) setCustomToDate(e.target.value);
+                    }}
+                    style={{
+                      backgroundColor: 'var(--input-bg, #0F172A)',
+                      color: 'var(--input-text, #F8FAFC)',
+                      border: '1px solid var(--color-border, #334155)',
+                      borderRadius: '5px',
+                      padding: '3px 8px',
+                      fontSize: '11.5px',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -630,21 +779,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="lf-kpi-trend-label">Due from Debtors</span>
               </div>
 
-              {/* Mini curved sparkline curve */}
-              <div className="lf-kpi-sparkline" style={{ width: 56, height: 24, display: 'flex', alignItems: 'center' }}>
-                <svg width="56" height="24" viewBox="0 0 56 24" fill="none">
-                  {receivablesPaise > 0 ? (
-                    <path
-                      d="M2 20C12 18 18 22 28 14C38 6 46 12 54 4"
-                      stroke="#F97316"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  ) : (
-                    <line x1="2" y1="18" x2="54" y2="18" stroke="#CBD5E1" strokeWidth="2" strokeDasharray="3 3" />
-                  )}
-                </svg>
+              {/* Mini data-driven sparkline */}
+              <div className="lf-kpi-sparkline" style={{ gap: 2.5, height: 26 }}>
+                {salesSparkline.map((h, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      width: 5,
+                      height: receivablesPaise > 0 ? h : 4,
+                      borderRadius: 1.5,
+                      backgroundColor: '#64748B',
+                      opacity: receivablesPaise > 0 ? 0.35 + idx * 0.12 : 0.2
+                    }}
+                  />
+                ))}
               </div>
             </div>
           </div>
@@ -674,22 +822,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="lf-kpi-trend-label">Due to Creditors</span>
               </div>
 
-              {/* Mini curved sparkline curve */}
-              <div className="lf-kpi-sparkline" style={{ width: 56, height: 24, display: 'flex', alignItems: 'center' }}>
-                <svg width="56" height="24" viewBox="0 0 56 24" fill="none">
-                  {payablesPaise > 0 ? (
-                    <path
-                      d="M2 18C10 20 20 12 30 16C40 20 48 8 54 6"
-                      stroke="#D97706"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      opacity="0.85"
-                    />
-                  ) : (
-                    <line x1="2" y1="18" x2="54" y2="18" stroke="#CBD5E1" strokeWidth="2" strokeDasharray="3 3" />
-                  )}
-                </svg>
+              {/* Mini data-driven sparkline */}
+              <div className="lf-kpi-sparkline" style={{ gap: 2.5, height: 26 }}>
+                {purchaseSparkline.map((h, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      width: 5,
+                      height: payablesPaise > 0 ? h : 4,
+                      borderRadius: 1.5,
+                      backgroundColor: '#D97706',
+                      opacity: payablesPaise > 0 ? 0.35 + idx * 0.12 : 0.2
+                    }}
+                  />
+                ))}
               </div>
             </div>
           </div>
@@ -719,17 +865,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="lf-kpi-trend-label">Repairs & Labor</span>
               </div>
 
-              {/* 6 mini bars */}
+              {/* Data-driven mini bars */}
               <div className="lf-kpi-sparkline" style={{ gap: 2.5, height: 26 }}>
-                {[0.2, 0.35, 0.5, 0.65, 0.8, 1.0].map((factor, idx) => (
+                {salesSparkline.map((h, idx) => (
                   <div
                     key={idx}
                     style={{
                       width: 5,
-                      height: serviceIncomePaise > 0 ? Math.max(4, Math.round(factor * 24)) : 4,
+                      height: serviceIncomePaise > 0 ? Math.max(4, Math.round(h * 0.8)) : 4,
                       borderRadius: 1.5,
-                      backgroundColor: '#E2D9D0',
-                      opacity: serviceIncomePaise > 0 ? 0.4 + idx * 0.12 : 0.25
+                      backgroundColor: '#F97316',
+                      opacity: serviceIncomePaise > 0 ? 0.3 + idx * 0.12 : 0.2
                     }}
                   />
                 ))}
@@ -784,8 +930,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       strokeWidth="14"
                       strokeLinecap="round"
                     />
-                    {/* Active Arc: Neutral indicator when books are live */}
-                    {hasAnyTransactions && (
+                    {/* Active Arc: Calibrated to real liquidity/solvency score */}
+                    {hasAnyTransactions && healthScoreDisplay !== '--' && (
                       <path
                         d="M 20 95 A 75 75 0 0 1 170 95"
                         fill="none"
@@ -793,7 +939,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         strokeWidth="14"
                         strokeLinecap="round"
                         strokeDasharray="235.6"
-                        strokeDashoffset={235.6 * 0.4}
+                        strokeDashoffset={healthArcOffset}
                       />
                     )}
                   </svg>
@@ -895,13 +1041,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <Filter size={13} /> Filter
                 </button>
                 <select
-                  value={period}
-                  onChange={(e) => setPeriod(e.target.value as any)}
+                  value={scope}
+                  onChange={(e) => setScope(e.target.value as any)}
                   className="lf-ctrl-select"
+                  aria-label="Filter scope"
                 >
-                  <option value="Last 6 Months">Last 6 Months</option>
-                  <option value="This FY">This FY</option>
-                  <option value="Last 12 Months">Last 12 Months</option>
+                  <option value="Financial Year">Financial Year</option>
+                  <option value="Single Day">Single Day</option>
+                  <option value="Custom Date Range">Custom Date Range</option>
                 </select>
                 <button
                   type="button"

@@ -15,6 +15,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { api, Company, FinancialYear, Party } from '../api/client';
+import { VoucherDeleteOptionsModal } from '../components/accounting/VoucherDeleteOptionsModal';
 import {
   Plus,
   Search,
@@ -189,6 +190,7 @@ export interface PurchaseViewProps {
   activeFy: FinancialYear | null;
   onCreateInvoice: () => void;
   onViewVoucher: (id: string) => void;
+  onEditVoucher?: (id: string) => void;
   onNavigateTab?: (tab: string, subTab?: string) => void;
 }
 
@@ -197,6 +199,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
   activeFy,
   onCreateInvoice,
   onViewVoucher,
+  onEditVoucher,
   onNavigateTab
 }) => {
   const [vouchers, setVouchers] = useState<any[]>([]);
@@ -219,6 +222,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
   const [permanentDeleteDialog, setPermanentDeleteDialog] = useState<{ id: string; number: string } | null>(null);
   const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false);
   const [permanentDeleteError, setPermanentDeleteError] = useState<string | null>(null);
+  const [deleteModalVoucher, setDeleteModalVoucher] = useState<any | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   // Pagination state
@@ -455,6 +459,33 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
     } finally {
       setIsPermanentlyDeleting(false);
     }
+  };
+
+  const handleSafeDeleteFromModal = async (reason: string) => {
+    if (!deleteModalVoucher) return;
+    const v = deleteModalVoucher;
+    if (v.status === 'POSTED') {
+      await api.cancelVoucher(v.voucher_id, reason);
+      showToast(`Invoice ${v.voucher_number} cancelled.`);
+    } else if (v.status === 'DRAFT') {
+      await api.deleteVoucher(v.voucher_id);
+      showToast(`Draft ${v.voucher_number} deleted.`);
+    } else {
+      await api.hideVoucher(v.voucher_id);
+      showToast(`Invoice ${v.voucher_number} hidden from normal lists.`);
+    }
+    await loadData();
+  };
+
+  const handlePermanentDeleteFromModal = async (reason: string) => {
+    if (!deleteModalVoucher) return;
+    const v = deleteModalVoucher;
+    await api.deleteVoucher(v.voucher_id, {
+      permanentDelete: true,
+      reason
+    });
+    showToast(`Invoice ${v.voucher_number} permanently deleted.`);
+    await loadData();
   };
 
   return (
@@ -1210,52 +1241,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                             )}
 
                             {isDraft && (
-                              <>
-                                <button
-                                  onClick={() => { setActionMenuId(null); handlePostDraft(v.voucher_id); }}
-                                  style={{
-                                    width: '100%',
-                                    padding: '8px 12px',
-                                    background: 'none',
-                                    border: 'none',
-                                    textAlign: 'left',
-                                    fontSize: '12px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    cursor: 'pointer',
-                                    color: '#10B981'
-                                  }}
-                                >
-                                  <CheckCircle2 size={13} /> Post Invoice
-                                </button>
-                                <button
-                                  onClick={() => { setActionMenuId(null); handleDeleteDraft(v.voucher_id); }}
-                                  style={{
-                                    width: '100%',
-                                    padding: '8px 12px',
-                                    background: 'none',
-                                    border: 'none',
-                                    textAlign: 'left',
-                                    fontSize: '12px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    cursor: 'pointer',
-                                    color: '#EF4444'
-                                  }}
-                                >
-                                  <Trash2 size={13} /> Delete Draft
-                                </button>
-                              </>
-                            )}
-
-                            {isPosted && (
                               <button
-                                onClick={() => {
-                                  setActionMenuId(null);
-                                  setCancelDialog({ id: v.voucher_id, number: v.voucher_number || 'Invoice' });
-                                }}
+                                onClick={() => { setActionMenuId(null); handlePostDraft(v.voucher_id); }}
                                 style={{
                                   width: '100%',
                                   padding: '8px 12px',
@@ -1267,20 +1254,16 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                                   alignItems: 'center',
                                   gap: '8px',
                                   cursor: 'pointer',
-                                  color: '#EF4444'
+                                  color: '#10B981'
                                 }}
                               >
-                                <X size={13} /> Cancel Invoice
+                                <CheckCircle2 size={13} /> Post Invoice
                               </button>
                             )}
 
-                            {isCancelled && (
+                            {onEditVoucher && (v.status === 'POSTED' || v.status === 'DRAFT') && (
                               <button
-                                onClick={() => {
-                                  setActionMenuId(null);
-                                  setPermanentDeleteDialog({ id: v.voucher_id, number: v.voucher_number || 'Invoice' });
-                                  setPermanentDeleteError(null);
-                                }}
+                                onClick={() => { onEditVoucher(v.voucher_id); setActionMenuId(null); }}
                                 style={{
                                   width: '100%',
                                   padding: '8px 12px',
@@ -1292,12 +1275,34 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                                   alignItems: 'center',
                                   gap: '8px',
                                   cursor: 'pointer',
-                                  color: '#EF4444'
+                                  color: 'var(--text-primary)'
                                 }}
                               >
-                                <Trash2 size={13} /> Permanently Delete
+                                <FileText size={13} /> Edit Invoice
                               </button>
                             )}
+
+                            <button
+                              onClick={() => {
+                                setDeleteModalVoucher(v);
+                                setActionMenuId(null);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                background: 'none',
+                                border: 'none',
+                                textAlign: 'left',
+                                fontSize: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                cursor: 'pointer',
+                                color: 'var(--danger-red, #EF4444)'
+                              }}
+                            >
+                              <Trash2 size={13} /> Delete / Cancel...
+                            </button>
                           </div>
                         )}
                       </td>
@@ -1745,6 +1750,16 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
           {toast}
         </div>
       )}
+
+      {/* Explicit Delete vs Permanent Delete Modal */}
+      <VoucherDeleteOptionsModal
+        isOpen={!!deleteModalVoucher}
+        voucher={deleteModalVoucher}
+        userRole="ADMIN"
+        onClose={() => setDeleteModalVoucher(null)}
+        onSafeDelete={handleSafeDeleteFromModal}
+        onPermanentDelete={handlePermanentDeleteFromModal}
+      />
     </div>
   );
 };

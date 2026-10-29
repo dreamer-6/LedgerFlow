@@ -231,31 +231,38 @@ export const BusinessSwitcherModal: React.FC<BusinessSwitcherModalProps> = ({
                 })}
               </div>
 
-              {/* Add New Business Button */}
+              {/* Add New Business Button - Opens full multi-step setup matching login */}
               <button
                 type="button"
                 onClick={() => {
+                  onClose();
+                  sessionStorage.setItem('lf_onboarding_pending', 'true');
+                  sessionStorage.setItem('lf_is_new_business', 'true');
+                  sessionStorage.removeItem('lf_onboarding_draft');
                   if (onStartNewBusiness) {
-                    onClose();
                     onStartNewBusiness();
                   } else {
-                    setView('CREATE');
-                    setError(null);
+                    window.location.href = '/business-setup?step=1';
                   }
                 }}
                 className="btn-secondary"
                 style={{
                   width: '100%',
-                  padding: '10px',
+                  padding: '11px',
                   borderRadius: '8px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: '8px',
-                  fontWeight: 600
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  backgroundColor: 'var(--color-surface, #ffffff)',
+                  border: '1px solid var(--border-color, #e2e8f0)',
+                  color: 'var(--color-primary, #ff641f)',
+                  cursor: 'pointer'
                 }}
               >
-                <Plus size={15} />
+                <Plus size={16} />
                 <span>+ Register Another Business</span>
               </button>
             </div>

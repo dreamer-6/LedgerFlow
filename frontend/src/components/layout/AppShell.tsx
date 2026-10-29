@@ -15,8 +15,8 @@ export interface AppShellProps {
   setVoucherInitialType?: (type: string) => void;
   mastersSubTab?: string;
   setMastersSubTab?: (tab: string) => void;
-  salesViewMode?: 'dashboard' | 'create';
-  setSalesViewMode?: (mode: 'dashboard' | 'create') => void;
+  salesViewMode?: 'dashboard' | 'create' | 'register' | 'view_invoice' | 'return';
+  setSalesViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view_invoice' | 'return') => void;
   quotationViewMode?: 'dashboard' | 'create';
   setQuotationViewMode?: (mode: 'dashboard' | 'create') => void;
   purchaseViewMode?: 'dashboard' | 'create';

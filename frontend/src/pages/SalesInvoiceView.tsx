@@ -19,7 +19,7 @@ import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { api, Company, FinancialYear } from '../api/client';
 import { InvoicePrintModal } from './InvoicePrintModal';
-import { QuickCustomerModal, QuickItemModal } from '../components/accounting';
+import { QuickCustomerModal, QuickItemModal, SerialPickerModal } from '../components/accounting';
 import {
   ArrowLeft,
   Plus,
@@ -39,7 +39,10 @@ import {
   Eye,
   MessageCircle,
   Mail,
-  Truck
+  Truck,
+  Barcode,
+  CreditCard,
+  ShieldCheck
 } from 'lucide-react';
 
 /* ─────────────────────────────────────────────
@@ -136,10 +139,10 @@ export interface LineItem {
   description: string;
   subtext?: string;
   hsnSac: string;
-  quantity: number;
+  quantity: number | string;
   unit: string;
-  rate: number;
-  discountPercent: number;
+  rate: number | string;
+  discountPercent: number | string;
   gstRate: number;
   godownId: string;
   serialNumber?: string;
@@ -148,6 +151,9 @@ export interface LineItem {
   stockLoading?: boolean;
   stockError?: string | null;
   isInventoryTracked?: boolean;
+  sku?: string;
+  warrantyMonths?: number;
+  hasSerialNo?: boolean;
 }
 
 const emptyLine = (): LineItem => ({
@@ -157,12 +163,15 @@ const emptyLine = (): LineItem => ({
   hsnSac: '',
   quantity: 1,
   unit: 'NOS',
-  rate: 0,
+  rate: '',
   discountPercent: 0,
   gstRate: 18,
   godownId: '',
   serialNumber: '',
-  isService: false
+  isService: false,
+  sku: '',
+  warrantyMonths: 0,
+  hasSerialNo: false
 });
 
 function calcLineAmounts(line: LineItem, taxMode: 'EXCLUSIVE' | 'INCLUSIVE') {
@@ -206,7 +215,8 @@ const Combobox: React.FC<{
   onAddNew?: () => void;
   addNewLabel?: string;
   style?: React.CSSProperties;
-}> = ({ value, items, placeholder = 'Search…', onSelect, onClear, onAddNew, addNewLabel, style }) => {
+  inputId?: string;
+}> = ({ value, items, placeholder = 'Search…', onSelect, onClear, onAddNew, addNewLabel, style, inputId }) => {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [highlightIdx, setHighlightIdx] = useState<number>(-1);
@@ -316,6 +326,7 @@ const Combobox: React.FC<{
     <div ref={ref} style={{ position: 'relative', width: '100%', ...style }}>
       <div style={{ position: 'relative' }}>
         <input
+          id={inputId}
           type="text"
           className="lf-input"
           placeholder={selected ? selected.label : placeholder}
@@ -465,6 +476,7 @@ export interface SalesInvoiceViewProps {
   activeFy: FinancialYear | null;
   currentDate?: string;
   initialQuotation?: any;
+  editVoucherId?: string | null;
   onBack: () => void;
   onPostSuccess: (voucherId: string) => void;
 }
@@ -474,6 +486,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
   activeFy,
   currentDate,
   initialQuotation,
+  editVoucherId,
   onBack,
   onPostSuccess
 }) => {
@@ -504,6 +517,15 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
   );
   const [notes, setNotes] = useState('Thank you for your business!');
   const [taxMode, setTaxMode] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('INCLUSIVE');
+
+  // Payment Mode & Settlement (Phase 4)
+  const [paymentMode, setPaymentMode] = useState<'CREDIT' | 'CASH' | 'BANK' | 'UPI'>('CASH');
+  const [settlementAmount, setSettlementAmount] = useState<number>(0);
+  const [isSettlementManuallyEdited, setIsSettlementManuallyEdited] = useState(false);
+
+  // Serial Selection Modal State (Phase 1)
+  const [showSerialModal, setShowSerialModal] = useState<boolean>(false);
+  const [activeSerialRowIdx, setActiveSerialRowIdx] = useState<number | null>(null);
 
   /* ── Line Items ── */
   const [lines, setLines] = useState<LineItem[]>([emptyLine()]);
@@ -567,8 +589,9 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     load();
   }, []);
 
-  /* ── Fetch Next Voucher Number ── */
+  /* ── Fetch Next Voucher Number (Only for New Invoices) ── */
   useEffect(() => {
+    if (editVoucherId) return;
     const fetchNext = async () => {
       if (!company || !activeFy) return;
       try {
@@ -579,7 +602,50 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
       }
     };
     fetchNext();
-  }, [company, activeFy]);
+  }, [company, activeFy, editVoucherId]);
+
+  /* ── Load Existing Voucher for Editing (Amendment / Draft Update) ── */
+  useEffect(() => {
+    if (!editVoucherId) return;
+    api.getVoucherById(editVoucherId)
+      .then(({ voucher, lines: vLines }) => {
+        setVoucherNumber(voucher.voucher_number || '');
+        setVoucherDate(voucher.voucher_date || '');
+        if (voucher.due_date) setDueDate(voucher.due_date);
+        setPartyId(voucher.party_id || '');
+        if (voucher.place_of_supply) setPlaceOfSupply(voucher.place_of_supply);
+        setPaymentMode(voucher.payment_mode || 'CASH');
+        setPaymentTerms(voucher.payment_terms ? voucher.payment_terms.replace(/\D/g, '') : '30');
+        setReferenceNo(voucher.reference_number || '');
+        setNarration(voucher.narration || '');
+        setTermsAndCond(voucher.terms_conditions || voucher.terms_and_conditions || termsAndCond);
+
+        if (vLines && vLines.length > 0) {
+          setLines(
+            vLines.map((l: any, idx: number) => ({
+              id: `line_${idx}_${Date.now()}`,
+              itemId: l.item_id || '',
+              description: l.description || '',
+              godownId: l.godown_id || '',
+              quantity: Number(l.quantity) || 1,
+              unit: l.unit_symbol || l.unit || 'NOS',
+              hsnSac: l.hsn_sac || '',
+              rate: (Number(l.rate_paise) || 0) / 100,
+              rateInclTax: 0,
+              discountPercent: Number(l.discount_percent) || 0,
+              gstRate: Number(l.gst_rate) || 18,
+              serialNumber: l.serial_number || '',
+              warrantyMonths: Number(l.warranty_months) || 0,
+              isService: Boolean(l.is_service)
+            }))
+          );
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load voucher for editing:', err);
+        setError('Failed to load voucher for editing');
+      });
+  }, [editVoucherId]);
 
   /* ── Prepopulate from Initial Quotation (UI-010 Conversion) ── */
   useEffect(() => {
@@ -685,9 +751,10 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     const sellRate = item.selling_rate_paise ? item.selling_rate_paise / 100 : 0;
     const gstRate = item.gst_rate ?? 18;
     const chosenGodown = lines[lineIndex]?.godownId || defaultGodown;
+    const hasSerial = Boolean(item.has_serial_no || (item.serial_numbers && item.serial_numbers.trim()));
 
-    setLines(prev =>
-      prev.map((l, i) =>
+    setLines(prev => {
+      const updated = prev.map((l, i) =>
         i === lineIndex
           ? {
               ...l,
@@ -699,15 +766,37 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
               rate: taxMode === 'INCLUSIVE' ? sellRate * (1 + gstRate / 100) : sellRate,
               gstRate,
               godownId: chosenGodown,
+              sku: item.sku || '',
+              warrantyMonths: item.warranty_months || 0,
+              hasSerialNo: hasSerial,
+              serialNumber: '',
               stockLoading: true,
               stockError: null
             }
           : l
-      )
-    );
+      );
+
+      // Tally-Style rapid item entry: Auto-append blank row if current line is the last line
+      if (lineIndex === prev.length - 1) {
+        return [
+          ...updated,
+          {
+            ...emptyLine(),
+            godownId: defaultGodown
+          }
+        ];
+      }
+      return updated;
+    });
 
     // Authoritative stock balance fetch
     fetchStockForLine(lineIndex, item.item_id, chosenGodown);
+
+    // Auto-advance focus to quantity input
+    setTimeout(() => {
+      const qtyInput = document.getElementById(`sales-qty-${lineIndex}`);
+      if (qtyInput) (qtyInput as HTMLInputElement).focus();
+    }, 50);
   };
 
   const handleGodownChange = (lineIndex: number, newGodownId: string) => {
@@ -754,9 +843,23 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     return { subtotal, discountTotal, taxable, taxTotal, grandTotal };
   }, [lines, taxMode]);
 
+  // Auto-sync settlement amount with grand total unless user manually adjusted
+  useEffect(() => {
+    if (!isSettlementManuallyEdited && paymentMode !== 'CREDIT') {
+      setSettlementAmount(totals.grandTotal);
+    }
+  }, [totals.grandTotal, paymentMode, isSettlementManuallyEdited]);
+
   /* ── Build Voucher Payload ── */
   const buildPayload = (status: 'DRAFT' | 'POSTED') => {
     const validLines = lines.filter(l => l.itemId && Number(l.quantity) > 0 && Number(l.rate) >= 0);
+
+    const immediatePay = (status === 'POSTED' && paymentMode !== 'CREDIT' && settlementAmount > 0)
+      ? {
+          mode: paymentMode as 'CASH' | 'BANK' | 'UPI',
+          amountPaise: Math.round(settlementAmount * 100)
+        }
+      : undefined;
 
     return {
       voucherType: 'SALES',
@@ -765,6 +868,8 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
       partyId: partyId || undefined,
       placeOfSupply: `${placeOfSupply}`,
       paymentTerms: paymentTerms ? `${paymentTerms} Days` : undefined,
+      paymentMode,
+      immediatePayment: immediatePay,
       referenceNumber: referenceNo || undefined,
       narration: narration || notes || undefined,
       termsConditions: termsAndCond || undefined,
@@ -780,6 +885,8 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
         gstRate: Number(l.gstRate),
         isTaxInclusive: taxMode === 'INCLUSIVE',
         serialNumber: l.serialNumber || undefined,
+        warrantyMonths: l.warrantyMonths || undefined,
+        isService: Boolean(l.isService || (l.hsnSac && l.hsnSac.startsWith('99')) || (l.description && l.description.toLowerCase().includes('service'))),
         movementType: 'OUT'
       }))
     };
@@ -795,8 +902,13 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     }
     setIsSaving(true);
     try {
-      const res = await api.postVoucher(payload);
-      showToast(`Draft ${res.voucherNumber || ''} saved successfully.`);
+      if (editVoucherId) {
+        await api.updateVoucher(editVoucherId, payload);
+        showToast(`Draft ${voucherNumber || ''} updated successfully.`);
+      } else {
+        const res = await api.postVoucher(payload);
+        showToast(`Draft ${res.voucherNumber || ''} saved successfully.`);
+      }
       onBack();
     } catch (err: any) {
       setError(err.message || 'Failed to save draft invoice');
@@ -819,9 +931,21 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     }
     setIsSaving(true);
     try {
-      const res = await api.postVoucher(payload);
-      showToast(`Invoice ${res.voucherNumber || ''} posted successfully!`);
-      onPostSuccess(res.voucherId);
+      let finalVchId = editVoucherId;
+      if (editVoucherId) {
+        const res = await api.updateVoucher(editVoucherId, payload);
+        showToast(`Sales Invoice ${voucherNumber || ''} updated successfully!`);
+        finalVchId = res.voucherId || editVoucherId;
+      } else {
+        const res = await api.postVoucher(payload);
+        if (res.settlementVoucherNumber) {
+          showToast(`Sales Invoice ${res.voucherNumber || ''} posted & settled via ${res.settlementVoucherNumber} (${paymentMode})!`);
+        } else {
+          showToast(`Invoice ${res.voucherNumber || ''} posted successfully!`);
+        }
+        finalVchId = res.voucherId;
+      }
+      onPostSuccess(finalVchId!);
     } catch (err: any) {
       setError(err.message || 'Failed to post invoice');
     } finally {
@@ -886,7 +1010,9 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
           cgst_amount_paise: isInterState ? 0 : Math.round((taxAmt / 2) * 100),
           sgst_amount_paise: isInterState ? 0 : Math.round((taxAmt / 2) * 100),
           igst_amount_paise: isInterState ? Math.round(taxAmt * 100) : 0,
-          total_amount_paise: Math.round(lineTotal * 100)
+          total_amount_paise: Math.round(lineTotal * 100),
+          serial_number: l.serialNumber || undefined,
+          warranty_months: l.warrantyMonths || itemObj?.warranty_months || undefined
         };
       })
     };
@@ -992,13 +1118,13 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
           </button>
           <div>
             <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginBottom: '2px' }}>
-              Sales &rsaquo; Sales Invoice &rsaquo; <span style={{ color: '#FF6B2B' }}>Create</span>
+              Sales &rsaquo; Sales Invoice &rsaquo; <span style={{ color: '#FF6B2B' }}>{editVoucherId ? 'Edit' : 'Create'}</span>
             </div>
             <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-              Sales Invoice
+              {editVoucherId ? 'Edit Sales Invoice' : 'Sales Invoice'}
             </h1>
             <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: '2px 0 0' }}>
-              Create and issue a sales invoice to your customer.
+              {editVoucherId ? 'Modify invoice details and save or amend double-entry postings.' : 'Create and issue a sales invoice to your customer.'}
             </p>
           </div>
         </div>
@@ -1354,6 +1480,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                         <td style={{ padding: '6px 8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <Combobox
+                              inputId={`sales-item-${idx}`}
                               value={line.itemId}
                               items={itemComboItems}
                               placeholder="Search item or type to add new…"
@@ -1392,6 +1519,55 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                               {line.subtext || (line.isService ? 'Service' : 'Product')}
                             </div>
                           )}
+
+                          {/* Stock Details: SKU & Warranty Badge (Phase 1) */}
+                          {(line.sku || (line.warrantyMonths !== undefined && line.warrantyMonths > 0)) && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', flexWrap: 'wrap', paddingLeft: '4px' }}>
+                              {line.sku && (
+                                <span style={{ fontSize: '10.5px', color: '#64748B', backgroundColor: 'rgba(100,116,139,0.1)', padding: '1px 5px', borderRadius: '4px' }}>
+                                  SKU: {line.sku}
+                                </span>
+                              )}
+                              {line.warrantyMonths !== undefined && line.warrantyMonths > 0 && (
+                                <span style={{ fontSize: '10.5px', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '1px 5px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                  <ShieldCheck size={11} /> {line.warrantyMonths}m Warranty
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Unit-level Serial Selection Trigger (Phase 1) */}
+                          {line.hasSerialNo && (
+                            <div style={{ marginTop: '4px', paddingLeft: '4px' }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveSerialRowIdx(idx);
+                                  setShowSerialModal(true);
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  color: line.serialNumber ? '#16A34A' : '#EA580C',
+                                  backgroundColor: line.serialNumber ? '#DCFCE7' : '#FFEDD5',
+                                  border: '1px solid ' + (line.serialNumber ? '#86EFAC' : '#FDBA74'),
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <Barcode size={12} />
+                                {line.serialNumber
+                                  ? `✓ ${line.serialNumber.split(',').filter(Boolean).length} Serials Selected`
+                                  : `Select Unit Serials (${line.quantity || 1}) *`}
+                              </button>
+                            </div>
+                          )}
+
                           {line.itemId && (
                             <div style={{ marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', paddingLeft: '4px' }}>
                               {line.stockLoading ? (
@@ -1451,23 +1627,49 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                         </td>
                         <td style={{ padding: '6px 8px', textAlign: 'center' }}>
                           <input
+                            id={`sales-qty-${idx}`}
                             type="number"
                             className="lf-input"
                             value={line.quantity}
                             min="1"
                             step="1"
                             onChange={e => updateLine(idx, 'quantity', e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const rateEl = document.getElementById(`sales-rate-${idx}`);
+                                if (rateEl) (rateEl as HTMLInputElement).focus();
+                              }
+                            }}
                             style={{ width: '64px', textAlign: 'center', fontFamily: 'var(--font-mono)' }}
                           />
                         </td>
                         <td style={{ padding: '6px 8px' }}>
                           <input
+                            id={`sales-rate-${idx}`}
                             type="number"
                             className="lf-input"
                             value={line.rate}
                             min="0"
                             step="0.01"
                             onChange={e => updateLine(idx, 'rate', e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (line.itemId && Number(line.quantity) > 0) {
+                                  if (idx === lines.length - 1) {
+                                    addRow(false);
+                                    setTimeout(() => {
+                                      const nextItemEl = document.getElementById(`sales-item-${idx + 1}`);
+                                      if (nextItemEl) (nextItemEl as HTMLInputElement).focus();
+                                    }, 50);
+                                  } else {
+                                    const nextItemEl = document.getElementById(`sales-item-${idx + 1}`);
+                                    if (nextItemEl) (nextItemEl as HTMLInputElement).focus();
+                                  }
+                                }
+                              }
+                            }}
                             style={{ width: '100px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}
                           />
                         </td>
@@ -1642,6 +1844,111 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
             </div>
           </div>
 
+          {/* Card 2.5: Payment & Immediate Settlement (Phase 4) */}
+          <div className="ledger-card" style={{ padding: '18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+              <div
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(16,185,129,0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#10B981'
+                }}
+              >
+                <CreditCard size={13} />
+              </div>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Payment &amp; Settlement
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {/* Mode Buttons */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', backgroundColor: 'var(--bg-subtle, #F1F5F9)', padding: '3px', borderRadius: '6px' }}>
+                {(['CASH', 'UPI', 'BANK', 'CREDIT'] as const).map(mode => {
+                  const active = paymentMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        setPaymentMode(mode);
+                        setIsSettlementManuallyEdited(false);
+                        if (mode !== 'CREDIT') {
+                          setSettlementAmount(totals.grandTotal);
+                        } else {
+                          setSettlementAmount(0);
+                        }
+                      }}
+                      style={{
+                        padding: '6px 2px',
+                        fontSize: '11px',
+                        fontWeight: active ? 700 : 500,
+                        borderRadius: '4px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        backgroundColor: active ? (mode === 'CREDIT' ? '#64748B' : '#10B981') : 'transparent',
+                        color: active ? '#FFFFFF' : 'var(--text-muted)',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {mode}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {paymentMode === 'CREDIT' ? (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', padding: '8px 10px', backgroundColor: 'var(--bg-subtle, #F8FAFC)', borderRadius: '6px', lineHeight: 1.4 }}>
+                  ℹ️ Bill will be saved on credit. Customer ledger will reflect outstanding balance without immediate receipt.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                      Settlement Amount (₹)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSettlementManuallyEdited(false);
+                        setSettlementAmount(totals.grandTotal);
+                      }}
+                      style={{ fontSize: '10.5px', color: '#10B981', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                    >
+                      Full Amount
+                    </button>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    max={totals.grandTotal}
+                    step="0.01"
+                    className="lf-input"
+                    value={settlementAmount}
+                    onChange={e => {
+                      setIsSettlementManuallyEdited(true);
+                      setSettlementAmount(Math.max(0, Number(e.target.value) || 0));
+                    }}
+                    style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}
+                  />
+                  <div style={{ fontSize: '10.5px', color: '#059669', backgroundColor: '#ECFDF5', padding: '6px 8px', borderRadius: '4px', lineHeight: 1.3 }}>
+                    ✓ Atomically posts linked RECEIPT voucher via {paymentMode} with AGAINST_REF allocation.
+                    {settlementAmount < totals.grandTotal && (
+                      <span style={{ display: 'block', color: '#D97706', marginTop: '2px' }}>
+                        Partial settlement: ₹ {(totals.grandTotal - settlementAmount).toLocaleString('en-IN')} remains unpaid.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Other Information Card */}
           <div className="ledger-card" style={{ padding: '18px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '12px' }}>
@@ -1784,6 +2091,24 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
           showToast(`Item '${newItem.item_name}' created and selected!`);
         }}
       />
+
+      {/* Unit-Level Serial Picker Modal (Phase 1) */}
+      {showSerialModal && activeSerialRowIdx !== null && lines[activeSerialRowIdx] && (
+        <SerialPickerModal
+          isOpen={showSerialModal}
+          mode="SALES"
+          itemId={lines[activeSerialRowIdx].itemId}
+          itemName={lines[activeSerialRowIdx].description || 'Selected Item'}
+          currentQuantity={Number(lines[activeSerialRowIdx].quantity) || 1}
+          initialSerials={lines[activeSerialRowIdx].serialNumber ? lines[activeSerialRowIdx].serialNumber.split(',').map(s => s.trim()).filter(Boolean) : []}
+          warrantyMonths={lines[activeSerialRowIdx].warrantyMonths || 0}
+          onConfirm={(serials) => {
+            updateLine(activeSerialRowIdx, 'serialNumber', serials.join(', '));
+            setShowSerialModal(false);
+          }}
+          onClose={() => setShowSerialModal(false)}
+        />
+      )}
     </div>
   );
 };

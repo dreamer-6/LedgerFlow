@@ -26,6 +26,7 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
   // Codes & Classification
   const [hsnSac, setHsnSac] = useState('');
   const [gstRate, setGstRate] = useState<number>(18);
+  const [warrantyMonths, setWarrantyMonths] = useState<number>(0);
 
   // Inventory Details
   const [openingQty, setOpeningQty] = useState('0.00');
@@ -72,7 +73,8 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
           setUnits(unList || []);
           setGodowns(gdList || []);
           if (unList && unList.length > 0) {
-            setUnitId(unList[0].unit_id);
+            const nosUnit = unList.find(u => u.symbol?.toUpperCase() === 'NOS' || u.unit_name?.toLowerCase().includes('nos') || u.unit_name?.toLowerCase().includes('number'));
+            setUnitId(nosUnit ? nosUnit.unit_id : unList[0].unit_id);
           }
           if (gdList && gdList.length > 0) {
             const defGd = gdList.find((g: any) => g.is_default) || gdList[0];
@@ -121,6 +123,7 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
         unitId: unitId || (units[0]?.unit_id ?? 'unit_nos'),
         hsnSac: hsnSac.trim() || (itemType === 'Service' ? '9987' : '8443'),
         gstRate: Number(gstRate),
+        warrantyMonths: Number(warrantyMonths || 0),
         purchaseRatePaise,
         sellingRatePaise,
         openingQty: parsedQty,
@@ -137,6 +140,7 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
         hsn_sac: payload.hsnSac,
         unit_id: payload.unitId,
         gst_rate: payload.gstRate,
+        warranty_months: payload.warrantyMonths,
         purchase_rate_paise: purchaseRatePaise,
         selling_rate_paise: sellingRatePaise,
         opening_qty: parsedQty,
@@ -487,6 +491,33 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
                   <option value={5}>5% (CGST 2.5% + SGST 2.5%)</option>
                   <option value={28}>28% (CGST 14% + SGST 14%)</option>
                   <option value={0}>0% (Exempt)</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: 'var(--text-secondary, #374151)',
+                    display: 'block',
+                    marginBottom: '4px'
+                  }}
+                >
+                  Warranty (Standard) <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>(Optional)</span>
+                </label>
+                <select
+                  className="lf-input"
+                  value={warrantyMonths}
+                  onChange={(e) => setWarrantyMonths(Number(e.target.value))}
+                  style={{ width: '100%', fontSize: '13px' }}
+                >
+                  <option value={0}>No Warranty (N/A)</option>
+                  <option value={3}>3 Months</option>
+                  <option value={6}>6 Months</option>
+                  <option value={12}>12 Months (1 Year)</option>
+                  <option value={24}>24 Months (2 Years)</option>
+                  <option value={36}>36 Months (3 Years)</option>
                 </select>
               </div>
             </div>

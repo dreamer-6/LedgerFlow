@@ -29,6 +29,9 @@ import { ServiceBillsDashboardView } from './pages/ServiceBillsDashboardView';
 import { ServiceBillCreationView } from './pages/ServiceBillCreationView';
 import { SalesView } from './pages/SalesView';
 import { SalesInvoiceView } from './pages/SalesInvoiceView';
+import { SalesRegisterView } from './pages/SalesRegisterView';
+import { IndividualSalesInvoiceView } from './pages/IndividualSalesInvoiceView';
+import { SalesReturnView } from './pages/SalesReturnView';
 import { PurchaseView } from './pages/PurchaseView';
 import { PurchaseInvoiceView } from './pages/PurchaseInvoiceView';
 import { ReceiptsView } from './pages/ReceiptsView';
@@ -113,7 +116,9 @@ export const App: React.FC = () => {
 
   // Tab & View States
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [salesViewMode, setSalesViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [salesViewMode, setSalesViewMode] = useState<'dashboard' | 'create' | 'register' | 'view_invoice' | 'return'>('dashboard');
+  const [selectedInvoiceViewId, setSelectedInvoiceViewId] = useState<string | null>(null);
+  const [salesEditVoucherId, setSalesEditVoucherId] = useState<string | null>(null);
   const [purchaseViewMode, setPurchaseViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [receiptViewMode, setReceiptViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [paymentViewMode, setPaymentViewMode] = useState<'dashboard' | 'create'>('dashboard');
@@ -848,7 +853,7 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* 1.1 Sales Module (UI-006) — Sales Dashboard & Sales Invoice Creation */}
+          {/* 1.1 Sales Module — Dashboard, Register, Invoice View, Return, and Create/Edit */}
           {activeTab === 'sales' && (
             <div key="sales" className="view-container-animated">
               {salesViewMode === 'dashboard' ? (
@@ -857,9 +862,69 @@ export const App: React.FC = () => {
                   activeFy={activeFy}
                   onCreateInvoice={() => {
                     setConvertedQuotation(null);
+                    setSalesEditVoucherId(null);
                     setSalesViewMode('create');
                   }}
-                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                  onOpenRegister={() => setSalesViewMode('register')}
+                  onOpenReturn={() => setSalesViewMode('return')}
+                  onViewVoucher={(id) => {
+                    setSelectedInvoiceViewId(id);
+                    setSalesViewMode('view_invoice');
+                  }}
+                  onEditVoucher={(id) => {
+                    setSalesEditVoucherId(id);
+                    setSalesViewMode('create');
+                  }}
+                  onNavigateTab={(tab, sub) => {
+                    setActiveTab(tab);
+                    if (sub) setReportSubTab(sub);
+                  }}
+                />
+              ) : salesViewMode === 'register' ? (
+                <SalesRegisterView
+                  company={company}
+                  activeFy={activeFy}
+                  onCreateInvoice={() => {
+                    setConvertedQuotation(null);
+                    setSalesEditVoucherId(null);
+                    setSalesViewMode('create');
+                  }}
+                  onViewInvoice={(id) => {
+                    setSelectedInvoiceViewId(id);
+                    setSalesViewMode('view_invoice');
+                  }}
+                  onEditInvoice={(id) => {
+                    setSalesEditVoucherId(id);
+                    setSalesViewMode('create');
+                  }}
+                  onPrintInvoice={(id) => setActivePrintVoucherId(id)}
+                  onNavigateTab={(tab, sub) => {
+                    setActiveTab(tab);
+                    if (sub) setReportSubTab(sub);
+                  }}
+                />
+              ) : salesViewMode === 'view_invoice' ? (
+                <IndividualSalesInvoiceView
+                  invoiceId={selectedInvoiceViewId || ''}
+                  company={company}
+                  onBack={() => setSalesViewMode('register')}
+                  onEdit={(id) => {
+                    setSalesEditVoucherId(id);
+                    setSalesViewMode('create');
+                  }}
+                  onRecordPayment={(voucherId, partyId, _bal) => {
+                    (window as any)._preselectedReceiptRefId = voucherId;
+                    (window as any)._preselectedReceiptPartyId = partyId;
+                    setActiveTab('receipts');
+                    setReceiptViewMode('create');
+                  }}
+                />
+              ) : salesViewMode === 'return' ? (
+                <SalesReturnView
+                  company={company}
+                  activeFy={activeFy}
+                  currentDate={currentDate}
+                  onPostSuccess={(id) => setActivePrintVoucherId(id)}
                   onNavigateTab={(tab, sub) => {
                     setActiveTab(tab);
                     if (sub) setReportSubTab(sub);
@@ -871,14 +936,17 @@ export const App: React.FC = () => {
                   activeFy={activeFy}
                   currentDate={currentDate}
                   initialQuotation={convertedQuotation}
+                  editVoucherId={salesEditVoucherId}
                   onBack={() => {
                     setConvertedQuotation(null);
-                    setSalesViewMode('dashboard');
+                    setSalesEditVoucherId(null);
+                    setSalesViewMode('register');
                   }}
                   onPostSuccess={(voucherId) => {
                     setConvertedQuotation(null);
+                    setSalesEditVoucherId(null);
                     setActivePrintVoucherId(voucherId);
-                    setSalesViewMode('dashboard');
+                    setSalesViewMode('register');
                   }}
                 />
               )}
@@ -1424,6 +1492,49 @@ export const App: React.FC = () => {
                     (window as any)._preselectedLedgerName = partyName;
                     setReportSubTab('ledger');
                     setActiveTab('reports');
+                  }}
+                />
+              ) : reportSubTab === 'sales_register' ? (
+                <SalesRegisterView
+                  company={company}
+                  activeFy={activeFy}
+                  onCreateInvoice={() => {
+                    setActiveTab('sales');
+                    setSalesEditVoucherId(null);
+                    setSalesViewMode('create');
+                  }}
+                  onViewInvoice={(id) => {
+                    setSelectedInvoiceViewId(id);
+                    setActiveTab('sales');
+                    setSalesViewMode('view_invoice');
+                  }}
+                  onEditInvoice={(id) => {
+                    setSalesEditVoucherId(id);
+                    setActiveTab('sales');
+                    setSalesViewMode('create');
+                  }}
+                  onPrintInvoice={(id) => setActivePrintVoucherId(id)}
+                  onNavigateTab={(tab, sub) => {
+                    setActiveTab(tab);
+                    if (sub) setReportSubTab(sub);
+                  }}
+                />
+              ) : reportSubTab === 'purchase_register' ? (
+                <PurchaseView
+                  company={company}
+                  activeFy={activeFy}
+                  onCreateInvoice={() => {
+                    setActiveTab('purchase');
+                    setPurchaseViewMode('create');
+                  }}
+                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                  onEditVoucher={(id) => {
+                    setEditVoucherId(id);
+                    setActiveTab('vouchers');
+                  }}
+                  onNavigateTab={(tab, sub) => {
+                    setActiveTab(tab);
+                    if (sub) setReportSubTab(sub);
                   }}
                 />
               ) : (

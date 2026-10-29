@@ -953,14 +953,14 @@ export const GSTReportsView: React.FC<GSTReportsViewProps> = ({
         <div
           style={{
             padding: '12px 16px',
-            backgroundColor: '#fef2f2',
-            border: '1px solid #fecaca',
+            backgroundColor: 'var(--color-danger-bg, #fef2f2)',
+            border: '1px solid var(--color-danger-border, #fecaca)',
             borderRadius: '10px',
             marginBottom: '20px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            color: '#b91c1c',
+            color: 'var(--color-danger-text, #b91c1c)',
             fontSize: '13px'
           }}
         >

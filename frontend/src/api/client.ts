@@ -135,8 +135,16 @@ export interface StockItem {
   created_at?: string;
   serial_numbers?: string | null;
   has_serial_no?: number;
+  warranty_months?: number;
   current_stock?: number;
   total_value_paise?: number;
+}
+
+export interface ItemSerialDetail {
+  serialNumber: string;
+  status: 'AVAILABLE' | 'SOLD';
+  purchaseDate?: string | null;
+  warrantyExpiryDate?: string | null;
 }
 
 export interface GodownBalanceItem {
@@ -259,6 +267,7 @@ export interface CreateStockItemPayload {
   godownId?: string;
   serialNumbers?: string;
   hasSerialNo?: boolean | number;
+  warrantyMonths?: number;
   quantityToAdd?: number;
   allowNegativeStock?: boolean;
   [key: string]: any;
@@ -596,9 +605,14 @@ export const api = {
     };
   },
 
-  async getDashboard(companyId?: string) {
+  async getDashboard(companyId?: string, period?: string, fromDate?: string, toDate?: string, fyId?: string) {
     const targetCompId = companyId || authStorage.getActiveCompanyId() || '';
-    const res = await fetch(`${API_BASE}/reports/dashboard?companyId=${encodeURIComponent(targetCompId)}`, {
+    const params = new URLSearchParams({ companyId: targetCompId });
+    if (period) params.set('period', period);
+    if (fromDate) params.set('fromDate', fromDate);
+    if (toDate) params.set('toDate', toDate);
+    if (fyId) params.set('fyId', fyId);
+    const res = await fetch(`${API_BASE}/reports/dashboard?${params.toString()}`, {
       headers: getHeaders()
     });
     if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
@@ -682,6 +696,23 @@ export const api = {
       headers: getHeaders()
     });
     if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
+  },
+
+  async getStockItem(id: string): Promise<StockItem> {
+    const res = await fetch(`${API_BASE}/masters/items/${encodeURIComponent(id)}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to fetch stock item'));
+    return res.json();
+  },
+
+  async getItemSerials(itemId: string, detailed: boolean = false): Promise<any[]> {
+    const qs = detailed ? '?detailed=true' : '';
+    const res = await fetch(`${API_BASE}/masters/items/${encodeURIComponent(itemId)}/serials${qs}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to fetch serials'));
     return res.json();
   },
 
@@ -951,8 +982,8 @@ export const api = {
   async getSalesVouchers(
     fromDate?: string,
     toDate?: string,
-    statusOrOptions?: string | { includeHidden?: boolean; showCancelled?: boolean },
-    options?: { includeHidden?: boolean; showCancelled?: boolean }
+    statusOrOptions?: string | { includeHidden?: boolean; showCancelled?: boolean; partyId?: string },
+    options?: { includeHidden?: boolean; showCancelled?: boolean; partyId?: string }
   ): Promise<any[]> {
     let status: string | undefined;
     let opts = options;
@@ -965,6 +996,7 @@ export const api = {
     if (fromDate) params.append('fromDate', fromDate);
     if (toDate) params.append('toDate', toDate);
     if (status) params.append('status', status);
+    if (opts?.partyId) params.append('partyId', opts.partyId);
     if (opts?.includeHidden) params.append('includeHidden', 'true');
     if (opts?.showCancelled !== undefined) params.append('showCancelled', String(opts.showCancelled));
     const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
@@ -1069,6 +1101,33 @@ export const api = {
     if (fromDate) params.append('fromDate', fromDate);
     if (toDate) params.append('toDate', toDate);
     if (status) params.append('status', status);
+    if (opts?.includeHidden) params.append('includeHidden', 'true');
+    if (opts?.showCancelled !== undefined) params.append('showCancelled', String(opts.showCancelled));
+    const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
+  },
+
+  async getSalesReturnVouchers(
+    fromDate?: string,
+    toDate?: string,
+    statusOrOptions?: string | { includeHidden?: boolean; showCancelled?: boolean; partyId?: string },
+    options?: { includeHidden?: boolean; showCancelled?: boolean; partyId?: string }
+  ): Promise<any[]> {
+    let status: string | undefined;
+    let opts = options;
+    if (typeof statusOrOptions === 'object' && statusOrOptions !== null) {
+      opts = statusOrOptions;
+    } else if (typeof statusOrOptions === 'string') {
+      status = statusOrOptions;
+    }
+    const params = new URLSearchParams({ type: 'SALES_RETURN' });
+    if (fromDate) params.append('fromDate', fromDate);
+    if (toDate) params.append('toDate', toDate);
+    if (status) params.append('status', status);
+    if (opts?.partyId) params.append('partyId', opts.partyId);
     if (opts?.includeHidden) params.append('includeHidden', 'true');
     if (opts?.showCancelled !== undefined) params.append('showCancelled', String(opts.showCancelled));
     const res = await fetch(`${API_BASE}/vouchers?${params.toString()}`, {

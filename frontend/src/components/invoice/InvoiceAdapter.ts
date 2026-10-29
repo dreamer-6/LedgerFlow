@@ -3,6 +3,7 @@ export interface InvoiceLineItem {
   itemName: string;
   description?: string;
   serialNumber?: string;
+  warrantyMonths?: number;
   hsnSac: string;
   quantity: number;
   unit: string;
@@ -71,6 +72,7 @@ export interface NormalizedInvoiceData {
   subTotal: number;
   taxTotal: number;
   taxBreakdowns: InvoiceTaxBreakdown[];
+  roundOff?: number;
   grandTotal: number;
   amountInWords: string;
   
@@ -98,7 +100,37 @@ export interface InvoiceVisibilityOptions {
   showTerms?: boolean;
   showSignature?: boolean;
   showLedgerflowWordmark?: boolean;
+  warrantyDisplayFormat?: 'Years' | 'Months' | 'Both';
   pageSize?: 'A4' | 'A5_LANDSCAPE' | 'A5_PORTRAIT' | 'THERMAL';
+}
+
+/**
+ * Format warranty months into readable format (Years, Months, Both)
+ * e.g. 12m -> 1 Year, 24m -> 2 Years, 18m -> 1.5 Years
+ */
+export function formatWarrantyDisplay(
+  months?: number | string | null,
+  format: 'Years' | 'Months' | 'Both' = 'Years'
+): string | null {
+  if (months == null) return null;
+  const num = typeof months === 'string' ? parseInt(months, 10) : months;
+  if (isNaN(num) || num <= 0) return null;
+
+  const isExactYears = num % 12 === 0;
+  const yearsVal = num / 12;
+  const yearsStr = isExactYears
+    ? `${yearsVal} ${yearsVal === 1 ? 'Year' : 'Years'}`
+    : `${yearsVal.toFixed(1).replace(/\.0$/, '')} Years`;
+  const monthsStr = `${num} ${num === 1 ? 'Month' : 'Months'}`;
+
+  if (format === 'Months') {
+    return monthsStr;
+  }
+  if (format === 'Both') {
+    return isExactYears ? `${yearsStr} (${monthsStr})` : `${yearsStr} (${monthsStr})`;
+  }
+  // format === 'Years'
+  return num >= 12 ? yearsStr : monthsStr;
 }
 
 export function numberToIndianWords(paiseAmount: number): string {
@@ -186,14 +218,33 @@ export function normalizeInvoiceData(rawVoucherData: any, company: any): Normali
     const taxablePaise = Number(
       line.taxable_amount_paise ?? (line.amount_paise ? line.amount_paise - (line.tax_amount_paise || 0) : qty * ratePaise)
     );
-    const taxRate = Number(line.tax_rate ?? line.tax_percent ?? line.tax_pct ?? 0);
-    const lineTotalPaise = Number(
-      line.total_amount_paise ?? line.amount_paise ?? (taxablePaise + Math.round((taxablePaise * taxRate) / 100))
-    );
 
     const cgstPaise = Number(line.cgst_amount_paise || 0);
     const sgstPaise = Number(line.sgst_amount_paise || 0);
     const igstPaise = Number(line.igst_amount_paise || 0);
+
+    // Accurate Tax Rate calculation: Inspect voucher_line gst_rate, item_gst_rate, or compute from taxes
+    let taxRate = 0;
+    if (line.gst_rate !== undefined && line.gst_rate !== null && line.gst_rate !== '') {
+      taxRate = Number(line.gst_rate);
+    } else if (line.tax_rate !== undefined && line.tax_rate !== null && line.tax_rate !== '') {
+      taxRate = Number(line.tax_rate);
+    } else if (line.tax_percent !== undefined && line.tax_percent !== null && line.tax_percent !== '') {
+      taxRate = Number(line.tax_percent);
+    } else if (line.tax_pct !== undefined && line.tax_pct !== null && line.tax_pct !== '') {
+      taxRate = Number(line.tax_pct);
+    } else if (line.item_gst_rate !== undefined && line.item_gst_rate !== null && line.item_gst_rate !== '') {
+      taxRate = Number(line.item_gst_rate);
+    } else if (taxablePaise > 0) {
+      const lineTaxPaise = cgstPaise + sgstPaise + igstPaise;
+      if (lineTaxPaise > 0) {
+        taxRate = Math.round((lineTaxPaise / taxablePaise) * 100);
+      }
+    }
+
+    const lineTotalPaise = Number(
+      line.total_amount_paise ?? line.amount_paise ?? (taxablePaise + Math.round((taxablePaise * taxRate) / 100))
+    );
 
     totalTaxablePaise += taxablePaise;
     totalCgstPaise += cgstPaise;
@@ -204,11 +255,16 @@ export function normalizeInvoiceData(rawVoucherData: any, company: any): Normali
     const rawUnit = (line.unit_symbol || line.unit_name || line.unit || '').trim();
     const unitDisplay = rawUnit ? rawUnit : '—';
 
+    // Warranty duration in authoritative unit (months)
+    const rawWarranty = line.warranty_months ?? line.item_warranty_months ?? line.warrantyMonths;
+    const warrantyMonths = rawWarranty ? Number(rawWarranty) : undefined;
+
     return {
       index: idx + 1,
       itemName: line.item_name || line.description || 'Item / Service',
       description: line.item_name && line.description && line.description !== line.item_name ? line.description : undefined,
       serialNumber: line.serial_number || undefined,
+      warrantyMonths: warrantyMonths,
       hsnSac: line.hsn_sac || line.hsnSac || '',
       quantity: qty,
       unit: unitDisplay,
@@ -311,6 +367,7 @@ export function normalizeInvoiceData(rawVoucherData: any, company: any): Normali
     subTotal,
     taxTotal,
     taxBreakdowns,
+    roundOff: v.round_off_paise ? Number(v.round_off_paise) / 100 : undefined,
     grandTotal,
     amountInWords: numberToIndianWords(Math.round(grandTotal * 100)),
 

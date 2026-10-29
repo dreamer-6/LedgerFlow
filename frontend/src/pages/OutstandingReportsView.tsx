@@ -490,8 +490,8 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                   right: 0,
                   top: '100%',
                   marginTop: '6px',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid var(--border-color, #e2e8f0)',
+                  backgroundColor: 'var(--color-surface, #ffffff)',
+                  border: '1px solid var(--color-border, #e2e8f0)',
                   borderRadius: 'var(--radius-md, 8px)',
                   boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
                   zIndex: 50,
@@ -499,7 +499,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                   overflow: 'hidden'
                 }}
               >
-                <div style={{ padding: '8px 12px', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted, #64748b)', textTransform: 'uppercase', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ padding: '8px 12px', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted, #64748b)', textTransform: 'uppercase', borderBottom: '1px solid var(--color-border, #f1f5f9)' }}>
                   Choose CSV Format
                 </div>
                 <button
@@ -558,7 +558,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                     fontSize: '13px',
                     color: 'var(--text-primary, #0f172a)',
                     cursor: 'pointer',
-                    borderTop: '1px solid var(--border-subtle, #f1f5f9)'
+                    borderTop: '1px solid var(--color-border, #f1f5f9)'
                   }}
                   onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover, #f8fafc)')}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -625,9 +625,9 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                   padding: '8px 12px 8px 34px',
                   fontSize: '13px',
                   borderRadius: 'var(--radius-md, 8px)',
-                  border: '1px solid var(--border-color, #e2e8f0)',
-                  backgroundColor: '#ffffff',
-                  color: 'var(--text-primary, #0f172a)',
+                  border: '1px solid var(--input-border, var(--border-color, #e2e8f0))',
+                  backgroundColor: 'var(--input-bg, #ffffff)',
+                  color: 'var(--input-text, var(--text-primary, #0f172a))',
                   outline: 'none',
                   boxSizing: 'border-box'
                 }}
@@ -654,9 +654,9 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                 padding: '8px 12px',
                 fontSize: '13px',
                 borderRadius: 'var(--radius-md, 8px)',
-                border: '1px solid var(--border-color, #e2e8f0)',
-                backgroundColor: '#ffffff',
-                color: 'var(--text-primary, #0f172a)',
+                border: '1px solid var(--input-border, var(--border-color, #e2e8f0))',
+                backgroundColor: 'var(--input-bg, #ffffff)',
+                color: 'var(--input-text, var(--text-primary, #0f172a))',
                 outline: 'none',
                 boxSizing: 'border-box'
               }}
@@ -681,9 +681,9 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                 padding: '8px 12px',
                 fontSize: '13px',
                 borderRadius: 'var(--radius-md, 8px)',
-                border: '1px solid var(--border-color, #e2e8f0)',
-                backgroundColor: '#ffffff',
-                color: 'var(--text-primary, #0f172a)',
+                border: '1px solid var(--input-border, var(--border-color, #e2e8f0))',
+                backgroundColor: 'var(--input-bg, #ffffff)',
+                color: 'var(--input-text, var(--text-primary, #0f172a))',
                 outline: 'none',
                 boxSizing: 'border-box'
               }}
@@ -708,9 +708,9 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                 padding: '8px 12px',
                 fontSize: '13px',
                 borderRadius: 'var(--radius-md, 8px)',
-                border: '1px solid var(--border-color, #e2e8f0)',
-                backgroundColor: '#ffffff',
-                color: 'var(--text-primary, #0f172a)',
+                border: '1px solid var(--input-border, var(--border-color, #e2e8f0))',
+                backgroundColor: 'var(--input-bg, #ffffff)',
+                color: 'var(--input-text, var(--text-primary, #0f172a))',
                 outline: 'none',
                 boxSizing: 'border-box'
               }}
@@ -747,17 +747,17 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
               id="outstanding-reset-btn"
               style={{
                 padding: '8px 16px',
-                backgroundColor: '#ffffff',
-                color: 'var(--text-secondary, #475569)',
-                border: '1px solid var(--border-color, #e2e8f0)',
+                backgroundColor: 'var(--color-surface, #ffffff)',
+                color: 'var(--color-text-secondary, #475569)',
+                border: '1px solid var(--color-border, #e2e8f0)',
                 borderRadius: 'var(--radius-md, 8px)',
                 fontWeight: 600,
                 fontSize: '13px',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease'
               }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = '#cbd5e1')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-color, #e2e8f0)')}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-border-strong, #cbd5e1)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border, #e2e8f0)')}
             >
               Reset
             </button>
@@ -765,7 +765,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
         </div>
 
         {ageingBasis === 'Due Date' && (
-          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#b45309', backgroundColor: '#fffbeb', padding: '6px 10px', borderRadius: '6px' }}>
+          <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--color-warning-text, #b45309)', backgroundColor: 'var(--color-warning-bg, #fffbeb)', border: '1px solid var(--color-warning-border, rgba(234, 179, 8, 0.25))', padding: '6px 10px', borderRadius: '6px' }}>
             <Info size={14} />
             <span>Note: LedgerFlow calculates authoritative aging via FIFO against Invoice Dates. Due Date reference follows default invoice grace period.</span>
           </div>
@@ -774,14 +774,14 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
 
       {/* ERROR BANNER */}
       {error && (
-        <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#991b1b', fontSize: '13px' }}>
+        <div style={{ backgroundColor: 'var(--color-danger-bg, #fef2f2)', border: '1px solid var(--color-danger-border, #fecaca)', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--color-danger-text, #991b1b)', fontSize: '13px' }}>
             <AlertTriangle size={18} />
             <span>{error}</span>
           </div>
           <button
             onClick={loadOutstandingData}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', backgroundColor: '#ffffff', border: '1px solid #f87171', borderRadius: '6px', color: '#991b1b', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', backgroundColor: 'var(--color-surface, #ffffff)', border: '1px solid var(--color-danger-border, #f87171)', borderRadius: '6px', color: 'var(--color-danger-text, #991b1b)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
           >
             <RefreshCw size={14} />
             <span>Retry</span>
@@ -957,7 +957,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
             </div>
 
             {/* Search Input Bar */}
-            <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#fcfcfd' }}>
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border, #f1f5f9)', backgroundColor: 'var(--color-surface-secondary, #fcfcfd)' }}>
               <div style={{ position: 'relative' }}>
                 <input
                   type="text"
@@ -969,8 +969,9 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                     padding: '7px 12px 7px 32px',
                     fontSize: '13px',
                     borderRadius: '6px',
-                    border: '1px solid var(--border-color, #e2e8f0)',
-                    backgroundColor: '#ffffff',
+                    border: '1px solid var(--input-border, var(--border-color, #e2e8f0))',
+                    backgroundColor: 'var(--input-bg, #ffffff)',
+                    color: 'var(--input-text, var(--text-primary, #0f172a))',
                     outline: 'none',
                     boxSizing: 'border-box'
                   }}
@@ -1109,7 +1110,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
             </div>
 
             {/* Search Input Bar */}
-            <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#fcfcfd' }}>
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border, #f1f5f9)', backgroundColor: 'var(--color-surface-secondary, #fcfcfd)' }}>
               <div style={{ position: 'relative' }}>
                 <input
                   type="text"
@@ -1121,8 +1122,9 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                     padding: '7px 12px 7px 32px',
                     fontSize: '13px',
                     borderRadius: '6px',
-                    border: '1px solid var(--border-color, #e2e8f0)',
-                    backgroundColor: '#ffffff',
+                    border: '1px solid var(--input-border, var(--border-color, #e2e8f0))',
+                    backgroundColor: 'var(--input-bg, #ffffff)',
+                    color: 'var(--input-text, var(--text-primary, #0f172a))',
                     outline: 'none',
                     boxSizing: 'border-box'
                   }}
@@ -1248,9 +1250,9 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                 fontWeight: 600,
                 padding: '4px 8px',
                 borderRadius: '6px',
-                border: '1px solid var(--border-color, #e2e8f0)',
-                backgroundColor: '#ffffff',
-                color: 'var(--text-primary, #0f172a)',
+                border: '1px solid var(--input-border, var(--border-color, #e2e8f0))',
+                backgroundColor: 'var(--input-bg, #ffffff)',
+                color: 'var(--input-text, var(--text-primary, #0f172a))',
                 outline: 'none'
               }}
             >
@@ -1262,7 +1264,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
           {/* Chart + Legend Container */}
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', alignItems: 'center' }}>
             {/* Bar Chart Canvas */}
-            <div style={{ height: '180px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '10px', paddingBottom: '24px', borderBottom: '1px solid #f1f5f9', position: 'relative' }}>
+            <div style={{ height: '180px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '10px', paddingBottom: '24px', borderBottom: '1px solid var(--color-border, #f1f5f9)', position: 'relative' }}>
               {receivableAgeing.buckets.map((b, idx) => {
                 const heightPct = maxReceivableBucketPaise > 0 ? Math.max((b.paise / maxReceivableBucketPaise) * 100, 4) : 4;
                 return (
@@ -1333,9 +1335,9 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                 fontWeight: 600,
                 padding: '4px 8px',
                 borderRadius: '6px',
-                border: '1px solid var(--border-color, #e2e8f0)',
-                backgroundColor: '#ffffff',
-                color: 'var(--text-primary, #0f172a)',
+                border: '1px solid var(--input-border, var(--border-color, #e2e8f0))',
+                backgroundColor: 'var(--input-bg, #ffffff)',
+                color: 'var(--input-text, var(--text-primary, #0f172a))',
                 outline: 'none'
               }}
             >
@@ -1347,7 +1349,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
           {/* Chart + Legend Container */}
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', alignItems: 'center' }}>
             {/* Bar Chart Canvas */}
-            <div style={{ height: '180px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '10px', paddingBottom: '24px', borderBottom: '1px solid #f1f5f9', position: 'relative' }}>
+            <div style={{ height: '180px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '10px', paddingBottom: '24px', borderBottom: '1px solid var(--color-border, #f1f5f9)', position: 'relative' }}>
               {payableAgeing.buckets.map((b, idx) => {
                 const heightPct = maxPayableBucketPaise > 0 ? Math.max((b.paise / maxPayableBucketPaise) * 100, 4) : 4;
                 return (
@@ -1416,12 +1418,14 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
         >
           <div
             style={{
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--color-surface, #ffffff)',
+              color: 'var(--color-text, #0f172a)',
+              border: '1px solid var(--color-border, #e2e8f0)',
               borderRadius: '16px',
               maxWidth: '560px',
               width: '100%',
               padding: '24px',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+              boxShadow: 'var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.2))',
               position: 'relative'
             }}
             onClick={e => e.stopPropagation()}
@@ -1449,7 +1453,7 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
               </button>
             </div>
 
-            <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
+            <div style={{ backgroundColor: 'var(--color-surface-secondary, #f8fafc)', border: '1px solid var(--color-border, #e2e8f0)', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
               <div style={{ fontSize: '12px', color: 'var(--text-muted, #64748b)', marginBottom: '4px' }}>Total Outstanding Balance</div>
               <div style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-primary, #0f172a)' }}>
                 ₹{formatPaise(selectedPartyDetail.totalOutstandingPaise)}
@@ -1461,27 +1465,27 @@ export const OutstandingReportsView: React.FC<OutstandingReportsViewProps> = ({
                 Ageing Distribution
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-                <div style={{ padding: '10px 12px', backgroundColor: '#f1f5f9', borderRadius: '6px' }}>
+                <div style={{ padding: '10px 12px', backgroundColor: 'var(--color-surface-secondary, #f1f5f9)', border: '1px solid var(--color-border, #e2e8f0)', borderRadius: '6px' }}>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted, #64748b)' }}>Current (0-30 Days)</div>
                   <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary, #0f172a)' }}>
                     ₹{formatPaise(selectedPartyDetail.bucket0to30Paise)}
                   </div>
                 </div>
-                <div style={{ padding: '10px 12px', backgroundColor: '#fee2e2', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '11px', color: '#dc2626' }}>31–60 Days</div>
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#dc2626' }}>
+                <div style={{ padding: '10px 12px', backgroundColor: 'var(--color-danger-bg, #fee2e2)', border: '1px solid var(--color-danger-border, #fecaca)', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--color-danger-text, #dc2626)' }}>31–60 Days</div>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-danger-text, #dc2626)' }}>
                     ₹{formatPaise(selectedPartyDetail.bucket31to60Paise)}
                   </div>
                 </div>
-                <div style={{ padding: '10px 12px', backgroundColor: '#fee2e2', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '11px', color: '#dc2626' }}>61–90 Days</div>
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#dc2626' }}>
+                <div style={{ padding: '10px 12px', backgroundColor: 'var(--color-danger-bg, #fee2e2)', border: '1px solid var(--color-danger-border, #fecaca)', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--color-danger-text, #dc2626)' }}>61–90 Days</div>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-danger-text, #dc2626)' }}>
                     ₹{formatPaise(selectedPartyDetail.bucket61to90Paise)}
                   </div>
                 </div>
-                <div style={{ padding: '10px 12px', backgroundColor: '#fee2e2', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '11px', color: '#dc2626' }}>&gt; 90 Days</div>
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#dc2626' }}>
+                <div style={{ padding: '10px 12px', backgroundColor: 'var(--color-danger-bg, #fee2e2)', border: '1px solid var(--color-danger-border, #fecaca)', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--color-danger-text, #dc2626)' }}>&gt; 90 Days</div>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-danger-text, #dc2626)' }}>
                     ₹{formatPaise(selectedPartyDetail.bucket90PlusPaise)}
                   </div>
                 </div>

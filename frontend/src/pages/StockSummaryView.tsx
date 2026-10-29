@@ -1100,7 +1100,7 @@ export const StockSummaryView: React.FC<StockSummaryViewProps> = ({
                       <span
                         style={{
                           fontWeight: 600,
-                          color: '#0f172a',
+                          color: 'var(--color-text, #0f172a)',
                           cursor: onViewItem ? 'pointer' : 'default'
                         }}
                         onClick={() => onViewItem?.(item.id)}

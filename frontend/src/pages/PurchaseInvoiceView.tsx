@@ -18,7 +18,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { api, Company, FinancialYear, Party, StockItem, GodownMaster } from '../api/client';
 import { InvoicePrintModal } from './InvoicePrintModal';
-import { QuickCustomerModal, QuickItemModal } from '../components/accounting';
+import { QuickCustomerModal, QuickItemModal, SerialPickerModal } from '../components/accounting';
 import {
   ArrowLeft,
   Plus,
@@ -40,7 +40,9 @@ import {
   Mail,
   Truck,
   FileText,
-  FileDown
+  FileDown,
+  Barcode,
+  CreditCard
 } from 'lucide-react';
 
 /* ─────────────────────────────────────────────
@@ -138,6 +140,9 @@ interface InvoiceLineItem {
   gstRate: number;
   serialNumber?: string;
   godownId?: string;
+  sku?: string;
+  warrantyMonths?: number;
+  hasSerialNo?: boolean;
 }
 
 export interface PurchaseInvoiceViewProps {
@@ -177,6 +182,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
   const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
   const [showQuickItemModal, setShowQuickItemModal] = useState(false);
   const [activeItemRowId, setActiveItemRowId] = useState<string | null>(null);
+  const [activeSerialModalLineId, setActiveSerialModalLineId] = useState<string | null>(null);
 
   // Invoice Details
   const [voucherNumber, setVoucherNumber] = useState('');
@@ -202,8 +208,16 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
   const [department, setDepartment] = useState('');
   const [project, setProject] = useState('');
 
-  // Tax Mode
-  const [taxMode, setTaxMode] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('INCLUSIVE');
+  // Tax Mode (Phase 3: Purchase rate defaults to EXCLUSIVE of GST)
+  const [taxMode, setTaxMode] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('EXCLUSIVE');
+
+  // Payment Mode & Settlement (Phase 4)
+  const [paymentMode, setPaymentMode] = useState<'CREDIT' | 'CASH' | 'BANK' | 'UPI'>('CREDIT');
+  const [settlementAmount, setSettlementAmount] = useState<number>(0);
+
+  // Serial Selection Modal State (Phase 1)
+  const [showSerialModal, setShowSerialModal] = useState<boolean>(false);
+  const [activeSerialRowIdx, setActiveSerialRowIdx] = useState<number | null>(null);
 
   // Items / Lines
   const [lines, setLines] = useState<InvoiceLineItem[]>([
@@ -372,13 +386,13 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
   };
 
   const handleLineChange = (id: string, field: keyof InvoiceLineItem, val: any) => {
-    setLines(prev =>
-      prev.map(line => {
+    setLines(prev => {
+      const nextLines = prev.map(line => {
         if (line.id !== id) return line;
 
         const updated = { ...line, [field]: val };
 
-        // If item selection changed, auto-populate HSN, rate, unit, tax rate
+        // If item selection changed, auto-populate HSN, rate, unit, tax rate, SKU, warranty, serial tracking
         if (field === 'itemId') {
           const matched = items.find(it => it.item_id === val);
           if (matched) {
@@ -387,92 +401,150 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
             updated.hsnCode = matched.hsn_sac || (matched as any).hsn_code || '';
             updated.unit = matched.unit_symbol || (matched as any).unit_name || 'NOS';
             updated.gstRate = matched.gst_rate ?? 18;
+            updated.sku = matched.sku || matched.item_code || '';
+            updated.warrantyMonths = matched.warranty_months || 0;
+            updated.hasSerialNo = Boolean(matched.has_serial_no || (matched.serial_numbers && matched.serial_numbers.trim()));
+            updated.serialNumber = ''; // Reset stale serial numbers
             // Use purchase_rate_paise if available, otherwise selling_rate_paise
             const ratePaise = matched.purchase_rate_paise && matched.purchase_rate_paise > 0
               ? matched.purchase_rate_paise
               : matched.selling_rate_paise || 0;
             updated.rate = ratePaise > 0 ? (ratePaise / 100).toFixed(2) : '';
+          } else {
+            updated.sku = '';
+            updated.warrantyMonths = 0;
+            updated.hasSerialNo = false;
+            updated.serialNumber = '';
           }
         }
         return updated;
-      })
-    );
+      });
+
+      // Phase 2: Tally-style auto next row
+      // When item is selected on the last row and last row is now populated, append a new blank row
+      if (field === 'itemId' && val) {
+        const last = nextLines[nextLines.length - 1];
+        if (last && last.itemId && last.itemId.trim() !== '') {
+          return [
+            ...nextLines,
+            {
+              id: 'ln_' + Date.now() + Math.random().toString(36).substring(2, 6),
+              itemId: '',
+              name: '',
+              description: '',
+              hsnCode: '',
+              quantity: 1,
+              unit: 'NOS',
+              rate: '',
+              discountPercent: 0,
+              gstRate: 18,
+              serialNumber: ''
+            }
+          ];
+        }
+      }
+
+      return nextLines;
+    });
   };
 
-  /* ── Line-level Amount Computations ── */
+  /* ── Line-level Amount Computations with Integer Paise Precision ── */
   const calcLineAmounts = (line: InvoiceLineItem, mode: 'EXCLUSIVE' | 'INCLUSIVE') => {
     const qty = Math.max(0, Number(line.quantity) || 0);
-    const rate = Math.max(0, Number(line.rate) || 0);
+    const ratePaise = Math.round((Number(line.rate) || 0) * 100);
     const discPct = Math.min(100, Math.max(0, Number(line.discountPercent) || 0));
     const gstRate = Number(line.gstRate) || 0;
+    const isInterState = Boolean(company?.state_code && placeOfSupply && company.state_code !== placeOfSupply);
 
-    const baseGross = qty * rate;
-    const discount = (baseGross * discPct) / 100;
-    const netTotal = baseGross - discount;
+    const grossAmountPaise = Math.round(qty * ratePaise);
+    const discountAmountPaise = discPct > 0 ? Math.round((grossAmountPaise * discPct) / 100) : 0;
+    const netLinePaise = grossAmountPaise - discountAmountPaise;
 
-    let taxable = 0;
-    let taxAmt = 0;
-    let lineTotal = 0;
+    let taxableAmountPaise = 0;
+    let cgstAmountPaise = 0;
+    let sgstAmountPaise = 0;
+    let igstAmountPaise = 0;
+    let totalTaxPaise = 0;
 
     if (mode === 'INCLUSIVE') {
-      // Net total already includes GST
-      taxable = gstRate > 0 ? (netTotal * 100) / (100 + gstRate) : netTotal;
-      taxAmt = netTotal - taxable;
-      lineTotal = netTotal;
+      taxableAmountPaise = gstRate > 0 ? Math.round(netLinePaise / (1 + gstRate / 100)) : netLinePaise;
+      const combinedTaxPaise = netLinePaise - taxableAmountPaise;
+      if (isInterState) {
+        igstAmountPaise = combinedTaxPaise;
+      } else {
+        cgstAmountPaise = Math.round((taxableAmountPaise * (gstRate / 2)) / 100);
+        sgstAmountPaise = cgstAmountPaise; // Exact deterministic split
+      }
     } else {
-      // Tax Exclusive
-      taxable = netTotal;
-      taxAmt = (taxable * gstRate) / 100;
-      lineTotal = taxable + taxAmt;
+      taxableAmountPaise = netLinePaise;
+      if (isInterState) {
+        igstAmountPaise = Math.round((taxableAmountPaise * gstRate) / 100);
+      } else {
+        cgstAmountPaise = Math.round((taxableAmountPaise * (gstRate / 2)) / 100);
+        sgstAmountPaise = cgstAmountPaise; // Exact deterministic split
+      }
     }
 
+    totalTaxPaise = cgstAmountPaise + sgstAmountPaise + igstAmountPaise;
+    const lineTotalPaise = taxableAmountPaise + totalTaxPaise;
+
     return {
-      taxable: Math.round(taxable * 100) / 100,
-      taxAmt: Math.round(taxAmt * 100) / 100,
-      discount: Math.round(discount * 100) / 100,
-      lineTotal: Math.round(lineTotal * 100) / 100
+      taxable: taxableAmountPaise / 100,
+      taxAmt: totalTaxPaise / 100,
+      discount: discountAmountPaise / 100,
+      lineTotal: lineTotalPaise / 100,
+      taxableAmountPaise,
+      cgstAmountPaise,
+      sgstAmountPaise,
+      igstAmountPaise,
+      totalTaxPaise,
+      lineTotalPaise
     };
   };
 
-  /* ── Grand Totals and Taxes Summary ── */
+  /* ── Grand Totals and Taxes Summary with Separate Round-Off ── */
   const invoiceTotals = useMemo(() => {
-    let subtotal = 0;
-    let discountTotal = 0;
-    let taxTotal = 0;
-    let totalQty = 0;
     let validItemsCount = 0;
+    let totalQty = 0;
+    let totalTaxablePaise = 0;
+    let totalCgstPaise = 0;
+    let totalSgstPaise = 0;
+    let totalIgstPaise = 0;
+    let discountTotal = 0;
+
+    const isInterState = Boolean(company?.state_code && placeOfSupply && company.state_code !== placeOfSupply);
 
     lines.forEach(l => {
       if (l.itemId || Number(l.quantity) > 0) {
         validItemsCount++;
         totalQty += Number(l.quantity) || 0;
       }
-      const { taxable, discount, taxAmt } = calcLineAmounts(l, taxMode);
-      subtotal += taxable + discount;
-      discountTotal += discount;
-      taxTotal += taxAmt;
+      const res = calcLineAmounts(l, taxMode);
+      totalTaxablePaise += res.taxableAmountPaise;
+      totalCgstPaise += res.cgstAmountPaise;
+      totalSgstPaise += res.sgstAmountPaise;
+      totalIgstPaise += res.igstAmountPaise;
+      discountTotal += res.discount;
     });
 
-    const taxable = subtotal - discountTotal;
-    const grandTotal = Math.round(taxable + taxTotal);
-
-    // Intra-state vs Inter-state determination
-    const isInterState = company?.state_code && placeOfSupply && company.state_code !== placeOfSupply;
-    const cgst = isInterState ? 0 : Math.round(taxTotal / 2);
-    const sgst = isInterState ? 0 : taxTotal - cgst;
-    const igst = isInterState ? Math.round(taxTotal) : 0;
+    const subTotalPaise = totalTaxablePaise + totalCgstPaise + totalSgstPaise + totalIgstPaise;
+    const roundedTotalRupees = Math.round(subTotalPaise / 100);
+    const totalAmountPaise = roundedTotalRupees * 100;
+    const roundOffPaise = totalAmountPaise - subTotalPaise;
 
     return {
       validItemsCount,
       totalQty,
-      subtotal,
+      subtotal: (totalTaxablePaise + Math.round(discountTotal * 100)) / 100,
       discountTotal,
-      taxable,
-      taxTotal,
-      cgst,
-      sgst,
-      igst,
-      grandTotal,
+      taxable: totalTaxablePaise / 100,
+      taxTotal: (totalCgstPaise + totalSgstPaise + totalIgstPaise) / 100,
+      cgst: totalCgstPaise / 100,
+      sgst: totalSgstPaise / 100,
+      igst: totalIgstPaise / 100,
+      roundOff: roundOffPaise / 100,
+      roundOffPaise,
+      grandTotal: totalAmountPaise / 100,
       isInterState
     };
   }, [lines, taxMode, company, placeOfSupply]);
@@ -480,6 +552,13 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
   /* ── Build Purchase Voucher Payload ── */
   const buildPayload = (status: 'DRAFT' | 'POSTED') => {
     const validLines = lines.filter(l => l.itemId && Number(l.quantity) > 0 && Number(l.rate) >= 0);
+
+    const immediatePay = (status === 'POSTED' && paymentMode !== 'CREDIT' && settlementAmount > 0)
+      ? {
+          mode: paymentMode as 'CASH' | 'BANK' | 'UPI',
+          amountPaise: Math.round(settlementAmount * 100)
+        }
+      : undefined;
 
     return {
       voucherType: 'PURCHASE',
@@ -493,6 +572,8 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
       termsConditions: termsAndCond || undefined,
       status,
       isTaxInclusive: taxMode === 'INCLUSIVE',
+      paymentMode,
+      immediatePayment: immediatePay,
       lines: validLines.map(l => ({
         itemId: l.itemId,
         description: l.description || undefined,
@@ -538,6 +619,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
         cgst_amount_paise: Math.round(invoiceTotals.cgst * 100),
         sgst_amount_paise: Math.round(invoiceTotals.sgst * 100),
         igst_amount_paise: Math.round(invoiceTotals.igst * 100),
+        round_off_paise: invoiceTotals.roundOffPaise,
         tax_amount_paise: Math.round(invoiceTotals.taxTotal * 100),
         total_amount_paise: Math.round(invoiceTotals.grandTotal * 100),
         narration: narration || notes || undefined,
@@ -545,9 +627,8 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
         payment_terms: paymentTerms ? `${paymentTerms} Days` : 'Immediate'
       },
       lines: linesToUse.map((l, idx) => {
-        const { taxable, taxAmt, lineTotal } = calcLineAmounts(l, taxMode);
+        const amounts = calcLineAmounts(l, taxMode);
         const itemObj = items.find(it => it.item_id === l.itemId);
-        const isInterState = invoiceTotals.isInterState;
 
         return {
           line_number: idx + 1,
@@ -559,12 +640,14 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
           unit: l.unit || itemObj?.unit_symbol || 'NOS',
           unit_symbol: l.unit || itemObj?.unit_symbol || 'NOS',
           rate_paise: Math.round((Number(l.rate) || 0) * 100),
-          taxable_amount_paise: Math.round(taxable * 100),
+          taxable_amount_paise: amounts.taxableAmountPaise,
           tax_rate: Number(l.gstRate) || 0,
-          cgst_amount_paise: isInterState ? 0 : Math.round((taxAmt / 2) * 100),
-          sgst_amount_paise: isInterState ? 0 : Math.round((taxAmt / 2) * 100),
-          igst_amount_paise: isInterState ? Math.round(taxAmt * 100) : 0,
-          total_amount_paise: Math.round(lineTotal * 100)
+          cgst_amount_paise: amounts.cgstAmountPaise,
+          sgst_amount_paise: amounts.sgstAmountPaise,
+          igst_amount_paise: amounts.igstAmountPaise,
+          total_amount_paise: amounts.lineTotalPaise,
+          serial_number: l.serialNumber || undefined,
+          warranty_months: l.warrantyMonths || itemObj?.warranty_months || 0
         };
       })
     };
@@ -605,7 +688,11 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
     setIsSaving(true);
     try {
       const res = await api.postVoucher(payload);
-      showToast(`Purchase Invoice ${res.voucherNumber || ''} posted successfully!`);
+      if (res.settlementVoucherNumber) {
+        showToast(`Purchase Invoice ${res.voucherNumber} posted & settled via ${res.settlementVoucherNumber} (${paymentMode})!`);
+      } else {
+        showToast(`Purchase Invoice ${res.voucherNumber || ''} posted successfully!`);
+      }
       onPostSuccess(res.voucherId);
     } catch (err: any) {
       setError(err.message || 'Failed to post purchase invoice');
@@ -1369,6 +1456,8 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
                             <select
                               value={line.itemId}
                               onChange={e => handleLineChange(line.id, 'itemId', e.target.value)}
+                              data-purchase-row={index}
+                              data-purchase-field="item"
                               style={{
                                 width: '100%',
                                 padding: '6px 8px',
@@ -1408,21 +1497,46 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
                             </button>
                           </div>
 
-                          {/* Optional Serial / Description */}
-                          <input
-                            type="text"
-                            placeholder="S/N: NA | Warranty: 1 Year (Optional)"
-                            value={line.serialNumber || ''}
-                            onChange={e => handleLineChange(line.id, 'serialNumber', e.target.value)}
-                            style={{
-                              width: '100%',
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              border: '1px solid var(--border-subtle, #E2E8F0)',
-                              fontSize: '11px',
-                              color: 'var(--text-muted)'
-                            }}
-                          />
+                          {/* Stock Details & Unit-level Serial Entry (Phase 1) */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                            {line.sku && (
+                              <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', backgroundColor: 'var(--bg-subtle, #f1f5f9)', padding: '1px 6px', borderRadius: '4px' }}>
+                                SKU: {line.sku}
+                              </span>
+                            )}
+                            {Boolean(line.warrantyMonths && line.warrantyMonths > 0) && (
+                              <span style={{ fontSize: '10.5px', color: '#0369A1', backgroundColor: '#E0F2FE', padding: '1px 6px', borderRadius: '4px' }}>
+                                Warranty: {line.warrantyMonths} Mo
+                              </span>
+                            )}
+                            {line.hasSerialNo && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveSerialRowIdx(index);
+                                  setShowSerialModal(true);
+                                }}
+                                style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: 600,
+                                  color: line.serialNumber ? '#16A34A' : '#EA580C',
+                                  backgroundColor: line.serialNumber ? '#DCFCE7' : '#FFEDD5',
+                                  border: '1px solid ' + (line.serialNumber ? '#86EFAC' : '#FDBA74'),
+                                  borderRadius: '4px',
+                                  padding: '2px 7px',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <Barcode size={11} />
+                                {line.serialNumber
+                                  ? `${line.serialNumber.split(',').filter(Boolean).length} Serials Entered`
+                                  : 'Enter Unit Serials *'}
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td style={{ padding: '8px 6px' }}>
                           <input
@@ -1446,6 +1560,14 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
                             min="1"
                             value={line.quantity}
                             onChange={e => handleLineChange(line.id, 'quantity', e.target.value)}
+                            data-purchase-row={index}
+                            data-purchase-field="qty"
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                (document.querySelector(`[data-purchase-row="${index}"][data-purchase-field="rate"]`) as HTMLElement)?.focus();
+                              }
+                            }}
                             style={{
                               width: '100%',
                               padding: '6px 6px',
@@ -1464,6 +1586,21 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
                             value={line.rate}
                             onChange={e => handleLineChange(line.id, 'rate', e.target.value)}
                             placeholder="0.00"
+                            data-purchase-row={index}
+                            data-purchase-field="rate"
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (index === lines.length - 1 && line.itemId) {
+                                  handleAddRow();
+                                  setTimeout(() => {
+                                    (document.querySelector(`[data-purchase-row="${index + 1}"][data-purchase-field="item"]`) as HTMLElement)?.focus();
+                                  }, 50);
+                                } else {
+                                  (document.querySelector(`[data-purchase-row="${index + 1}"][data-purchase-field="item"]`) as HTMLElement)?.focus();
+                                }
+                              }
+                            }}
                             style={{
                               width: '100%',
                               padding: '6px 8px',
@@ -1861,6 +1998,104 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
             </div>
           </div>
 
+          {/* Card 2.5: Payment & Immediate Settlement (Phase 4) */}
+          <div className="ledger-card" style={{ padding: '18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+              <div
+                style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(16,185,129,0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#10B981'
+                }}
+              >
+                <CreditCard size={13} />
+              </div>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Payment &amp; Settlement
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {/* Mode Buttons */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px', backgroundColor: 'var(--bg-subtle, #F1F5F9)', padding: '3px', borderRadius: '6px' }}>
+                {(['CREDIT', 'CASH', 'BANK', 'UPI'] as const).map(mode => {
+                  const active = paymentMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        setPaymentMode(mode);
+                        if (mode !== 'CREDIT') {
+                          setSettlementAmount(invoiceTotals.grandTotal);
+                        } else {
+                          setSettlementAmount(0);
+                        }
+                      }}
+                      style={{
+                        padding: '6px 2px',
+                        fontSize: '11px',
+                        fontWeight: active ? 700 : 500,
+                        borderRadius: '4px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        backgroundColor: active ? (mode === 'CREDIT' ? '#64748B' : '#10B981') : 'transparent',
+                        color: active ? '#FFFFFF' : 'var(--text-muted)',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {mode}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {paymentMode === 'CREDIT' ? (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', padding: '8px 10px', backgroundColor: 'var(--bg-subtle, #F8FAFC)', borderRadius: '6px', lineHeight: 1.4 }}>
+                  ℹ️ Bill will be saved on credit. Supplier ledger will reflect outstanding balance without immediate payment.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                      Settlement Amount (₹)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setSettlementAmount(invoiceTotals.grandTotal)}
+                      style={{ fontSize: '10.5px', color: '#10B981', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                    >
+                      Full Amount
+                    </button>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    max={invoiceTotals.grandTotal}
+                    step="0.01"
+                    className="lf-input"
+                    value={settlementAmount}
+                    onChange={e => setSettlementAmount(Math.max(0, Number(e.target.value) || 0))}
+                    style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-mono)' }}
+                  />
+                  <div style={{ fontSize: '10.5px', color: '#059669', backgroundColor: '#ECFDF5', padding: '6px 8px', borderRadius: '4px', lineHeight: 1.3 }}>
+                    ✓ Atomically posts linked PAYMENT voucher via {paymentMode} with AGAINST_REF allocation.
+                    {settlementAmount < invoiceTotals.grandTotal && (
+                      <span style={{ display: 'block', color: '#D97706', marginTop: '2px' }}>
+                        Partial settlement: ₹ {(invoiceTotals.grandTotal - settlementAmount).toLocaleString('en-IN')} remains unpaid.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Card 3: Quick Actions */}
           <div className="ledger-card" style={{ padding: '18px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
@@ -1979,6 +2214,24 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
           showToast(`Item '${newItem.item_name}' added successfully!`);
         }}
       />
+
+      {/* Unit-Level Serial Picker Modal (Phase 1) */}
+      {showSerialModal && activeSerialRowIdx !== null && lines[activeSerialRowIdx] && (
+        <SerialPickerModal
+          isOpen={showSerialModal}
+          mode="PURCHASE"
+          itemId={lines[activeSerialRowIdx].itemId}
+          itemName={lines[activeSerialRowIdx].name || 'Selected Item'}
+          currentQuantity={Number(lines[activeSerialRowIdx].quantity) || 1}
+          initialSerials={lines[activeSerialRowIdx].serialNumber ? lines[activeSerialRowIdx].serialNumber.split(',').map(s => s.trim()).filter(Boolean) : []}
+          warrantyMonths={lines[activeSerialRowIdx].warrantyMonths || 0}
+          onConfirm={(serials) => {
+            handleLineChange(lines[activeSerialRowIdx].id, 'serialNumber', serials.join(', '));
+            setShowSerialModal(false);
+          }}
+          onClose={() => setShowSerialModal(false)}
+        />
+      )}
     </div>
   );
 };

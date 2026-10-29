@@ -459,7 +459,7 @@ export function createApiRouter(db: DatabaseSync): Router {
   router.get('/masters/items', ...withCompany, (req: SecureRequest, res: Response) => {
     try {
       const rows = db.prepare(`
-        SELECT si.*, u.symbol as unit_symbol
+        SELECT si.*, u.symbol as unit_symbol, u.unit_name
         FROM stock_items si
         LEFT JOIN units u ON si.unit_id = u.unit_id
         WHERE si.company_id = ? AND si.is_active = 1
@@ -540,6 +540,7 @@ export function createApiRouter(db: DatabaseSync): Router {
               purchase_rate_paise = CASE WHEN ? > 0 THEN ? ELSE purchase_rate_paise END,
               selling_rate_paise = CASE WHEN ? > 0 THEN ? ELSE selling_rate_paise END,
               reorder_level = COALESCE(?, reorder_level),
+              warranty_months = COALESCE(?, warranty_months),
               serial_numbers = ?,
               has_serial_no = CASE WHEN ? = 1 OR ? IS NOT NULL THEN 1 ELSE has_serial_no END
             WHERE item_id = ?
@@ -549,6 +550,7 @@ export function createApiRouter(db: DatabaseSync): Router {
             rate, rate,
             sellRate, sellRate,
             b.reorderLevel || null,
+            b.warrantyMonths !== undefined ? Number(b.warrantyMonths) : null,
             updatedSerials || null,
             b.hasSerialNo ? 1 : 0,
             b.serialNumbers || null,
@@ -682,24 +684,40 @@ export function createApiRouter(db: DatabaseSync): Router {
       }
 
       let unitId = b.unitId ? String(b.unitId).trim() : null;
-      if (!unitId || unitId === 'unit_nos') {
-        const defUnit = db.prepare('SELECT unit_id FROM units WHERE company_id = ? LIMIT 1').get(companyId) as any;
-        unitId = defUnit?.unit_id || unitId || 'unit_nos';
+      if (!unitId) {
+        const nosUnit = db.prepare(`
+          SELECT unit_id FROM units
+          WHERE (company_id = ? OR company_id IS NULL) AND (UPPER(symbol) = 'NOS' OR LOWER(unit_name) LIKE '%number%' OR LOWER(unit_name) LIKE '%nos%')
+          ORDER BY company_id DESC LIMIT 1
+        `).get(companyId) as { unit_id: string } | undefined;
+
+        if (!nosUnit) {
+          const newUnitId = `${companyId}_unit_nos`;
+          db.prepare(`
+            INSERT OR IGNORE INTO units (unit_id, company_id, unit_name, symbol, uqc_code, decimal_places)
+            VALUES (?, ?, 'Numbers', 'Nos', 'NOS', 0)
+          `).run(newUnitId, companyId);
+          unitId = newUnitId;
+        } else {
+          unitId = nosUnit.unit_id;
+        }
       }
 
       db.exec('BEGIN TRANSACTION;');
       const itemId = 'item_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      const warrantyMonths = b.warrantyMonths !== undefined && b.warrantyMonths !== null ? Number(b.warrantyMonths) : 0;
       db.prepare(`
         INSERT INTO stock_items (
           item_id, company_id, item_name, item_code, sku, hsn_sac,
           unit_id, gst_rate, cess_rate, purchase_rate_paise, selling_rate_paise,
-          opening_qty, opening_rate_paise, reorder_level, serial_numbers, has_serial_no
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          opening_qty, opening_rate_paise, reorder_level, warranty_months, serial_numbers, has_serial_no
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         itemId, companyId, b.itemName.trim(), b.itemCode || null, b.sku || null, b.hsnSac || '84713010',
         unitId, b.gstRate !== undefined && b.gstRate !== null ? Number(b.gstRate) : 18.00, b.cessRate || 0,
         rate, sellRate,
         qty, rate, b.reorderLevel || 0,
+        warrantyMonths,
         b.serialNumbers || null, b.hasSerialNo ? 1 : 0
       );
 
@@ -716,10 +734,17 @@ export function createApiRouter(db: DatabaseSync): Router {
       }
 
       if (b.serialNumbers && b.serialNumbers.trim()) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        let expiryDate: string | null = null;
+        if (warrantyMonths > 0) {
+          const [y, m, d] = todayStr.split('-').map(Number);
+          const exp = new Date(y, m - 1 + warrantyMonths, d);
+          expiryDate = `${exp.getFullYear()}-${String(exp.getMonth() + 1).padStart(2, '0')}-${String(exp.getDate()).padStart(2, '0')}`;
+        }
         const serialsArr = b.serialNumbers.split(',').map((s: string) => s.trim()).filter(Boolean);
         for (const s of serialsArr) {
-          db.prepare('INSERT OR IGNORE INTO stock_item_serials (serial_id, item_id, serial_number, status) VALUES (?, ?, ?, ?)')
-            .run('ser_' + Date.now().toString(36) + Math.random().toString(36).substring(2,6), itemId, s, 'AVAILABLE');
+          db.prepare('INSERT OR IGNORE INTO stock_item_serials (serial_id, item_id, serial_number, status, purchase_date, warranty_expiry_date) VALUES (?, ?, ?, ?, ?, ?)')
+            .run('ser_' + Date.now().toString(36) + Math.random().toString(36).substring(2,6), itemId, s, 'AVAILABLE', todayStr, expiryDate);
         }
       }
 
@@ -736,16 +761,43 @@ export function createApiRouter(db: DatabaseSync): Router {
     }
   });
 
+  router.get('/masters/items/:id', ...withCompany, (req: SecureRequest, res: Response) => {
+    try {
+      const item = db.prepare(`
+        SELECT si.*, u.symbol as unit_symbol, u.unit_name
+        FROM stock_items si
+        LEFT JOIN units u ON si.unit_id = u.unit_id
+        WHERE si.item_id = ?
+      `).get(req.params.id) as any;
+      if (!item || !assertResourceOwnership(res, item.company_id, req.companyId!)) return;
+      res.json(item);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.get('/masters/items/:id/serials', ...withCompany, (req: SecureRequest, res: Response) => {
     try {
       // Verify item belongs to company
       const item = db.prepare('SELECT item_id, company_id, serial_numbers FROM stock_items WHERE item_id = ?').get(req.params.id) as any;
       if (!item || !assertResourceOwnership(res, item.company_id, req.companyId!)) return;
 
+      const isDetailed = req.query.detailed === 'true';
+
       const rows = db.prepare(`
-        SELECT serial_number FROM stock_item_serials
+        SELECT serial_number, status, purchase_date, warranty_expiry_date FROM stock_item_serials
         WHERE item_id = ? AND status = 'AVAILABLE'
       `).all(req.params.id) as any[];
+
+      if (isDetailed) {
+        res.json(rows.map(r => ({
+          serialNumber: r.serial_number,
+          status: r.status,
+          purchaseDate: r.purchase_date || null,
+          warrantyExpiryDate: r.warranty_expiry_date || null
+        })));
+        return;
+      }
 
       let list = rows.map((r: any) => r.serial_number);
       if (list.length === 0 && item.serial_numbers) {
@@ -885,6 +937,7 @@ export function createApiRouter(db: DatabaseSync): Router {
       const purchaseRatePaise = b.purchaseRatePaise !== undefined && b.purchaseRatePaise !== null ? Number(b.purchaseRatePaise) : (item.purchase_rate_paise ?? 0);
       const sellingRatePaise = b.sellingRatePaise !== undefined && b.sellingRatePaise !== null ? Number(b.sellingRatePaise) : (item.selling_rate_paise ?? 0);
       const reorderLevel = b.reorderLevel !== undefined && b.reorderLevel !== null ? Number(b.reorderLevel) : (item.reorder_level ?? 0);
+      const warrantyMonths = b.warrantyMonths !== undefined && b.warrantyMonths !== null ? Number(b.warrantyMonths) : (item.warranty_months ?? 0);
 
       if (b.purchaseRatePaise !== undefined && b.purchaseRatePaise !== null && Number(b.purchaseRatePaise) < 0) {
         return res.status(400).json({ error: 'Purchase rate cannot be negative.' });
@@ -898,13 +951,13 @@ export function createApiRouter(db: DatabaseSync): Router {
           item_name = ?, item_code = ?, sku = ?, hsn_sac = ?,
           unit_id = ?, gst_rate = ?, cess_rate = ?,
           purchase_rate_paise = ?, selling_rate_paise = ?,
-          reorder_level = ?
+          reorder_level = ?, warranty_months = ?
         WHERE item_id = ?
       `).run(
         itemName, itemCode, sku, hsnSac,
         unitId, gstRate, cessRate,
         purchaseRatePaise, sellingRatePaise,
-        reorderLevel,
+        reorderLevel, warrantyMonths,
         req.params.id
       );
       res.json({ success: true, message: 'Stock item updated successfully.' });
@@ -984,11 +1037,22 @@ export function createApiRouter(db: DatabaseSync): Router {
 
   router.get('/vouchers', ...withCompany, (req: SecureRequest, res: Response) => {
     try {
-      const { type, fromDate, toDate, status, includeHidden, showCancelled } = req.query as any;
+      const { type, fromDate, toDate, status, partyId, includeHidden, showCancelled } = req.query as any;
       let query = `
-        SELECT v.*, p.party_name, p.gstin as party_gstin, p.party_type
+        SELECT v.*, p.party_name, p.gstin as party_gstin, p.party_type,
+               pa.city as party_city, pa.state as party_state,
+               COALESCE((
+                 SELECT SUM(ba.amount_paise)
+                 FROM bill_allocations ba
+                 JOIN vouchers rv ON ba.voucher_id = rv.voucher_id
+                 WHERE ba.reference_voucher_id = v.voucher_id
+                   AND rv.status != 'CANCELLED'
+               ), 0) as paid_amount_paise
         FROM vouchers v
         LEFT JOIN parties p ON v.party_id = p.party_id
+        LEFT JOIN (
+          SELECT party_id, city, state FROM party_addresses GROUP BY party_id
+        ) pa ON p.party_id = pa.party_id
         WHERE v.company_id = ?
       `;
       const params: any[] = [req.companyId!];
@@ -1009,6 +1073,10 @@ export function createApiRouter(db: DatabaseSync): Router {
         query += ` AND v.status = ?`;
         params.push(status);
       }
+      if (partyId) {
+        query += ` AND v.party_id = ?`;
+        params.push(partyId);
+      }
       if (fromDate) {
         query += ` AND v.voucher_date >= ?`;
         params.push(fromDate);
@@ -1017,7 +1085,7 @@ export function createApiRouter(db: DatabaseSync): Router {
         query += ` AND v.voucher_date <= ?`;
         params.push(toDate);
       }
-      query += ` ORDER BY v.voucher_date DESC, v.created_at DESC LIMIT 100`;
+      query += ` ORDER BY v.voucher_date DESC, v.created_at DESC LIMIT 200`;
       const rows = db.prepare(query).all(...params);
       res.json(rows);
     } catch (err: any) {
@@ -1029,7 +1097,7 @@ export function createApiRouter(db: DatabaseSync): Router {
     try {
       const voucher = db.prepare(`
         SELECT v.*, p.party_name, p.gstin as party_gstin, p.phone as party_phone,
-               pa.address_line1, pa.city, pa.state, pa.state_code, pa.pincode
+               pa.address_line1, pa.address_line2, pa.city, pa.state, pa.state_code, pa.pincode
         FROM vouchers v
         LEFT JOIN parties p ON v.party_id = p.party_id
         LEFT JOIN party_addresses pa ON p.party_id = pa.party_id
@@ -1042,7 +1110,8 @@ export function createApiRouter(db: DatabaseSync): Router {
       if (!assertResourceOwnership(res, voucher.company_id, req.companyId!)) return;
 
       const lines = db.prepare(`
-        SELECT vl.*, si.item_name, si.hsn_sac, u.symbol as unit_symbol, g.godown_name
+        SELECT vl.*, si.item_name, si.hsn_sac, u.symbol as unit_symbol, g.godown_name,
+               si.gst_rate as item_gst_rate, si.warranty_months as item_warranty_months
         FROM voucher_lines vl
         LEFT JOIN stock_items si ON vl.item_id = si.item_id
         LEFT JOIN units u ON si.unit_id = u.unit_id
@@ -1066,7 +1135,26 @@ export function createApiRouter(db: DatabaseSync): Router {
         WHERE se.voucher_id = ?
       `).all(req.params.id);
 
-      res.json({ voucher, lines, ledgerEntries, stockEntries });
+      const billAllocations = db.prepare(`
+        SELECT ba.*, v.voucher_number as ref_voucher_number, v.voucher_type as ref_voucher_type,
+               v.voucher_date as ref_voucher_date, v.payment_mode as ref_payment_mode,
+               v.status as ref_voucher_status
+        FROM bill_allocations ba
+        LEFT JOIN vouchers v ON (ba.voucher_id = v.voucher_id)
+        WHERE (ba.reference_voucher_id = ? OR ba.voucher_id = ?)
+          AND COALESCE(v.status, 'POSTED') != 'CANCELLED'
+        ORDER BY ba.created_at ASC
+      `).all(req.params.id, req.params.id);
+
+      const paidPaise = db.prepare(`
+        SELECT COALESCE(SUM(ba.amount_paise), 0) as paid_paise
+        FROM bill_allocations ba
+        JOIN vouchers rv ON ba.voucher_id = rv.voucher_id
+        WHERE ba.reference_voucher_id = ? AND rv.status != 'CANCELLED'
+      `).get(req.params.id) as any;
+      voucher.paid_amount_paise = Number(paidPaise?.paid_paise || 0);
+
+      res.json({ voucher, lines, ledgerEntries, stockEntries, billAllocations });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1148,34 +1236,59 @@ export function createApiRouter(db: DatabaseSync): Router {
     try {
       const companyId = req.companyId!;
       const voucherId = req.params.id;
-      const fyId = req.body.fyId;
-
-      if (!fyId) return res.status(400).json({ error: 'Financial year ID is required for editing a voucher.' });
 
       // Verify voucher ownership
-      const vch = db.prepare('SELECT voucher_id, company_id, status, voucher_number FROM vouchers WHERE voucher_id = ?').get(voucherId) as any;
+      const vch = db.prepare('SELECT voucher_id, company_id, status, voucher_number, fy_id FROM vouchers WHERE voucher_id = ?').get(voucherId) as any;
       if (!vch || !assertResourceOwnership(res, vch.company_id, companyId)) return;
+
+      const fyId = req.body.fyId || vch.fy_id;
+      if (!fyId) return res.status(400).json({ error: 'Financial year ID is required for editing a voucher.' });
 
       // Verify FY belongs to company
       const fy = db.prepare('SELECT fy_id FROM financial_years WHERE fy_id = ? AND company_id = ?').get(fyId, companyId) as any;
       if (!fy) return res.status(400).json({ error: 'Invalid financial year for this company.' });
 
-      // 006-A: Atomic voucher amendment inside single transaction
-      const payload = {
-        ...req.body,
-        companyId,
-        fyId,
-        createdBy: req.user!.userId,
-        referenceNumber: req.body.referenceNumber || `AMEND-${vch.voucher_number}`
-      };
+      if (vch.status === 'DRAFT') {
+        const payload = {
+          ...req.body,
+          companyId,
+          fyId,
+          createdBy: req.user!.userId
+        };
+        const result = PostingEngine.updateDraftVoucher(db, voucherId, payload);
+        return res.status(200).json({
+          voucherId: result.voucherId,
+          voucherNumber: result.voucherNumber,
+          totalAmountPaise: result.totalAmountPaise,
+          status: result.status
+        });
+      }
 
-      const result = PostingEngine.amendVoucher(db, voucherId, payload);
-      res.status(200).json({
-        voucherId: result.replacementVoucherId,
-        voucherNumber: result.replacementVoucherNumber,
-        totalAmountPaise: result.totalAmountPaise,
-        status: result.status,
-        amendedVoucherId: voucherId
+      if (vch.status === 'POSTED') {
+        // 006-A: Atomic voucher amendment inside single transaction
+        const payload = {
+          ...req.body,
+          companyId,
+          fyId,
+          createdBy: req.user!.userId,
+          referenceNumber: req.body.referenceNumber || `AMEND-${vch.voucher_number}`
+        };
+        if (payload.voucherNumber && payload.voucherNumber.trim() === vch.voucher_number) {
+          payload.voucherNumber = undefined;
+        }
+
+        const result = PostingEngine.amendVoucher(db, voucherId, payload);
+        return res.status(200).json({
+          voucherId: result.replacementVoucherId,
+          voucherNumber: result.replacementVoucherNumber,
+          totalAmountPaise: result.totalAmountPaise,
+          status: result.status,
+          amendedVoucherId: voucherId
+        });
+      }
+
+      return res.status(400).json({
+        error: `Vouchers with status '${vch.status}' cannot be edited.`
       });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -1274,14 +1387,31 @@ export function createApiRouter(db: DatabaseSync): Router {
         }
 
         // Check dependent allocations where other vouchers reference this one
-        const depAlloc = db.prepare(`
-          SELECT COUNT(*) as cnt FROM bill_allocations
-          WHERE reference_voucher_id = ? AND voucher_id != ?
-        `).get(vch.voucher_id, vch.voucher_id) as { cnt: number };
+        const depAllocs = db.prepare(`
+          SELECT ba.allocation_id, ba.voucher_id, ba.amount_paise,
+                 v.voucher_number, v.voucher_type, v.status as voucher_status, v.company_id as voucher_company_id
+          FROM bill_allocations ba
+          LEFT JOIN vouchers v ON ba.voucher_id = v.voucher_id
+          WHERE ba.reference_voucher_id = ? AND ba.voucher_id != ?
+        `).all(vch.voucher_id, vch.voucher_id) as Array<{
+          allocation_id: string;
+          voucher_id: string;
+          amount_paise: number;
+          voucher_number?: string;
+          voucher_type?: string;
+          voucher_status?: string;
+          voucher_company_id?: string;
+        }>;
 
-        if (depAlloc && depAlloc.cnt > 0) {
+        // Active allocations are those where the referencing voucher is active (POSTED) and in same company
+        const activeDepAllocs = depAllocs.filter(
+          a => a.voucher_company_id === vch.company_id && a.voucher_status === 'POSTED'
+        );
+
+        if (activeDepAllocs.length > 0) {
+          const details = activeDepAllocs.map(a => `${a.voucher_type || 'Voucher'} ${a.voucher_number || a.voucher_id} (₹${((a.amount_paise || 0) / 100).toFixed(2)})`).join(', ');
           return res.status(400).json({
-            error: `Cannot permanently delete cancelled voucher: ${depAlloc.cnt} external bill allocation(s) still reference this document. Use 'Hide from Normal Lists' instead.`
+            error: `Cannot permanently delete cancelled voucher: Active payment allocation(s) [${details}] still reference this document. Cancel or de-allocate those vouchers first, or use 'Hide from Normal Lists' instead.`
           });
         }
 
@@ -1316,9 +1446,9 @@ export function createApiRouter(db: DatabaseSync): Router {
             })
           );
 
-          // 2. Safely purge dependent entries within atomic transaction
+          // 2. Safely purge dependent entries within atomic transaction (including stale reference allocations)
           db.prepare('DELETE FROM tax_entries WHERE voucher_id = ?').run(vch.voucher_id);
-          db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ?').run(vch.voucher_id);
+          db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ? OR reference_voucher_id = ?').run(vch.voucher_id, vch.voucher_id);
           db.prepare('DELETE FROM stock_entries WHERE voucher_id = ?').run(vch.voucher_id);
           db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(vch.voucher_id);
           db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(vch.voucher_id);
@@ -1387,20 +1517,129 @@ export function createApiRouter(db: DatabaseSync): Router {
     try {
       const companyId = req.companyId!;
       const today = new Date().toISOString().split('T')[0];
+      const periodParam = (req.query.period as string) || 'Financial Year';
+
+      // Helper to get company's configured financial year (respecting fyId query param) or fallback
+      const getCompanyFy = () => {
+        const fyIdParam = (req.query.fyId as string | undefined)?.trim();
+        if (fyIdParam) {
+          const selectedFy = db.prepare(`
+            SELECT start_date, end_date FROM financial_years
+            WHERE company_id = ? AND fy_id = ?
+          `).get(companyId, fyIdParam) as { start_date: string; end_date: string } | undefined;
+
+          if (selectedFy) {
+            return {
+              startDate: selectedFy.start_date,
+              endDate: selectedFy.end_date,
+              startYear: parseInt(selectedFy.start_date.substring(0, 4), 10)
+            };
+          }
+        }
+
+        const openFy = db.prepare(`
+          SELECT start_date, end_date FROM financial_years
+          WHERE company_id = ? AND status = 'OPEN'
+          ORDER BY start_date DESC LIMIT 1
+        `).get(companyId) as { start_date: string; end_date: string } | undefined;
+
+        if (openFy) {
+          return {
+            startDate: openFy.start_date,
+            endDate: openFy.end_date,
+            startYear: parseInt(openFy.start_date.substring(0, 4), 10)
+          };
+        }
+        const now = new Date();
+        const m = now.getMonth() + 1;
+        const y = now.getFullYear();
+        const sYear = m >= 4 ? y : y - 1;
+        return {
+          startDate: `${sYear}-04-01`,
+          endDate: `${sYear + 1}-03-31`,
+          startYear: sYear
+        };
+      };
+
+      // 1. Resolve Date Range according to period filter
+      let fromDate: string;
+      let toDate = (req.query.toDate as string) || today;
+      let fyStartYear = parseInt(today.substring(0, 4), 10);
+      let isFyScope = false;
+
+      if (periodParam === 'Single Day') {
+        const selectedDate = (req.query.date as string) || (req.query.fromDate as string) || today;
+        fromDate = selectedDate;
+        toDate = selectedDate;
+        const fy = getCompanyFy();
+        fyStartYear = fy.startYear;
+      } else if (periodParam === 'Custom Date Range' || periodParam === 'Custom') {
+        fromDate = (req.query.fromDate as string) || today;
+        toDate = (req.query.toDate as string) || today;
+        const fy = getCompanyFy();
+        fyStartYear = fy.startYear;
+      } else if (periodParam === 'Financial Year' || periodParam === 'This FY') {
+        isFyScope = true;
+        const fy = getCompanyFy();
+        fromDate = fy.startDate;
+        toDate = fy.endDate;
+        fyStartYear = fy.startYear;
+      } else if (periodParam === 'Last 12 Months') {
+        const d = new Date();
+        d.setFullYear(d.getFullYear() - 1);
+        d.setDate(1);
+        fromDate = d.toISOString().split('T')[0];
+      } else if (periodParam === 'Last 6 Months') {
+        const d = new Date();
+        d.setMonth(d.getMonth() - 5);
+        d.setDate(1);
+        fromDate = d.toISOString().split('T')[0];
+      } else if (req.query.fromDate) {
+        fromDate = req.query.fromDate as string;
+      } else {
+        // Default fallback: Financial Year
+        isFyScope = true;
+        const fy = getCompanyFy();
+        fromDate = fy.startDate;
+        toDate = fy.endDate;
+        fyStartYear = fy.startYear;
+      }
+
+      // 2. Net Sales Turnover (Before Tax / Taxable Amount) for selected period & today
+      const periodSales = db.prepare(`
+        SELECT COALESCE(
+          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+        ) - COALESCE(
+          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+        ) as total
+      `).get(companyId, fromDate, toDate, companyId, fromDate, toDate) as { total: number };
 
       const todaySales = db.prepare(`
-        SELECT COALESCE(SUM(total_amount_paise), 0) as total
-        FROM vouchers
-        WHERE company_id = ? AND voucher_type = 'SALES' AND voucher_date = ? AND status = 'POSTED'
-      `).get(companyId, today) as { total: number };
+        SELECT COALESCE(
+          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES' AND status = 'POSTED' AND voucher_date = ?), 0
+        ) - COALESCE(
+          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES_RETURN' AND status = 'POSTED' AND voucher_date = ?), 0
+        ) as total
+      `).get(companyId, today, companyId, today) as { total: number };
+
+      // 3. Net Purchases Turnover (Before Tax / Taxable Amount) for selected period & today
+      const periodPurchases = db.prepare(`
+        SELECT COALESCE(
+          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+        ) - COALESCE(
+          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+        ) as total
+      `).get(companyId, fromDate, toDate, companyId, fromDate, toDate) as { total: number };
 
       const todayPurchases = db.prepare(`
-        SELECT COALESCE(SUM(total_amount_paise), 0) as total
-        FROM vouchers
-        WHERE company_id = ? AND voucher_type = 'PURCHASE' AND voucher_date = ? AND status = 'POSTED'
-      `).get(companyId, today) as { total: number };
+        SELECT COALESCE(
+          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE' AND status = 'POSTED' AND voucher_date = ?), 0
+        ) - COALESCE(
+          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE_RETURN' AND status = 'POSTED' AND voucher_date = ?), 0
+        ) as total
+      `).get(companyId, today, companyId, today) as { total: number };
 
-      // DEF-REP-10: Include opening balances in receivables, payables, and cash/bank, and expose bank overdraft accurately
+      // 4. Receivables (Sundry Debtors) with opening balances
       const receivables = db.prepare(`
         SELECT COALESCE(SUM(
           COALESCE(l.opening_balance_paise * (CASE WHEN l.opening_balance_type = 'DR' THEN 1 ELSE -1 END), 0) +
@@ -1418,6 +1657,7 @@ export function createApiRouter(db: DatabaseSync): Router {
         WHERE l.company_id = ? AND (l.group_id LIKE '%debtor%' OR g.group_name LIKE '%Debtor%')
       `).get(companyId) as { balance: number };
 
+      // 5. Payables (Sundry Creditors) with opening balances
       const payables = db.prepare(`
         SELECT COALESCE(SUM(
           COALESCE(l.opening_balance_paise * (CASE WHEN l.opening_balance_type = 'CR' THEN 1 ELSE -1 END), 0) +
@@ -1435,6 +1675,7 @@ export function createApiRouter(db: DatabaseSync): Router {
         WHERE l.company_id = ? AND (l.group_id LIKE '%creditor%' OR g.group_name LIKE '%Creditor%')
       `).get(companyId) as { balance: number };
 
+      // 6. Cash and Bank Balances
       const cashBank = db.prepare(`
         SELECT COALESCE(SUM(
           COALESCE(l.opening_balance_paise * (CASE WHEN l.opening_balance_type = 'DR' THEN 1 ELSE -1 END), 0) +
@@ -1452,6 +1693,7 @@ export function createApiRouter(db: DatabaseSync): Router {
         WHERE l.company_id = ? AND (l.group_id LIKE '%cash%' OR l.group_id LIKE '%bank%' OR g.group_name LIKE '%Cash%' OR g.group_name LIKE '%Bank%')
       `).get(companyId) as { balance: number };
 
+      // 7. Stock Valuation
       const stockSummary = ReportEngine.getStockSummary(db, companyId);
       const totalStockValPaise = stockSummary.reduce((sum, item) => sum + item.totalValuePaise, 0);
 
@@ -1463,7 +1705,6 @@ export function createApiRouter(db: DatabaseSync): Router {
         ORDER BY v.voucher_date DESC, v.created_at DESC LIMIT 5
       `).all(companyId);
 
-      // DEF-REP-09: Stock alerts use actual stock quantity compared against actual reorder level
       const stockAlerts = stockSummary
         .filter(item => (item.reorderLevel > 0 && item.quantity <= item.reorderLevel) || item.quantity <= 0)
         .slice(0, 5)
@@ -1473,27 +1714,127 @@ export function createApiRouter(db: DatabaseSync): Router {
           status: item.quantity <= 0 ? 'critical' : 'warning'
         }));
 
-      const trendData = db.prepare(`
+      // 8. Monthly Trend Data strictly aggregated from saved posted transactions
+      // For Financial Year overview, query spans the whole financial year and includes all 12 months (even with 0 activity)
+      const trendQueryFrom = isFyScope ? fromDate : (periodParam === 'Single Day' ? `${fyStartYear}-04-01` : fromDate);
+      const trendQueryTo = isFyScope ? toDate : (periodParam === 'Single Day' ? `${fyStartYear + 1}-03-31` : toDate);
+
+      const rawTrend = db.prepare(`
         SELECT
           substr(voucher_date, 1, 7) as month,
           voucher_type,
-          COALESCE(SUM(total_amount_paise), 0) as total
+          COALESCE(SUM(taxable_amount_paise), 0) as total
         FROM vouchers
-        WHERE company_id = ? AND status = 'POSTED' AND voucher_type IN ('SALES', 'PURCHASE')
+        WHERE company_id = ? AND status = 'POSTED'
+          AND voucher_type IN ('SALES', 'SALES_RETURN', 'PURCHASE', 'PURCHASE_RETURN')
+          AND voucher_date BETWEEN ? AND ?
         GROUP BY substr(voucher_date, 1, 7), voucher_type
         ORDER BY month ASC
-      `).all(companyId) as { month: string; voucher_type: string; total: number }[];
+      `).all(companyId, trendQueryFrom, trendQueryTo) as { month: string; voucher_type: string; total: number }[];
+
+      const trendMap = new Map<string, { salesPaise: number; purchasePaise: number }>();
+
+      // Seed all 12 financial-year months (Apr-Mar) for FY / Single Day mode
+      if (isFyScope || periodParam === 'Financial Year' || periodParam === 'This FY' || periodParam === 'Single Day') {
+        for (let m = 4; m <= 12; m++) {
+          const mStr = `${fyStartYear}-${String(m).padStart(2, '0')}`;
+          trendMap.set(mStr, { salesPaise: 0, purchasePaise: 0 });
+        }
+        for (let m = 1; m <= 3; m++) {
+          const mStr = `${fyStartYear + 1}-${String(m).padStart(2, '0')}`;
+          trendMap.set(mStr, { salesPaise: 0, purchasePaise: 0 });
+        }
+      }
+
+      for (const row of rawTrend) {
+        const cur = trendMap.get(row.month) || { salesPaise: 0, purchasePaise: 0 };
+        if (row.voucher_type === 'SALES') cur.salesPaise += row.total;
+        if (row.voucher_type === 'SALES_RETURN') cur.salesPaise -= row.total;
+        if (row.voucher_type === 'PURCHASE') cur.purchasePaise += row.total;
+        if (row.voucher_type === 'PURCHASE_RETURN') cur.purchasePaise -= row.total;
+        trendMap.set(row.month, cur);
+      }
+
+      let trendEntries = Array.from(trendMap.entries());
+      if (isFyScope || periodParam === 'Financial Year' || periodParam === 'This FY' || periodParam === 'Single Day') {
+        const fyOrder = [
+          `${fyStartYear}-04`, `${fyStartYear}-05`, `${fyStartYear}-06`,
+          `${fyStartYear}-07`, `${fyStartYear}-08`, `${fyStartYear}-09`,
+          `${fyStartYear}-10`, `${fyStartYear}-11`, `${fyStartYear}-12`,
+          `${fyStartYear + 1}-01`, `${fyStartYear + 1}-02`, `${fyStartYear + 1}-03`
+        ];
+        trendEntries.sort((a, b) => fyOrder.indexOf(a[0]) - fyOrder.indexOf(b[0]));
+      } else {
+        trendEntries.sort((a, b) => a[0].localeCompare(b[0]));
+      }
+
+      const trendData = trendEntries.map(([month, vals]) => ({
+        month,
+        salesPaise: Math.max(0, vals.salesPaise),
+        purchasePaise: Math.max(0, vals.purchasePaise),
+        // For backwards compatibility with consumers expecting voucher_type / total rows
+        total: Math.max(0, vals.salesPaise),
+        voucher_type: 'SALES'
+      }));
+
+      // 9. Explainable Business Health metrics
+      const recBal = Math.max(0, receivables.balance);
+      const payBal = Math.max(0, payables.balance);
+      const liquidFunds = cashBank.balance + recBal;
+      const hasActivity = periodSales.total > 0 || periodPurchases.total > 0 || recBal > 0 || payBal > 0;
+
+      let healthScore: number | null = null;
+      let healthStatusText = 'No Activity';
+      let healthDescText = 'No transactions recorded for the selected period.';
+
+      if (hasActivity) {
+        if (payBal === 0) {
+          healthScore = 100;
+          healthStatusText = 'Excellent (Debt Free)';
+          healthDescText = 'Zero outstanding payables. Business operating with positive cash flow.';
+        } else {
+          const quickRatio = liquidFunds / payBal;
+          if (quickRatio >= 1.5) {
+            healthScore = 95;
+            healthStatusText = 'Strong Solvency';
+            healthDescText = `Liquid assets cover ${quickRatio.toFixed(1)}x current payables (benchmark >= 1.5x).`;
+          } else if (quickRatio >= 1.0) {
+            healthScore = 80;
+            healthStatusText = 'Adequate Liquidity';
+            healthDescText = `Liquid assets adequately match short-term obligations (${quickRatio.toFixed(1)}x coverage).`;
+          } else if (quickRatio >= 0.5) {
+            healthScore = 60;
+            healthStatusText = 'Moderate Working Capital';
+            healthDescText = `Payables exceed immediately available liquid funds (${quickRatio.toFixed(1)}x coverage).`;
+          } else {
+            healthScore = 40;
+            healthStatusText = 'Liquidity Attention Needed';
+            healthDescText = `Payables significantly exceed liquid reserves (${quickRatio.toFixed(1)}x coverage).`;
+          }
+        }
+      }
 
       res.json({
-        todaySalesPaise: todaySales.total,
-        todayPurchasesPaise: todayPurchases.total,
-        receivablesPaise: Math.max(0, receivables.balance),
-        payablesPaise: Math.max(0, payables.balance),
-        cashBankPaise: cashBank.balance, // DEF-REP-10: Expose overdraft / negative balance accurately
+        totalSalesPaise: Math.max(0, periodSales.total),
+        totalPurchasesPaise: Math.max(0, periodPurchases.total),
+        todaySalesPaise: Math.max(0, todaySales.total),
+        todayPurchasesPaise: Math.max(0, todayPurchases.total),
+        receivablesPaise: recBal,
+        payablesPaise: payBal,
+        cashBankPaise: cashBank.balance,
         stockValuePaise: totalStockValPaise,
         stockAlerts,
         trendData,
-        recentVouchers
+        recentVouchers,
+        period: periodParam,
+        fromDate,
+        toDate,
+        businessHealth: {
+          score: healthScore,
+          statusText: healthStatusText,
+          descText: healthDescText,
+          quickRatio: payBal > 0 ? liquidFunds / payBal : null
+        }
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
