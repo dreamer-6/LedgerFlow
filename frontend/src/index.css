@@ -7617,3 +7617,150 @@ h2.sg-title {
     display: none !important;
   }
 }
+
+/* ── UI-035: Purchase Invoice Workspace & Shared Layout ── */
+.purchase-invoice-workspace {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 24px 28px;
+  font-family: var(--font-sans);
+  min-height: 100%;
+}
+
+@media (min-width: 1440px) {
+  .purchase-invoice-workspace {
+    padding: 24px 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  .purchase-invoice-workspace {
+    padding: 16px;
+  }
+}
+
+.purchase-layout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 72%) minmax(320px, 28%);
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1200px) {
+  .purchase-layout-grid {
+    grid-template-columns: minmax(0, 68%) minmax(300px, 32%);
+    gap: 18px;
+  }
+}
+
+@media (max-width: 960px) {
+  .purchase-layout-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+.purchase-form-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 768px) {
+  .purchase-form-grid-3 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.purchase-form-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 768px) {
+  .purchase-form-grid-2 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.purchase-terms-notes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .purchase-terms-notes-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.purchase-supplier-info-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .purchase-supplier-info-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.purchase-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.purchase-items-table th {
+  padding: 8px 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: left;
+}
+
+.purchase-items-table th.col-num {
+  width: 34px;
+  text-align: center;
+}
+
+.purchase-items-table th.col-item {
+  min-width: 280px;
+  width: auto;
+}
+
+.purchase-items-table th.col-hsn {
+  width: 95px;
+}
+
+.purchase-items-table th.col-qty {
+  width: 75px;
+  text-align: center;
+}
+
+.purchase-items-table th.col-rate {
+  width: 120px;
+  text-align: right;
+}
+
+.purchase-items-table th.col-tax {
+  width: 85px;
+  text-align: center;
+}
+
+.purchase-items-table th.col-amount {
+  width: 125px;
+  text-align: right;
+}
+
+.purchase-items-table th.col-del {
+  width: 40px;
+  text-align: center;
+}

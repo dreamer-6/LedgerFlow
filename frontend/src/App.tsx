@@ -34,6 +34,8 @@ import { IndividualSalesInvoiceView } from './pages/IndividualSalesInvoiceView';
 import { SalesReturnView } from './pages/SalesReturnView';
 import { PurchaseView } from './pages/PurchaseView';
 import { PurchaseInvoiceView } from './pages/PurchaseInvoiceView';
+import { PurchaseRegisterView } from './pages/PurchaseRegisterView';
+import { PurchaseReturnView } from './pages/PurchaseReturnView';
 import { ReceiptsView } from './pages/ReceiptsView';
 import { ReceiptCreationView } from './pages/ReceiptCreationView';
 import { PaymentsView } from './pages/PaymentsView';
@@ -119,7 +121,8 @@ export const App: React.FC = () => {
   const [salesViewMode, setSalesViewMode] = useState<'dashboard' | 'create' | 'register' | 'view_invoice' | 'return'>('dashboard');
   const [selectedInvoiceViewId, setSelectedInvoiceViewId] = useState<string | null>(null);
   const [salesEditVoucherId, setSalesEditVoucherId] = useState<string | null>(null);
-  const [purchaseViewMode, setPurchaseViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [purchaseViewMode, setPurchaseViewMode] = useState<'dashboard' | 'create' | 'register' | 'return' | 'view_invoice'>('dashboard');
+  const [purchaseEditVoucherId, setPurchaseEditVoucherId] = useState<string | null>(null);
   const [receiptViewMode, setReceiptViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [paymentViewMode, setPaymentViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [journalViewMode, setJournalViewMode] = useState<'dashboard' | 'create'>('dashboard');
@@ -999,32 +1002,76 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* 1.2 Purchase Module (UI-007) — Purchase Dashboard & Purchase Invoice Creation */}
+          {/* 1.2 Purchase Module (UI-036) — Dashboard, Register, Invoice Creation, Return */}
           {activeTab === 'purchase' && (
             <div key="purchase" className="view-container-animated">
               {purchaseViewMode === 'dashboard' ? (
                 <PurchaseView
                   company={company}
                   activeFy={activeFy}
-                  onCreateInvoice={() => setPurchaseViewMode('create')}
+                  onCreateInvoice={() => {
+                    setPurchaseEditVoucherId(null);
+                    setPurchaseViewMode('create');
+                  }}
+                  onOpenRegister={() => setPurchaseViewMode('register')}
+                  onOpenReturn={() => setPurchaseViewMode('return')}
                   onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                  onEditVoucher={(id) => {
+                    setPurchaseEditVoucherId(id);
+                    setPurchaseViewMode('create');
+                  }}
                   onNavigateTab={(tab, sub) => {
                     setActiveTab(tab);
                     if (sub) setReportSubTab(sub);
                   }}
                 />
-              ) : (
+              ) : purchaseViewMode === 'register' ? (
+                <PurchaseRegisterView
+                  company={company}
+                  activeFy={activeFy}
+                  onCreateInvoice={() => {
+                    setPurchaseEditVoucherId(null);
+                    setPurchaseViewMode('create');
+                  }}
+                  onViewInvoice={(id) => setActivePrintVoucherId(id)}
+                  onEditInvoice={(id) => {
+                    setPurchaseEditVoucherId(id);
+                    setPurchaseViewMode('create');
+                  }}
+                  onPrintInvoice={(id) => setActivePrintVoucherId(id)}
+                  onNavigateTab={(tab, sub) => {
+                    setActiveTab(tab);
+                    if (sub) setReportSubTab(sub);
+                  }}
+                />
+              ) : purchaseViewMode === 'create' ? (
                 <PurchaseInvoiceView
                   company={company}
                   activeFy={activeFy}
                   currentDate={currentDate}
-                  onBack={() => setPurchaseViewMode('dashboard')}
+                  editVoucherId={purchaseEditVoucherId}
+                  onBack={() => {
+                    setPurchaseEditVoucherId(null);
+                    setPurchaseViewMode('register');
+                  }}
                   onPostSuccess={(voucherId) => {
+                    setPurchaseEditVoucherId(null);
                     setActivePrintVoucherId(voucherId);
-                    setPurchaseViewMode('dashboard');
+                    setPurchaseViewMode('register');
                   }}
                 />
-              )}
+              ) : purchaseViewMode === 'return' ? (
+                <PurchaseReturnView
+                  company={company}
+                  activeFy={activeFy}
+                  currentDate={currentDate}
+                  onPostSuccess={(id) => setActivePrintVoucherId(id)}
+                  onNavigateTab={(tab, sub) => {
+                    setActiveTab(tab);
+                    if (sub) setReportSubTab(sub);
+                  }}
+                />
+              ) : null}
             </div>
           )}
 

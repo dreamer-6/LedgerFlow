@@ -35,6 +35,79 @@ export const DEFAULT_A4_PAGINATION_CONFIG: PaginationConfig = {
   minItemsOnFinalPageWithFooter: 1
 };
 
+export const A4_LANDSCAPE_PAGINATION_CONFIG: PaginationConfig = {
+  totalPageHeight: 720,
+  page1HeaderHeight: 250,
+  continuationHeaderHeight: 48,
+  tableHeaderHeight: 38,
+  footerHeight: 270,
+  pageNumberHeight: 26,
+  minItemsOnFinalPageWithFooter: 1
+};
+
+export const A5_PORTRAIT_PAGINATION_CONFIG: PaginationConfig = {
+  totalPageHeight: 780,
+  page1HeaderHeight: 260,
+  continuationHeaderHeight: 48,
+  tableHeaderHeight: 38,
+  footerHeight: 280,
+  pageNumberHeight: 26,
+  minItemsOnFinalPageWithFooter: 1
+};
+
+export const A5_LANDSCAPE_PAGINATION_CONFIG: PaginationConfig = {
+  totalPageHeight: 530,
+  page1HeaderHeight: 210,
+  continuationHeaderHeight: 44,
+  tableHeaderHeight: 36,
+  footerHeight: 230,
+  pageNumberHeight: 24,
+  minItemsOnFinalPageWithFooter: 1
+};
+
+export const LETTER_PORTRAIT_PAGINATION_CONFIG: PaginationConfig = {
+  totalPageHeight: 980,
+  page1HeaderHeight: 290,
+  continuationHeaderHeight: 52,
+  tableHeaderHeight: 40,
+  footerHeight: 330,
+  pageNumberHeight: 30,
+  minItemsOnFinalPageWithFooter: 1
+};
+
+export const LETTER_LANDSCAPE_PAGINATION_CONFIG: PaginationConfig = {
+  totalPageHeight: 740,
+  page1HeaderHeight: 250,
+  continuationHeaderHeight: 48,
+  tableHeaderHeight: 38,
+  footerHeight: 270,
+  pageNumberHeight: 26,
+  minItemsOnFinalPageWithFooter: 1
+};
+
+export function getPaginationConfigForFormat(
+  format: string = 'A4',
+  orientation: string = 'PORTRAIT'
+): PaginationConfig {
+  const normFormat = (format || 'A4').toUpperCase();
+  const normOrient = (orientation || 'PORTRAIT').toUpperCase();
+
+  if (normFormat.includes('A5')) {
+    return normOrient === 'LANDSCAPE' || normFormat.includes('LANDSCAPE')
+      ? A5_LANDSCAPE_PAGINATION_CONFIG
+      : A5_PORTRAIT_PAGINATION_CONFIG;
+  }
+  if (normFormat.includes('LETTER')) {
+    return normOrient === 'LANDSCAPE' || normFormat.includes('LANDSCAPE')
+      ? LETTER_LANDSCAPE_PAGINATION_CONFIG
+      : LETTER_PORTRAIT_PAGINATION_CONFIG;
+  }
+  // Default A4
+  return normOrient === 'LANDSCAPE' || normFormat.includes('LANDSCAPE')
+    ? A4_LANDSCAPE_PAGINATION_CONFIG
+    : DEFAULT_A4_PAGINATION_CONFIG;
+}
+
 /**
  * Calculates deterministic line item height based on description length, serial number, etc.
  */

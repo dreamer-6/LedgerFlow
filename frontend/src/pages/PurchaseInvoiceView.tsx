@@ -149,6 +149,7 @@ export interface PurchaseInvoiceViewProps {
   company: Company | null;
   activeFy: FinancialYear | null;
   currentDate?: string;
+  editVoucherId?: string | null;
   onBack: () => void;
   onPostSuccess: (voucherId: string) => void;
 }
@@ -157,6 +158,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
   company,
   activeFy,
   currentDate,
+  editVoucherId,
   onBack,
   onPostSuccess
 }) => {
@@ -306,8 +308,8 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
       if (purLedger) setPurchaseLedgerId(purLedger.ledger_id);
     }).catch(console.error);
 
-    // 5. Next Voucher Number
-    if (activeFy) {
+    // 5. Next Voucher Number (only when creating new)
+    if (activeFy && !editVoucherId) {
       api.getNextVoucherNumber(company.company_id, activeFy.fy_id, 'PURCHASE')
         .then(res => {
           if (res?.nextVoucherNumber) {
@@ -318,10 +320,46 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
     }
 
     // Default place of supply to company state
-    if (company.state_code) {
+    if (company.state_code && !editVoucherId) {
       setPlaceOfSupply(company.state_code);
     }
-  }, [company, activeFy]);
+  }, [company, activeFy, editVoucherId]);
+
+  // Load existing voucher when editVoucherId is provided
+  useEffect(() => {
+    if (!editVoucherId) return;
+    api.getVoucherById(editVoucherId)
+      .then(({ voucher, lines: vLines }) => {
+        if (!voucher) return;
+        if (voucher.party_id) setPartyId(voucher.party_id);
+        if (voucher.voucher_number) setVoucherNumber(voucher.voucher_number);
+        if (voucher.voucher_date) setVoucherDate(voucher.voucher_date.split('T')[0]);
+        if (voucher.due_date) setDueDate(voucher.due_date.split('T')[0]);
+        if (voucher.reference_number) setReferenceNo(voucher.reference_number);
+        if (voucher.supplier_invoice_no) setSupplierInvoiceNo(voucher.supplier_invoice_no);
+        if (voucher.place_of_supply) setPlaceOfSupply(voucher.place_of_supply);
+        if (voucher.narration) setNarration(voucher.narration);
+        if (voucher.terms_conditions) setTermsAndCond(voucher.terms_conditions);
+        if (voucher.is_tax_inclusive !== undefined) setTaxMode(voucher.is_tax_inclusive ? 'INCLUSIVE' : 'EXCLUSIVE');
+
+        if (vLines && vLines.length > 0) {
+          setLines(vLines.map((vl: any, idx: number) => ({
+            id: `edit_ln_${idx}_${Date.now()}`,
+            itemId: vl.item_id || '',
+            name: vl.item_name || '',
+            description: vl.description || '',
+            hsnCode: vl.hsn_sac || '',
+            quantity: Number(vl.quantity) || 1,
+            unit: vl.unit || vl.unit_symbol || 'NOS',
+            rate: vl.rate_paise ? (vl.rate_paise / 100).toFixed(2) : (vl.rate || ''),
+            discountPercent: Number(vl.discount_percent) || 0,
+            gstRate: Number(vl.tax_rate) ?? Number(vl.gst_rate) ?? 18,
+            serialNumber: vl.serial_number || ''
+          })));
+        }
+      })
+      .catch(console.error);
+  }, [editVoucherId]);
 
   // Selected supplier object
   const selectedSupplier = useMemo(() => {
@@ -663,8 +701,13 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
     }
     setIsSaving(true);
     try {
-      const res = await api.postVoucher(payload);
-      showToast(`Draft ${res.voucherNumber || ''} saved successfully.`);
+      if (editVoucherId) {
+        await api.updateVoucher(editVoucherId, payload);
+        showToast('Draft purchase invoice updated successfully.');
+      } else {
+        const res = await api.postVoucher(payload);
+        showToast(`Draft ${res.voucherNumber || ''} saved successfully.`);
+      }
       onBack();
     } catch (err: any) {
       setError(err.message || 'Failed to save draft invoice');
@@ -687,13 +730,21 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
     }
     setIsSaving(true);
     try {
-      const res = await api.postVoucher(payload);
-      if (res.settlementVoucherNumber) {
-        showToast(`Purchase Invoice ${res.voucherNumber} posted & settled via ${res.settlementVoucherNumber} (${paymentMode})!`);
+      let finalVchId = editVoucherId;
+      if (editVoucherId) {
+        await api.updateVoucher(editVoucherId, payload);
+        await api.postDraftVoucher(editVoucherId);
+        showToast(`Purchase Invoice ${voucherNumber || ''} posted successfully!`);
+        onPostSuccess(editVoucherId);
       } else {
-        showToast(`Purchase Invoice ${res.voucherNumber || ''} posted successfully!`);
+        const res = await api.postVoucher(payload);
+        if (res.settlementVoucherNumber) {
+          showToast(`Purchase Invoice ${res.voucherNumber} posted & settled via ${res.settlementVoucherNumber} (${paymentMode})!`);
+        } else {
+          showToast(`Purchase Invoice ${res.voucherNumber || ''} posted successfully!`);
+        }
+        onPostSuccess(res.voucherId);
       }
-      onPostSuccess(res.voucherId);
     } catch (err: any) {
       setError(err.message || 'Failed to post purchase invoice');
     } finally {
@@ -735,7 +786,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
   };
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: '1440px', margin: '0 auto', fontFamily: 'var(--font-sans)' }}>
+    <div className="purchase-invoice-workspace">
       {/* Toast Notification */}
       {toast && (
         <div
@@ -800,13 +851,13 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
           </button>
           <div>
             <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginBottom: '2px' }}>
-              Purchase &rsaquo; Purchase Invoice &rsaquo; <span style={{ color: '#F97316' }}>Create</span>
+              Purchase &rsaquo; Purchase Invoice &rsaquo; <span style={{ color: '#F97316' }}>{editVoucherId ? 'Edit' : 'Create'}</span>
             </div>
             <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-              Purchase Invoice
+              {editVoucherId ? 'Edit Purchase Invoice' : 'Purchase Invoice'}
             </h1>
             <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: '2px 0 0' }}>
-              Record a purchase invoice from your supplier.
+              {editVoucherId ? 'Modify purchase invoice details and save or amend double-entry postings.' : 'Record a purchase invoice from your supplier.'}
             </p>
           </div>
         </div>
@@ -862,14 +913,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
       )}
 
       {/* Main Two-Column Layout */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) 320px',
-          gap: '20px',
-          alignItems: 'start'
-        }}
-      >
+      <div className="purchase-layout-grid">
         {/* ─────────────────────────────────────────────
             LEFT COLUMN: Details, Items, Terms
         ────────────────────────────────────────────── */}
@@ -1042,10 +1086,8 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
             {/* Selected Supplier Details Grid */}
             {selectedSupplier ? (
               <div
+                className="purchase-supplier-info-grid"
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1.2fr 1fr',
-                  gap: '16px',
                   backgroundColor: 'var(--bg-subtle, #F8FAFC)',
                   padding: '14px',
                   borderRadius: '8px',
@@ -1134,7 +1176,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div className="purchase-form-grid-3">
               {/* Invoice No */}
               <div>
                 <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
@@ -1203,7 +1245,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div className="purchase-form-grid-3">
               {/* Purchase Ledger */}
               <div>
                 <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
@@ -1282,7 +1324,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div className="purchase-form-grid-2">
               {/* Reference No */}
               <div>
                 <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
@@ -1422,21 +1464,21 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
 
             {/* Items Table */}
             <div style={{ overflowX: 'auto', marginBottom: '14px', minHeight: '260px', position: 'relative' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+              <table className="purchase-items-table">
                 <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: 'var(--bg-card, #FFFFFF)' }}>
                   <tr style={{ backgroundColor: 'var(--bg-subtle, #F8FAFC)', borderBottom: '1px solid var(--border-subtle, #E2E8F0)' }}>
-                    <th style={{ width: '30px', padding: '8px 10px', textAlign: 'center', color: 'var(--text-muted)' }}>#</th>
-                    <th style={{ minWidth: '220px', padding: '8px 10px', textAlign: 'left', color: 'var(--text-muted)' }}>Item Name & Description</th>
-                    <th style={{ width: '90px', padding: '8px 10px', textAlign: 'left', color: 'var(--text-muted)' }}>HSN/SAC</th>
-                    <th style={{ width: '70px', padding: '8px 10px', textAlign: 'center', color: 'var(--text-muted)' }}>Qty</th>
-                    <th style={{ width: '110px', padding: '8px 10px', textAlign: 'right', color: 'var(--text-muted)' }}>
+                    <th className="col-num">#</th>
+                    <th className="col-item">Item Name &amp; Description</th>
+                    <th className="col-hsn">HSN/SAC</th>
+                    <th className="col-qty">Qty</th>
+                    <th className="col-rate">
                       Rate (₹) {taxMode === 'INCLUSIVE' ? '(Incl. Tax)' : ''}
                     </th>
-                    <th style={{ width: '80px', padding: '8px 10px', textAlign: 'center', color: 'var(--text-muted)' }}>Tax %</th>
-                    <th style={{ width: '110px', padding: '8px 10px', textAlign: 'right', color: 'var(--text-muted)' }}>
+                    <th className="col-tax">Tax %</th>
+                    <th className="col-amount">
                       Amount (₹) {taxMode === 'INCLUSIVE' ? '(Incl. Tax)' : ''}
                     </th>
-                    <th style={{ width: '40px', padding: '8px 10px', textAlign: 'center' }}></th>
+                    <th className="col-del"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1697,7 +1739,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="purchase-terms-notes-grid">
               {/* Terms & Conditions */}
               <div>
                 <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>

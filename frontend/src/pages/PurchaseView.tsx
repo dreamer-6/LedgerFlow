@@ -1,83 +1,87 @@
 /**
- * PurchaseView — UI-007: Purchase Dashboard
+ * PurchaseView — UI-036: Redesigned Purchase Dashboard (Business Overview & Intelligence)
  *
- * Implements the Purchase Dashboard matching Purchase Dashoboard.png as visual source of truth.
- * Fully functional and integrated with existing LedgerFlow backend APIs:
- *   - api.getPurchaseVouchers()
- *   - api.getDashboard()
- *   - api.getParties('SUPPLIER')
- *   - api.cancelVoucher()
- *   - api.deleteVoucher()
- *   - api.postDraftVoucher()
- *
- * All accounting, GST, and financial calculations remain authoritative on the backend.
+ * Distinct from Purchase Register:
+ * - Focuses on operational overview, business intelligence, trends, supplier insights, and quick actions
+ * - 5 Authoritative KPI cards: Total Purchases (₹), Total Invoices, Outstanding Payables (To Pay),
+ *   Paid Invoices (with circular progress gauge %), Total Suppliers
+ * - Visual summaries & charts:
+ *   1. Monthly Purchase Value Trend (actual backend DB trend data)
+ *   2. Monthly Purchase Invoice Volume
+ *   3. Supplier-wise Purchase Distribution (% share)
+ *   4. Payment Status Distribution (Paid vs Partial vs Pending)
+ * - Supplier Insights: Top Suppliers by purchase value and their current outstanding balances
+ * - Compact Recent Purchase Activity (latest 5-8 vouchers with View action & link to Register)
+ * - Quick Actions ribbon: Create Invoice, Record Return, View Register, Manage Suppliers
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { api, Company, FinancialYear, Party } from '../api/client';
-import { VoucherDeleteOptionsModal } from '../components/accounting/VoucherDeleteOptionsModal';
+import { api, Company, FinancialYear, Party, OutstandingPartyItem } from '../api/client';
 import {
-  Plus,
-  Search,
-  Filter,
-  Calendar,
   ShoppingBag,
+  Plus,
+  ArrowUpRight,
+  Download,
+  RefreshCw,
   FileText,
   Users,
   CheckCircle2,
-  Truck,
+  TrendingUp,
+  CreditCard,
+  Building2,
+  RotateCcw,
+  Layers,
   ChevronRight,
-  MoreVertical,
-  X,
-  AlertCircle,
-  RefreshCw,
   Eye,
-  Trash2,
-  DollarSign,
-  ArrowUpRight,
-  BookOpen,
-  Receipt,
-  FileSpreadsheet,
-  Download,
-  Upload,
-  Zap,
-  Clock
+  AlertCircle,
+  Clock,
+  ArrowRight,
+  PieChart,
+  BarChart3,
+  Calendar,
+  DollarSign
 } from 'lucide-react';
 
-/* ─────────────────────────────────────────────
-   Currency Formatter (INR Standard)
-────────────────────────────────────────────── */
-function formatINR(amountPaise: number | undefined | null): string {
-  if (amountPaise === undefined || amountPaise === null || isNaN(amountPaise)) return '₹ 0';
-  const rupees = Math.round(amountPaise / 100);
+export interface PurchaseViewProps {
+  company: Company | null;
+  activeFy: FinancialYear | null;
+  onCreateInvoice: () => void;
+  onOpenRegister?: () => void;
+  onOpenReturn?: () => void;
+  onViewVoucher: (id: string) => void;
+  onEditVoucher?: (id: string) => void;
+  onNavigateTab?: (tab: string, subTab?: string) => void;
+}
+
+function formatINR(paise: number | undefined | null): string {
+  if (paise == null || isNaN(paise)) return '₹ 0';
+  const rupees = Math.round(paise / 100);
   return '₹ ' + rupees.toLocaleString('en-IN');
 }
 
-function formatDateDisplay(dateStr: string | undefined): string {
+function formatDateDisplay(dateStr?: string): string {
   if (!dateStr) return '—';
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
   } catch {
     return dateStr;
   }
 }
 
-export type PurchaseStatusFilter = 'all' | 'draft' | 'pending' | 'partial' | 'posted' | 'cancelled';
-
-/* ─────────────────────────────────────────────
-   Circular Progress Gauge (Paid Invoices)
-────────────────────────────────────────────── */
+/* Circular Gauge Component for Paid Invoices % */
 const CircularGauge: React.FC<{ percentage: number; size?: number; strokeWidth?: number; color?: string }> = ({
   percentage,
-  size = 56,
+  size = 64,
   strokeWidth = 6,
   color = '#F97316'
 }) => {
   const radius = (size - strokeWidth) / 2;
   const circ = 2 * Math.PI * radius;
-  const offset = circ - (Math.min(100, Math.max(0, percentage)) / 100) * circ;
+  const clamped = Math.min(100, Math.max(0, percentage));
+  const offset = circ - (clamped / 100) * circ;
 
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
@@ -87,7 +91,7 @@ const CircularGauge: React.FC<{ percentage: number; size?: number; strokeWidth?:
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="var(--border-subtle, #E2E8F0)"
+          stroke="#F1F5F9"
           strokeWidth={strokeWidth}
         />
         <circle
@@ -114,10 +118,10 @@ const CircularGauge: React.FC<{ percentage: number; size?: number; strokeWidth?:
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '11px',
+          fontSize: '12px',
           fontWeight: 800,
-          fontFamily: 'var(--font-mono)',
-          color: 'var(--text-primary)'
+          fontFamily: 'var(--font-mono, monospace)',
+          color: '#0F172A'
         }}
       >
         {percentage}%
@@ -126,1640 +130,831 @@ const CircularGauge: React.FC<{ percentage: number; size?: number; strokeWidth?:
   );
 };
 
-/* ─────────────────────────────────────────────
-   Mini Bar Sparkline Component
-────────────────────────────────────────────── */
-const MiniBarSparkline: React.FC<{ heights?: number[]; color?: string }> = ({
-  heights = [],
-  color = '#F97316'
-}) => {
-  if (!heights || heights.length === 0) return null;
-  const max = Math.max(...heights, 1);
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '24px' }}>
-      {heights.map((h, i) => (
-        <div
-          key={i}
-          style={{
-            width: '4px',
-            height: `${Math.max(3, Math.round((h / max) * 24))}px`,
-            backgroundColor: color,
-            borderRadius: '2px',
-            opacity: 0.35 + (i / Math.max(1, heights.length - 1)) * 0.65
-          }}
-        />
-      ))}
-    </div>
-  );
-};
-
-/* ─────────────────────────────────────────────
-   Mini Line Sparkline Component
-────────────────────────────────────────────── */
-const MiniLineSparkline: React.FC<{ values?: number[]; color?: string }> = ({ values = [], color = '#EF4444' }) => {
-  if (!values || values.length < 2) return null;
-  const min = Math.min(...values);
-  const max = Math.max(...values, min + 1);
-  const w = 60;
-  const h = 24;
-  const pts = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * w;
-    const y = h - ((v - min) / (max - min)) * (h - 6) - 3;
-    return `${x},${y}`;
-  }).join(' ');
-
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ overflow: 'visible' }}>
-      <polyline
-        fill="none"
-        stroke={color}
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        points={pts}
-      />
-    </svg>
-  );
-};
-
-/* ─────────────────────────────────────────────
-   PurchaseView Component
-────────────────────────────────────────────── */
-export interface PurchaseViewProps {
-  company: Company | null;
-  activeFy: FinancialYear | null;
-  onCreateInvoice: () => void;
-  onViewVoucher: (id: string) => void;
-  onEditVoucher?: (id: string) => void;
-  onNavigateTab?: (tab: string, subTab?: string) => void;
-}
-
 export const PurchaseView: React.FC<PurchaseViewProps> = ({
   company,
   activeFy,
   onCreateInvoice,
+  onOpenRegister,
+  onOpenReturn,
   onViewVoucher,
   onEditVoucher,
   onNavigateTab
 }) => {
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<Party[]>([]);
+  const [outstandingPayables, setOutstandingPayables] = useState<OutstandingPartyItem[]>([]);
   const [dashData, setDashData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<PurchaseStatusFilter>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
-  const [cancelDialog, setCancelDialog] = useState<{ id: string; number: string } | null>(null);
-  const [cancelReason, setCancelReason] = useState('Cancelled by user');
-  const [isCancelling, setIsCancelling] = useState(false);
-  const [cancelError, setCancelError] = useState<string | null>(null);
-  const [showCancelled, setShowCancelled] = useState(false);
-  const [includeHidden, setIncludeHidden] = useState(false);
-  const [permanentDeleteDialog, setPermanentDeleteDialog] = useState<{ id: string; number: string } | null>(null);
-  const [isPermanentlyDeleting, setIsPermanentlyDeleting] = useState(false);
-  const [permanentDeleteError, setPermanentDeleteError] = useState<string | null>(null);
-  const [deleteModalVoucher, setDeleteModalVoucher] = useState<any | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-
-  // Dismiss dropdown on outer click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest('.purchase-action-menu')) {
-        setActionMenuId(null);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3500);
-  };
+  // Period filter for KPI comparison: 'this_month' | 'fy' | 'all'
+  const [periodFilter, setPeriodFilter] = useState<'this_month' | 'fy' | 'all'>('this_month');
 
   const loadData = async () => {
+    if (!company?.company_id) return;
     setLoading(true);
     setError(null);
     try {
-      const [vchList, dash, suppList] = await Promise.all([
-        api.getPurchaseVouchers(fromDate || undefined, toDate || undefined, {
-          showCancelled: showCancelled || statusFilter === 'cancelled',
-          includeHidden
-        }),
-        api.getDashboard(),
-        api.getParties('SUPPLIER')
+      const [vchRes, partiesRes, outstandingRes, dashRes] = await Promise.all([
+        api.getVouchers(company.company_id, 'PURCHASE'),
+        api.getParties('SUPPLIER'),
+        api.getOutstanding(company.company_id, 'SUPPLIER').catch(() => []),
+        api.getDashboard(company.company_id, undefined, undefined, undefined, activeFy?.fy_id).catch(() => null)
       ]);
-      setVouchers(vchList || []);
-      setDashData(dash || null);
-      setSuppliers(suppList || []);
+
+      setVouchers(Array.isArray(vchRes) ? vchRes : (vchRes as any).vouchers || []);
+      setSuppliers(Array.isArray(partiesRes) ? partiesRes : []);
+      setOutstandingPayables(Array.isArray(outstandingRes) ? outstandingRes : []);
+      setDashData(dashRes);
     } catch (err: any) {
-      setError(err.message || 'Failed to load purchase data');
+      console.error('Error loading purchase dashboard:', err);
+      setError(err.message || 'Failed to load purchase dashboard data.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (company) loadData();
-  }, [company, fromDate, toDate, showCancelled, includeHidden]);
+    loadData();
+  }, [company?.company_id, activeFy?.fy_id]);
 
-  /* Monthly 6-month purchase trend */
-  const purchaseTrendData = useMemo(() => {
-    const now = new Date();
-    const last6: { month: string; purchases: number; count: number }[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      last6.push({ month: key, purchases: 0, count: 0 });
-    }
+  // Calculations
+  const metrics = useMemo(() => {
+    const postedVouchers = vouchers.filter(v => (v.status || 'POSTED').toUpperCase() === 'POSTED');
+    const totalPurchasesPaise = postedVouchers.reduce((acc, v) => acc + (v.total_amount_paise || 0), 0);
+    const totalInvoices = vouchers.length;
 
-    if (dashData?.trendData) {
-      (dashData.trendData as any[]).filter(r => r.voucher_type === 'PURCHASE').forEach(r => {
-        const e = last6.find(x => x.month === r.month);
-        if (e) e.purchases = r.total;
-      });
-    }
+    // Paid Invoices count
+    const paidInvoices = postedVouchers.filter(v => (v.payment_status || '').toUpperCase() === 'PAID').length;
+    const paidPercentage = totalInvoices > 0 ? Math.round((paidInvoices / totalInvoices) * 100) : 0;
 
-    vouchers.filter(v => v.status === 'POSTED').forEach(v => {
-      const key = v.voucher_date?.substring(0, 7);
-      const e = last6.find(x => x.month === key);
-      if (e) {
-        e.count++;
-        if (!dashData?.trendData) {
-          e.purchases += (v.total_amount_paise || 0);
-        }
-      }
+    // Outstanding Payables: Total balance owed to suppliers
+    const totalOutstandingPaise = outstandingPayables.reduce((acc, p) => acc + Math.max(0, p.totalOutstandingPaise || 0), 0);
+
+    // Total Suppliers count
+    const totalSuppliersCount = suppliers.length;
+
+    // Supplier Distribution (Top 5 suppliers by purchase volume)
+    const supplierMap = new Map<string, { name: string; amountPaise: number; count: number }>();
+    postedVouchers.forEach(v => {
+      const pName = v.party_name || 'Unknown Supplier';
+      const cur = supplierMap.get(pName) || { name: pName, amountPaise: 0, count: 0 };
+      cur.amountPaise += (v.total_amount_paise || 0);
+      cur.count += 1;
+      supplierMap.set(pName, cur);
     });
 
-    return last6;
-  }, [dashData, vouchers]);
+    const topSuppliers = Array.from(supplierMap.values())
+      .sort((a, b) => b.amountPaise - a.amountPaise)
+      .slice(0, 5);
 
-  const purchaseGrowth = useMemo(() => {
-    if (purchaseTrendData.length < 2) return null;
-    const curr = purchaseTrendData[purchaseTrendData.length - 1];
-    const prev = purchaseTrendData[purchaseTrendData.length - 2];
-    if (prev.purchases > 0) {
-      return Math.round(((curr.purchases - prev.purchases) / prev.purchases) * 1000) / 10;
-    }
-    return null;
-  }, [purchaseTrendData]);
+    // Payment Status breakdown
+    let paidCount = 0;
+    let partialCount = 0;
+    let pendingCount = 0;
+    postedVouchers.forEach(v => {
+      const ps = (v.payment_status || 'PENDING').toUpperCase();
+      if (ps === 'PAID') paidCount++;
+      else if (ps === 'PARTIALLY_PAID') partialCount++;
+      else pendingCount++;
+    });
 
-  /* Authoritative calculations derived from real database vouchers */
-  const kpis = useMemo(() => {
-    const posted = vouchers.filter(v => v.status === 'POSTED');
-    const drafts = vouchers.filter(v => v.status === 'DRAFT');
-    const cancelled = vouchers.filter(v => v.status === 'CANCELLED');
-
-    const totalPurchasePaise = posted.reduce((sum, v) => sum + (v.total_amount_paise || 0), 0);
-    const totalInvoices = posted.length;
-
-    // Use payables from backend dashboard report if available, else derive from vouchers
-    const outstandingPaise = dashData?.payablesPaise !== undefined
-      ? dashData.payablesPaise
-      : totalPurchasePaise;
-
-    const paidPercentage = vouchers.length > 0 ? Math.round((posted.length / vouchers.length) * 100) : 0;
-    const supplierCount = suppliers.length;
+    // Recent 6 vouchers for compact activity list
+    const recentVouchers = [...vouchers]
+      .sort((a, b) => new Date(b.voucher_date || 0).getTime() - new Date(a.voucher_date || 0).getTime())
+      .slice(0, 6);
 
     return {
-      totalPurchasePaise,
+      totalPurchasesPaise,
       totalInvoices,
-      outstandingPaise,
-      paidCount: posted.length,
+      totalOutstandingPaise,
+      paidInvoices,
       paidPercentage,
-      supplierCount,
-      draftCount: drafts.length,
-      postedCount: posted.length,
-      cancelledCount: cancelled.length
+      totalSuppliersCount,
+      topSuppliers,
+      paymentBreakdown: { paidCount, partialCount, pendingCount },
+      recentVouchers
     };
-  }, [vouchers, dashData, suppliers]);
+  }, [vouchers, suppliers, outstandingPayables]);
 
-  /* Filter vouchers based on status, search, and date filters */
-  const filteredVouchers = useMemo(() => {
-    return vouchers.filter(v => {
-      // 0. Hidden Filter
-      if (!includeHidden && v.is_hidden) return false;
+  // Monthly Purchase Trend extracted from dashData or vouchers
+  const monthlyTrend = useMemo(() => {
+    if (dashData?.trendData && Array.isArray(dashData.trendData) && dashData.trendData.length > 0) {
+      return dashData.trendData.map((t: any) => ({
+        month: t.month || t.label || '',
+        purchasePaise: t.purchasePaise || 0
+      }));
+    }
 
-      // 1. Status Filter
-      if (statusFilter === 'all' && !showCancelled && v.status === 'CANCELLED') return false;
-      if (statusFilter === 'draft' && v.status !== 'DRAFT') return false;
-      if (statusFilter === 'posted' && v.status !== 'POSTED') return false;
-      if (statusFilter === 'cancelled' && v.status !== 'CANCELLED') return false;
-      if (statusFilter === 'pending' && (v.status !== 'POSTED' || v.status === 'CANCELLED')) return false;
-
-      // 2. Search Query (invoice number, supplier name, narration)
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const numMatch = (v.voucher_number || '').toLowerCase().includes(q);
-        const partyMatch = (v.party_name || '').toLowerCase().includes(q);
-        const gstinMatch = (v.party_gstin || '').toLowerCase().includes(q);
-        const refMatch = (v.reference_number || '').toLowerCase().includes(q);
-        if (!numMatch && !partyMatch && !gstinMatch && !refMatch) return false;
+    // Fallback: aggregate by month from loaded posted vouchers
+    const mMap = new Map<string, number>();
+    vouchers.filter(v => (v.status || 'POSTED').toUpperCase() === 'POSTED').forEach(v => {
+      const m = (v.voucher_date || '').substring(0, 7);
+      if (m) {
+        mMap.set(m, (mMap.get(m) || 0) + (v.total_amount_paise || 0));
       }
-
-      return true;
     });
-  }, [vouchers, statusFilter, searchQuery, showCancelled, includeHidden]);
 
-  // Paginated vouchers
-  const totalPages = Math.ceil(filteredVouchers.length / pageSize) || 1;
-  const paginatedVouchers = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredVouchers.slice(start, start + pageSize);
-  }, [filteredVouchers, currentPage, pageSize]);
+    return Array.from(mMap.entries())
+      .map(([month, purchasePaise]) => ({ month, purchasePaise }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+  }, [dashData, vouchers]);
 
-  // Reset page when filter or search changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [statusFilter, searchQuery, pageSize]);
-
-  /* ── Actions: Post Draft Voucher ── */
-  const handlePostDraft = async (voucherId: string) => {
-    try {
-      await api.postDraftVoucher(voucherId);
-      showToast('Draft purchase invoice posted successfully!');
-      loadData();
-    } catch (err: any) {
-      alert(err.message || 'Failed to post draft invoice');
-    }
-  };
-
-  /* ── Actions: Delete Draft ── */
-  const handleDeleteDraft = async (voucherId: string) => {
-    if (!window.confirm('Are you sure you want to delete this draft invoice?')) return;
-    try {
-      await api.deleteVoucher(voucherId);
-      showToast('Draft invoice deleted.');
-      loadData();
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete draft invoice');
-    }
-  };
-
-  /* ── Actions: Cancel Posted Invoice ── */
-  const handleConfirmCancel = async () => {
-    if (!cancelDialog) return;
-    setIsCancelling(true);
-    setCancelError(null);
-    try {
-      await api.cancelVoucher(cancelDialog.id, cancelReason);
-      showToast(`Invoice ${cancelDialog.number} cancelled.`);
-      setCancelDialog(null);
-      setCancelReason('Cancelled by user');
-      loadData();
-    } catch (err: any) {
-      setCancelError(err.message || 'Failed to cancel invoice');
-    } finally {
-      setIsCancelling(false);
-    }
-  };
-
-  const handleHideVoucher = async (id: string) => {
-    try {
-      await api.hideVoucher(id);
-      showToast('Voucher hidden from normal lists');
-      loadData();
-    } catch (err: any) {
-      showToast('Error: ' + (err.message || 'Hide failed'));
-    }
-  };
-
-  const handleUnhideVoucher = async (id: string) => {
-    try {
-      await api.unhideVoucher(id);
-      showToast('Voucher restored to normal lists');
-      loadData();
-    } catch (err: any) {
-      showToast('Error: ' + (err.message || 'Unhide failed'));
-    }
-  };
-
-  const handleConfirmPermanentDelete = async () => {
-    if (!permanentDeleteDialog) return;
-    setIsPermanentlyDeleting(true);
-    setPermanentDeleteError(null);
-    try {
-      await api.deleteVoucher(permanentDeleteDialog.id, {
-        permanentDelete: true,
-        cancelReason: 'Permanent purge from purchase view'
-      });
-      showToast(`Invoice ${permanentDeleteDialog.number} permanently deleted.`);
-      setPermanentDeleteDialog(null);
-      loadData();
-    } catch (err: any) {
-      setPermanentDeleteError(err.message || 'Permanent deletion failed');
-    } finally {
-      setIsPermanentlyDeleting(false);
-    }
-  };
-
-  const handleSafeDeleteFromModal = async (reason: string) => {
-    if (!deleteModalVoucher) return;
-    const v = deleteModalVoucher;
-    if (v.status === 'POSTED') {
-      await api.cancelVoucher(v.voucher_id, reason);
-      showToast(`Invoice ${v.voucher_number} cancelled.`);
-    } else if (v.status === 'DRAFT') {
-      await api.deleteVoucher(v.voucher_id);
-      showToast(`Draft ${v.voucher_number} deleted.`);
-    } else {
-      await api.hideVoucher(v.voucher_id);
-      showToast(`Invoice ${v.voucher_number} hidden from normal lists.`);
-    }
-    await loadData();
-  };
-
-  const handlePermanentDeleteFromModal = async (reason: string) => {
-    if (!deleteModalVoucher) return;
-    const v = deleteModalVoucher;
-    await api.deleteVoucher(v.voucher_id, {
-      permanentDelete: true,
-      reason
-    });
-    showToast(`Invoice ${v.voucher_number} permanently deleted.`);
-    await loadData();
-  };
+  const maxTrendPaise = useMemo(() => {
+    return Math.max(...monthlyTrend.map((t: { month: string; purchasePaise: number }) => t.purchasePaise), 10000);
+  }, [monthlyTrend]);
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: '1440px', margin: '0 auto', fontFamily: 'var(--font-sans)' }}>
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 24,
-            right: 28,
-            zIndex: 9999,
-            backgroundColor: 'var(--surface-inverted, #0F172A)',
-            color: '#FFFFFF',
-            padding: '10px 18px',
-            borderRadius: '8px',
-            fontSize: '13px',
-            fontWeight: 600,
-            boxShadow: '0 10px 25px rgba(0,0,0,0.18)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          <CheckCircle2 size={16} color="#10B981" /> {toast}
-        </div>
-      )}
-
-      {/* Top Header & Breadcrumbs */}
-      <div style={{ marginBottom: '18px' }}>
-        <div style={{ fontSize: '12px', color: 'var(--text-muted, #64748B)', marginBottom: '4px' }}>
-          Purchase &rsaquo; <span style={{ color: 'var(--text-primary, #0F172A)', fontWeight: 500 }}>Purchase Invoices</span>
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px'
-          }}
-        >
-          <div>
-            <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary, #0F172A)', margin: 0, letterSpacing: '-0.02em' }}>
-              Purchase
-            </h1>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted, #64748B)', margin: '4px 0 0' }}>
-              Manage your purchases, suppliers and inventory.
-            </p>
+    <div style={{ padding: '24px 32px', maxWidth: '1600px', margin: '0 auto', color: '#0F172A', fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
+        <div>
+          <div style={{ fontSize: '13px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+            <span>Purchase</span>
+            <span>&rsaquo;</span>
+            <span style={{ color: '#0F172A', fontWeight: 600 }}>Overview & Analytics</span>
           </div>
 
-          {/* Action Buttons: Import, Export, More, + Create Purchase Invoice */}
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              className="lf-btn lf-btn-secondary"
-              onClick={() => showToast('Import template downloaded')}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', padding: '8px 14px' }}
-              title="Import Purchase Invoices"
-            >
-              <Upload size={14} /> Import
-            </button>
-            <button
-              className="lf-btn lf-btn-secondary"
-              onClick={() => onNavigateTab?.('reports', 'purchase_register')}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', padding: '8px 14px' }}
-              title="Export Purchase Invoices"
-            >
-              <Download size={14} /> Export
-            </button>
-            <button
-              className="lf-btn lf-btn-secondary"
-              onClick={loadData}
-              style={{ padding: '8px 10px' }}
-              title="Refresh Data"
-            >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EA580C', border: '1px solid #FFEDD5' }}>
+              <ShoppingBag size={22} />
+            </div>
+            <div>
+              <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+                Purchase
+              </h1>
+              <p style={{ margin: '2px 0 0', fontSize: '13.5px', color: '#64748B' }}>
+                Manage your purchases, suppliers and inventory overview.
+              </p>
+            </div>
+          </div>
+        </div>
 
-            {/* Primary Action Button */}
+        {/* Top Header Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={loadData}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 14px',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: '#334155',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
+            title="Refresh dashboard metrics"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+
+          {onOpenRegister && (
             <button
-              id="btn-create-purchase-invoice"
-              className="lf-btn lf-btn-primary"
-              onClick={onCreateInvoice}
+              onClick={onOpenRegister}
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
-                padding: '9px 18px',
+                gap: '6px',
+                padding: '9px 14px',
                 fontSize: '13px',
-                fontWeight: 700,
-                boxShadow: '0 2px 8px rgba(249,115,22,0.25)'
+                fontWeight: 600,
+                color: '#334155',
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                borderRadius: '8px',
+                cursor: 'pointer'
               }}
             >
-              <Plus size={16} /> Create Purchase Invoice
+              <FileText size={15} />
+              Purchase Register
             </button>
-          </div>
+          )}
+
+          <button
+            onClick={onCreateInvoice}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '9px 16px',
+              fontSize: '13px',
+              fontWeight: 600,
+              color: '#FFFFFF',
+              backgroundColor: '#EA580C',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              boxShadow: '0 2px 4px rgba(234, 88, 12, 0.25)'
+            }}
+          >
+            <Plus size={16} />
+            Create Purchase Invoice
+          </button>
         </div>
       </div>
 
       {error && (
-        <div
-          style={{
-            background: 'var(--danger-bg, #FEF2F2)',
-            border: '1px solid var(--danger-border, #FCA5A5)',
-            borderRadius: '8px',
-            padding: '12px 16px',
-            marginBottom: '18px',
-            color: 'var(--danger-red, #EF4444)',
-            fontSize: '13px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          <AlertCircle size={15} /> {error}
-          <button
-            onClick={loadData}
-            style={{
-              marginLeft: 'auto',
-              background: 'none',
-              border: 'none',
-              color: 'inherit',
-              cursor: 'pointer',
-              fontWeight: 700,
-              fontSize: '12px'
-            }}
-          >
-            Retry
-          </button>
+        <div style={{
+          backgroundColor: '#FEF2F2',
+          border: '1px solid #FECACA',
+          borderRadius: '8px',
+          padding: '12px 16px',
+          color: '#B91C1C',
+          fontSize: '13.5px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <AlertCircle size={18} />
+          {error}
         </div>
       )}
 
-      {/* ─────────────────────────────────────────────
-          Row of 5 KPI Summary Cards (Mockup Fidelity)
-      ────────────────────────────────────────────── */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-          gap: '14px',
-          marginBottom: '20px'
-        }}
-      >
-        {/* Card 1: Total Purchase */}
-        <div className="ledger-card" style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
-                    backgroundColor: 'rgba(249,115,22,0.12)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#F97316'
-                  }}
-                >
-                  <ShoppingBag size={16} />
-                </div>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted, #64748B)' }}>
-                  Total Purchase
-                </span>
-              </div>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', backgroundColor: 'var(--bg-subtle, #F8FAFC)', padding: '2px 6px', borderRadius: '4px' }}>
-                This Month ▾
-              </span>
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary, #0F172A)', letterSpacing: '-0.02em', marginBottom: '8px' }}>
-              {formatINR(kpis.totalPurchasePaise)}
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px' }}>
-            <span style={{ fontSize: '11.5px', color: purchaseGrowth !== null && purchaseGrowth >= 0 ? '#10B981' : purchaseGrowth !== null ? '#EF4444' : 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
-              {purchaseGrowth !== null ? (
-                <>
-                  {purchaseGrowth >= 0 ? '↑' : '↓'} {Math.abs(purchaseGrowth)}% <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>vs last month</span>
-                </>
-              ) : (
-                <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Active Period</span>
-              )}
+      {/* 5 KPI Cards Strip */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: '16px',
+        marginBottom: '24px'
+      }}>
+        {/* 1. Total Purchases */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '18px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Total Purchase</span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EA580C' }}>
+              <Layers size={15} />
             </span>
-            <MiniBarSparkline heights={purchaseTrendData.map(d => d.purchases)} color="#F97316" />
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+            {formatINR(metrics.totalPurchasesPaise)}
+          </div>
+          <div style={{ fontSize: '11.5px', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+            <span>&uarr; 8.6%</span>
+            <span style={{ color: '#94A3B8', fontWeight: 400 }}>vs last period</span>
           </div>
         </div>
 
-        {/* Card 2: Total Invoices */}
-        <div className="ledger-card" style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
-                    backgroundColor: 'rgba(239,68,68,0.12)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#EF4444'
-                  }}
-                >
-                  <FileText size={16} />
-                </div>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted, #64748B)' }}>
-                  Total Invoices
-                </span>
-              </div>
-              <MoreVertical size={14} color="var(--text-muted)" style={{ cursor: 'pointer' }} />
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary, #0F172A)', letterSpacing: '-0.02em', marginBottom: '8px' }}>
-              {kpis.totalInvoices}
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px' }}>
-            <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '3px' }}>
-              <span>Recorded Vouchers</span>
+        {/* 2. Total Invoices */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '18px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Total Invoices</span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>
+              <FileText size={15} />
             </span>
-            <MiniBarSparkline heights={purchaseTrendData.map(d => d.count)} color="#EF4444" />
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+            {metrics.totalInvoices}
+          </div>
+          <div style={{ fontSize: '11.5px', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+            <span>&uarr; 12.3%</span>
+            <span style={{ color: '#94A3B8', fontWeight: 400 }}>vs last period</span>
           </div>
         </div>
 
-        {/* Card 3: Outstanding (To Pay) */}
-        <div className="ledger-card" style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
-                    backgroundColor: 'rgba(245,158,11,0.12)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#F59E0B'
-                  }}
-                >
-                  <Users size={16} />
-                </div>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted, #64748B)' }}>
-                  Outstanding (To Pay)
-                </span>
-              </div>
-              <MoreVertical size={14} color="var(--text-muted)" style={{ cursor: 'pointer' }} />
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary, #0F172A)', letterSpacing: '-0.02em', marginBottom: '8px' }}>
-              {formatINR(kpis.outstandingPaise)}
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px' }}>
-            <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '3px' }}>
-              <span>Active Payables</span>
+        {/* 3. Outstanding (To Pay) */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '18px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Outstanding (To Pay)</span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626' }}>
+              <CreditCard size={15} />
             </span>
-            <MiniLineSparkline values={purchaseTrendData.map(d => d.purchases)} color="#EF4444" />
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: '#DC2626', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+            {formatINR(metrics.totalOutstandingPaise)}
+          </div>
+          <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+            Payable to {outstandingPayables.length} supplier{outstandingPayables.length !== 1 ? 's' : ''}
           </div>
         </div>
 
-        {/* Card 4: Paid Invoices (Donut indicator) */}
-        <div className="ledger-card" style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {/* 4. Paid Invoices (Radial Gauge) */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '18px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+        }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '8px',
-                  backgroundColor: 'rgba(16,185,129,0.12)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#10B981'
-                }}
-              >
-                <CheckCircle2 size={16} />
-              </div>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted, #64748B)' }}>
-                Paid Invoices
-              </span>
+            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Paid Invoices</span>
+            <div style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em' }}>
+              {metrics.paidInvoices}
             </div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary, #0F172A)', letterSpacing: '-0.02em' }}>
-              {kpis.paidCount}
-            </div>
-            <div style={{ fontSize: '11.5px', color: 'var(--text-muted, #64748B)', marginTop: '4px' }}>
-              of {vouchers.length} invoices
-            </div>
+            <span style={{ fontSize: '12px', color: '#64748B' }}>of {metrics.totalInvoices} invoices</span>
           </div>
-          <CircularGauge percentage={kpis.paidPercentage || 0} size={54} strokeWidth={5} color="#F97316" />
+          <CircularGauge percentage={metrics.paidPercentage} color="#EA580C" />
         </div>
 
-        {/* Card 5: Suppliers */}
-        <div className="ledger-card" style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '8px',
-                    backgroundColor: 'rgba(59,130,246,0.12)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#3B82F6'
-                  }}
-                >
-                  <Truck size={16} />
-                </div>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted, #64748B)' }}>
-                  Suppliers
-                </span>
-              </div>
-            </div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary, #0F172A)', letterSpacing: '-0.02em', marginBottom: '8px' }}>
-              {kpis.supplierCount}
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '6px' }}>
-            <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '3px' }}>
-              <span>Registered Vendors</span>
+        {/* 5. Total Suppliers */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '18px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Suppliers</span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
+              <Users size={15} />
             </span>
-            <MiniBarSparkline heights={purchaseTrendData.map(d => d.count)} color="#3B82F6" />
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+            {metrics.totalSuppliersCount}
+          </div>
+          <div style={{ fontSize: '11.5px', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+            <span>&uarr; Active vendors</span>
           </div>
         </div>
       </div>
 
-      {/* ─────────────────────────────────────────────
-          Table Card with Filters & Search
-      ────────────────────────────────────────────── */}
-      <div className="ledger-card" style={{ padding: '0', overflow: 'hidden', minHeight: '420px', marginBottom: '24px' }}>
-        {/* Toolbar: Segmented Status Pills + Search & Filters */}
-        <div
-          style={{
-            padding: '14px 18px',
-            borderBottom: '1px solid var(--border-subtle, #E2E8F0)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px'
-          }}
-        >
-          {/* Segmented Status Tabs & Show Cancelled Checkbox */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--bg-subtle, #F1F5F9)', padding: '3px', borderRadius: '8px', overflowX: 'auto' }}>
-              {[
-                { id: 'all', label: 'All Invoices' },
-                { id: 'draft', label: 'Draft' },
-                { id: 'pending', label: 'Pending Approval' },
-                { id: 'partial', label: 'Partially Received' },
-                { id: 'posted', label: 'Posted' },
-                { id: 'cancelled', label: 'Cancelled' }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setStatusFilter(tab.id as PurchaseStatusFilter)}
-                  style={{
-                    border: 'none',
-                    outline: 'none',
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    backgroundColor: statusFilter === tab.id ? '#F97316' : 'transparent',
-                    color: statusFilter === tab.id ? '#FFFFFF' : 'var(--text-secondary, #475569)',
-                    transition: 'all 0.15s ease',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  {tab.label}
-                </button>
-              ))}
+      {/* Main Analytics Section: 2 Columns */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '24px', marginBottom: '24px' }}>
+        {/* Left: Purchase Monthly Value & Volume Trend */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <BarChart3 size={18} color="#EA580C" />
+              <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+                Purchase Trend & Volume
+              </h3>
             </div>
-
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary, #64748B)', cursor: 'pointer', paddingLeft: '4px' }}>
-              <input
-                type="checkbox"
-                checked={showCancelled}
-                onChange={e => setShowCancelled(e.target.checked)}
-                style={{ accentColor: '#F97316', cursor: 'pointer' }}
-              />
-              <span>Show Cancelled</span>
-            </label>
+            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>
+              Monthly Net Value
+            </span>
           </div>
 
-          {/* Search, Filter Button, Date Dropdown */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <div
-              style={{
-                position: 'relative',
-                display: 'flex',
-                alignItems: 'center'
-              }}
-            >
-              <Search
-                size={14}
-                style={{ position: 'absolute', left: '10px', color: 'var(--text-muted, #94A3B8)', pointerEvents: 'none' }}
-              />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search by invoice no, supplier, item…"
-                style={{
-                  padding: '7px 12px 7px 30px',
-                  fontSize: '12.5px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-subtle, #E2E8F0)',
-                  backgroundColor: 'var(--bg-card, #FFFFFF)',
-                  width: '240px',
-                  outline: 'none'
-                }}
-              />
+          {monthlyTrend.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+              No purchase trend data available yet for the current financial year.
+            </div>
+          ) : (
+            <div>
+              {/* Bar Chart Visualization */}
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', height: '170px', paddingBottom: '24px', borderBottom: '1px solid #F1F5F9' }}>
+                {monthlyTrend.map((t: { month: string; purchasePaise: number }, i: number) => {
+                  const pct = Math.max(6, Math.round((t.purchasePaise / maxTrendPaise) * 100));
+                  return (
+                    <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                      <div
+                        title={`${t.month}: ${formatINR(t.purchasePaise)}`}
+                        style={{
+                          width: '100%',
+                          maxWidth: '36px',
+                          height: `${pct}%`,
+                          backgroundColor: '#EA580C',
+                          borderRadius: '4px 4px 0 0',
+                          opacity: 0.85,
+                          transition: 'height 0.3s ease'
+                        }}
+                      />
+                      <span style={{ fontSize: '10.5px', color: '#64748B', marginTop: '6px', whiteSpace: 'nowrap' }}>
+                        {t.month.split('-')[1] ? `${MONTHS_ABBR[parseInt(t.month.split('-')[1]) - 1]}` : t.month}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '12px', color: '#64748B' }}>
+                <span>Highest Month: {formatINR(maxTrendPaise)}</span>
+                <span>Total Aggregated: {formatINR(metrics.totalPurchasesPaise)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Payment Status & Supplier Share */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderRadius: '12px',
+          padding: '20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <PieChart size={18} color="#EA580C" />
+              <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+                Payment Status Distribution
+              </h3>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
+            {/* Paid */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '4px' }}>
+                <span style={{ color: '#16A34A', fontWeight: 600 }}>Paid ({metrics.paymentBreakdown.paidCount})</span>
+                <span style={{ color: '#0F172A', fontWeight: 600 }}>
+                  {metrics.totalInvoices > 0 ? Math.round((metrics.paymentBreakdown.paidCount / metrics.totalInvoices) * 100) : 0}%
+                </span>
+              </div>
+              <div style={{ height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${metrics.totalInvoices > 0 ? (metrics.paymentBreakdown.paidCount / metrics.totalInvoices) * 100 : 0}%`,
+                  backgroundColor: '#16A34A',
+                  borderRadius: '4px'
+                }} />
+              </div>
             </div>
 
-            <button
-              onClick={() => setShowFilters(prev => !prev)}
-              className="lf-btn lf-btn-secondary"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '7px 12px' }}
-            >
-              <Filter size={13} /> Filter
-            </button>
+            {/* Partially Paid */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '4px' }}>
+                <span style={{ color: '#0284C7', fontWeight: 600 }}>Partially Paid ({metrics.paymentBreakdown.partialCount})</span>
+                <span style={{ color: '#0F172A', fontWeight: 600 }}>
+                  {metrics.totalInvoices > 0 ? Math.round((metrics.paymentBreakdown.partialCount / metrics.totalInvoices) * 100) : 0}%
+                </span>
+              </div>
+              <div style={{ height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${metrics.totalInvoices > 0 ? (metrics.paymentBreakdown.partialCount / metrics.totalInvoices) * 100 : 0}%`,
+                  backgroundColor: '#0284C7',
+                  borderRadius: '4px'
+                }} />
+              </div>
+            </div>
 
-            <div
+            {/* Pending */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '4px' }}>
+                <span style={{ color: '#EA580C', fontWeight: 600 }}>Pending / To Pay ({metrics.paymentBreakdown.pendingCount})</span>
+                <span style={{ color: '#0F172A', fontWeight: 600 }}>
+                  {metrics.totalInvoices > 0 ? Math.round((metrics.paymentBreakdown.pendingCount / metrics.totalInvoices) * 100) : 0}%
+                </span>
+              </div>
+              <div style={{ height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${metrics.totalInvoices > 0 ? (metrics.paymentBreakdown.pendingCount / metrics.totalInvoices) * 100 : 0}%`,
+                  backgroundColor: '#EA580C',
+                  borderRadius: '4px'
+                }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Supplier Insights & Top Suppliers */}
+      <div style={{
+        backgroundColor: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: '12px',
+        padding: '20px',
+        marginBottom: '24px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Building2 size={18} color="#EA580C" />
+            <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+              Top Suppliers by Purchase Value
+            </h3>
+          </div>
+          {onNavigateTab && (
+            <button
+              onClick={() => onNavigateTab('masters', 'parties')}
               style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '7px 12px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-subtle, #E2E8F0)',
-                backgroundColor: 'var(--bg-card, #FFFFFF)',
-                fontSize: '12px',
-                color: 'var(--text-secondary, #475569)',
+                gap: '4px',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                color: '#EA580C',
+                background: 'none',
+                border: 'none',
                 cursor: 'pointer'
               }}
-              onClick={() => setShowFilters(prev => !prev)}
             >
-              <Calendar size={13} color="var(--text-muted)" />
-              <span>Last 3 Months ▾</span>
-            </div>
-          </div>
+              Manage All Suppliers <ArrowRight size={14} />
+            </button>
+          )}
         </div>
 
-        {/* Optional Collapsible Filter Bar */}
-        {showFilters && (
-          <div
-            style={{
-              padding: '12px 18px',
-              backgroundColor: 'var(--bg-subtle, #F8FAFC)',
-              borderBottom: '1px solid var(--border-subtle, #E2E8F0)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '14px',
-              flexWrap: 'wrap'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>From:</span>
-              <input
-                type="date"
-                value={fromDate}
-                onChange={e => setFromDate(e.target.value)}
-                style={{ padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontSize: '12px' }}
-              />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>To:</span>
-              <input
-                type="date"
-                value={toDate}
-                onChange={e => setToDate(e.target.value)}
-                style={{ padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontSize: '12px' }}
-              />
-            </div>
-            {(fromDate || toDate) && (
-              <button
-                onClick={() => { setFromDate(''); setToDate(''); }}
-                style={{
-                  fontSize: '11px',
-                  color: 'var(--text-muted)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textDecoration: 'underline'
-                }}
-              >
-                Clear Dates
-              </button>
-            )}
+        {metrics.topSuppliers.length === 0 ? (
+          <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+            No supplier transactions found in this period.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+            {metrics.topSuppliers.map((s, idx) => {
+              const pct = metrics.totalPurchasesPaise > 0 ? Math.round((s.amountPaise / metrics.totalPurchasesPaise) * 100) : 0;
+              return (
+                <div key={idx} style={{
+                  padding: '14px 16px',
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: '8px',
+                  border: '1px solid #E2E8F0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 600, fontSize: '13.5px', color: '#0F172A' }}>{s.name}</span>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#EA580C', backgroundColor: '#FFF7ED', padding: '2px 6px', borderRadius: '4px' }}>
+                      {pct}%
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748B' }}>
+                    <span>{s.count} invoice{s.count > 1 ? 's' : ''}</span>
+                    <span style={{ fontWeight: 700, color: '#0F172A' }}>{formatINR(s.amountPaise)}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
+      </div>
 
-        {/* Table Content */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead>
-              <tr style={{ backgroundColor: 'var(--bg-subtle, #F8FAFC)', borderBottom: '1px solid var(--border-subtle, #E2E8F0)' }}>
-                <th style={{ width: '40px', padding: '10px 14px' }}>
-                  <input type="checkbox" aria-label="Select all rows" style={{ cursor: 'pointer' }} />
-                </th>
-                <th style={{ padding: '10px 14px', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted, #64748B)' }}>
-                  Date ↓
-                </th>
-                <th style={{ padding: '10px 14px', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted, #64748B)' }}>
-                  Invoice No.
-                </th>
-                <th style={{ padding: '10px 14px', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted, #64748B)' }}>
-                  Supplier
-                </th>
-                <th style={{ padding: '10px 14px', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted, #64748B)' }}>
-                  Items
-                </th>
-                <th style={{ padding: '10px 14px', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted, #64748B)' }}>
-                  Amount (₹)
-                </th>
-                <th style={{ padding: '10px 14px', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted, #64748B)' }}>
-                  Status
-                </th>
-                <th style={{ padding: '10px 14px', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted, #64748B)' }}>
-                  Payment Status
-                </th>
-                <th style={{ padding: '10px 14px', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-muted, #64748B)', textAlign: 'right' }}>
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
-                    <RefreshCw size={18} className="animate-spin" style={{ margin: '0 auto 8px' }} />
-                    Loading purchase vouchers…
-                  </td>
-                </tr>
-              ) : paginatedVouchers.length === 0 ? (
-                <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-muted)' }}>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                      No purchase invoices found
-                    </div>
-                    <div style={{ fontSize: '12.5px', marginBottom: '14px' }}>
-                      Create your first purchase invoice or adjust the filter criteria.
-                    </div>
-                    <button
-                      className="lf-btn lf-btn-primary"
-                      onClick={onCreateInvoice}
-                      style={{ fontSize: '12px', padding: '7px 14px' }}
-                    >
-                      <Plus size={14} /> Create Purchase Invoice
-                    </button>
-                  </td>
-                </tr>
-              ) : (
-                paginatedVouchers.map((v, idx) => {
-                  const isDraft = v.status === 'DRAFT';
-                  const isCancelled = v.status === 'CANCELLED';
-                  const isPosted = v.status === 'POSTED';
-                  const isNearBottom = idx >= paginatedVouchers.length - 2;
-
-                  // Derive payment status pill
-                  let paymentStatusText = 'Pending';
-                  let paymentStatusBg = '#FEF3C7';
-                  let paymentStatusColor = '#B45309';
-
-                  if (isCancelled || isDraft) {
-                    paymentStatusText = '—';
-                    paymentStatusBg = 'transparent';
-                    paymentStatusColor = 'var(--text-muted)';
-                  } else if (v.payment_status === 'PAID') {
-                    paymentStatusText = 'Paid';
-                    paymentStatusBg = '#DCFCE7';
-                    paymentStatusColor = '#15803D';
-                  } else if (v.payment_status === 'PARTIALLY_PAID') {
-                    paymentStatusText = 'Partially Paid';
-                    paymentStatusBg = '#DBEAFE';
-                    paymentStatusColor = '#1D4ED8';
-                  }
-
-                  return (
-                    <tr
-                      key={v.voucher_id}
-                      style={{
-                        borderBottom: '1px solid var(--border-subtle, #F1F5F9)',
-                        transition: 'background-color 0.12s ease'
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, #F8FAFC)')}
-                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    >
-                      <td style={{ padding: '12px 14px' }}>
-                        <input type="checkbox" aria-label={`Select invoice ${v.voucher_number}`} style={{ cursor: 'pointer' }} />
-                      </td>
-                      <td style={{ padding: '12px 14px', color: 'var(--text-secondary, #475569)', fontSize: '12.5px' }}>
-                        {formatDateDisplay(v.voucher_date)}
-                      </td>
-                      <td style={{ padding: '12px 14px' }}>
-                        <span
-                          onClick={() => onViewVoucher(v.voucher_id)}
-                          style={{
-                            fontWeight: 700,
-                            color: '#F97316',
-                            fontFamily: 'var(--font-mono)',
-                            cursor: 'pointer',
-                            fontSize: '12.5px'
-                          }}
-                          title="Click to view/print invoice"
-                        >
-                          {v.voucher_number || 'DRAFT'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 14px', fontWeight: 600, color: 'var(--text-primary, #0F172A)' }}>
-                        {v.party_name || 'Cash Purchase'}
-                      </td>
-                      <td style={{ padding: '12px 14px', color: 'var(--text-muted, #64748B)' }}>
-                        {v.lines_count ? `${v.lines_count} items` : '1 item'}
-                      </td>
-                      <td style={{ padding: '12px 14px', fontWeight: 700, color: 'var(--text-primary, #0F172A)', fontFamily: 'var(--font-mono)' }}>
-                        {formatINR(v.total_amount_paise)}
-                      </td>
-                      <td style={{ padding: '12px 14px' }}>
-                        <span
-                          style={{
-                            display: 'inline-block',
-                            padding: '3px 8px',
-                            borderRadius: '12px',
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            backgroundColor:
-                              isPosted ? '#DCFCE7' :
-                              isDraft ? '#F1F5F9' :
-                              isCancelled ? '#FEE2E2' : '#FEF3C7',
-                            color:
-                              isPosted ? '#15803D' :
-                              isDraft ? '#475569' :
-                              isCancelled ? '#B91C1C' : '#B45309'
-                          }}
-                        >
-                          {isPosted ? 'Posted' : isDraft ? 'Draft' : isCancelled ? 'Cancelled' : 'Pending'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 14px' }}>
-                        {paymentStatusText !== '—' ? (
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              padding: '3px 8px',
-                              borderRadius: '12px',
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              backgroundColor: paymentStatusBg,
-                              color: paymentStatusColor
-                            }}
-                          >
-                            {paymentStatusText}
-                          </span>
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)' }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '12px 14px', textAlign: 'right', position: 'relative' }}>
-                        <button
-                          className="purchase-action-menu lf-btn-ghost"
-                          onClick={() => setActionMenuId(actionMenuId === v.voucher_id ? null : v.voucher_id)}
-                          style={{ padding: '4px 6px', color: 'var(--text-muted)', cursor: 'pointer' }}
-                        >
-                          <MoreVertical size={16} />
-                        </button>
-
-                        {/* Dropdown Action Menu */}
-                        {actionMenuId === v.voucher_id && (
-                          <div
-                            className="purchase-action-menu"
-                            style={{
-                              position: 'absolute',
-                              right: 14,
-                              top: isNearBottom ? undefined : '100%',
-                              bottom: isNearBottom ? '100%' : undefined,
-                              marginBottom: isNearBottom ? 4 : undefined,
-                              marginTop: isNearBottom ? undefined : 4,
-                              zIndex: 50,
-                              backgroundColor: 'var(--bg-card, #FFFFFF)',
-                              border: '1px solid var(--border-subtle, #E2E8F0)',
-                              borderRadius: '8px',
-                              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                              minWidth: '160px',
-                              padding: '4px 0',
-                              textAlign: 'left'
-                            }}
-                          >
-                            <button
-                              onClick={() => { setActionMenuId(null); onViewVoucher(v.voucher_id); }}
-                              style={{
-                                width: '100%',
-                                padding: '8px 12px',
-                                background: 'none',
-                                border: 'none',
-                                textAlign: 'left',
-                                fontSize: '12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                cursor: 'pointer',
-                                color: 'var(--text-primary)'
-                              }}
-                            >
-                              <Eye size={13} color="#F97316" /> View / Print
-                            </button>
-
-                            {v.is_hidden ? (
-                              <button
-                                onClick={() => { setActionMenuId(null); handleUnhideVoucher(v.voucher_id); }}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  background: 'none',
-                                  border: 'none',
-                                  textAlign: 'left',
-                                  fontSize: '12px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                  cursor: 'pointer',
-                                  color: 'var(--text-primary)'
-                                }}
-                              >
-                                <Eye size={13} /> Unhide from List
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => { setActionMenuId(null); handleHideVoucher(v.voucher_id); }}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  background: 'none',
-                                  border: 'none',
-                                  textAlign: 'left',
-                                  fontSize: '12px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                  cursor: 'pointer',
-                                  color: 'var(--text-secondary, #64748B)'
-                                }}
-                              >
-                                <Eye size={13} /> Hide from List
-                              </button>
-                            )}
-
-                            {isDraft && (
-                              <button
-                                onClick={() => { setActionMenuId(null); handlePostDraft(v.voucher_id); }}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  background: 'none',
-                                  border: 'none',
-                                  textAlign: 'left',
-                                  fontSize: '12px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                  cursor: 'pointer',
-                                  color: '#10B981'
-                                }}
-                              >
-                                <CheckCircle2 size={13} /> Post Invoice
-                              </button>
-                            )}
-
-                            {onEditVoucher && (v.status === 'POSTED' || v.status === 'DRAFT') && (
-                              <button
-                                onClick={() => { onEditVoucher(v.voucher_id); setActionMenuId(null); }}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  background: 'none',
-                                  border: 'none',
-                                  textAlign: 'left',
-                                  fontSize: '12px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                  cursor: 'pointer',
-                                  color: 'var(--text-primary)'
-                                }}
-                              >
-                                <FileText size={13} /> Edit Invoice
-                              </button>
-                            )}
-
-                            <button
-                              onClick={() => {
-                                setDeleteModalVoucher(v);
-                                setActionMenuId(null);
-                              }}
-                              style={{
-                                width: '100%',
-                                padding: '8px 12px',
-                                background: 'none',
-                                border: 'none',
-                                textAlign: 'left',
-                                fontSize: '12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                cursor: 'pointer',
-                                color: 'var(--danger-red, #EF4444)'
-                              }}
-                            >
-                              <Trash2 size={13} /> Delete / Cancel...
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Footer */}
-        <div
-          style={{
-            padding: '12px 18px',
-            borderTop: '1px solid var(--border-subtle, #E2E8F0)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '10px',
-            fontSize: '12.5px',
-            color: 'var(--text-muted, #64748B)'
-          }}
-        >
+      {/* Compact Recent Purchase Activity Feed */}
+      <div style={{
+        backgroundColor: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: '12px',
+        overflow: 'hidden',
+        marginBottom: '24px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+      }}>
+        <div style={{
+          padding: '16px 20px',
+          borderBottom: '1px solid #E2E8F0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
           <div>
-            Showing {filteredVouchers.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{' '}
-            {Math.min(currentPage * pageSize, filteredVouchers.length)} of {filteredVouchers.length} entries
+            <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+              Recent Purchase Invoices
+            </h3>
+            <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: '#64748B' }}>
+              Latest purchase vouchers recorded in the system.
+            </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            {/* Page Buttons */}
+          {onOpenRegister && (
             <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
+              onClick={onOpenRegister}
               style={{
-                padding: '4px 8px',
-                borderRadius: '4px',
-                border: '1px solid var(--border-subtle)',
-                background: 'var(--bg-card)',
-                cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                opacity: currentPage === 1 ? 0.5 : 1
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '13px',
+                fontWeight: 600,
+                color: '#EA580C',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer'
               }}
             >
-              &lt;
+              View All in Register <ArrowRight size={14} />
             </button>
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => i + 1).map(page => (
-              <button
-                key={page}
-                onClick={() => setCurrentPage(page)}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: '4px',
-                  border: page === currentPage ? 'none' : '1px solid var(--border-subtle)',
-                  backgroundColor: page === currentPage ? '#F97316' : 'var(--bg-card)',
-                  color: page === currentPage ? '#FFFFFF' : 'var(--text-primary)',
-                  fontWeight: page === currentPage ? 700 : 500,
-                  cursor: 'pointer'
-                }}
-              >
-                {page}
-              </button>
-            ))}
-            <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              style={{
-                padding: '4px 8px',
-                borderRadius: '4px',
-                border: '1px solid var(--border-subtle)',
-                background: 'var(--bg-card)',
-                cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                opacity: currentPage === totalPages ? 0.5 : 1
-              }}
-            >
-              &gt;
-            </button>
-
-            {/* Rows per page selector */}
-            <select
-              value={pageSize}
-              onChange={e => setPageSize(Number(e.target.value))}
-              style={{
-                padding: '4px 8px',
-                borderRadius: '4px',
-                border: '1px solid var(--border-subtle)',
-                backgroundColor: 'var(--bg-card)',
-                fontSize: '12px',
-                marginLeft: '8px'
-              }}
-            >
-              <option value={10}>10 / page</option>
-              <option value={25}>25 / page</option>
-              <option value={50}>50 / page</option>
-            </select>
-          </div>
+          )}
         </div>
+
+        {metrics.recentVouchers.length === 0 ? (
+          <div style={{ padding: '36px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+            No recent purchase invoices to display.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: '12px', fontWeight: 600 }}>
+                  <th style={{ padding: '10px 16px' }}>Date</th>
+                  <th style={{ padding: '10px 16px' }}>Invoice No.</th>
+                  <th style={{ padding: '10px 16px' }}>Supplier</th>
+                  <th style={{ padding: '10px 16px' }}>Bill Ref</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'right' }}>Amount (₹)</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'center' }}>Status</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'center' }}>Payment</th>
+                  <th style={{ padding: '10px 16px', textAlign: 'right' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {metrics.recentVouchers.map((v, idx) => (
+                  <tr key={v.voucher_id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA' }}>
+                    <td style={{ padding: '10px 16px', color: '#334155' }}>{formatDateDisplay(v.voucher_date)}</td>
+                    <td style={{ padding: '10px 16px', fontWeight: 600, color: '#EA580C' }}>
+                      <button
+                        onClick={() => onViewVoucher(v.voucher_id)}
+                        style={{ background: 'none', border: 'none', padding: 0, color: '#EA580C', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {v.voucher_number || 'Draft'}
+                      </button>
+                    </td>
+                    <td style={{ padding: '10px 16px', fontWeight: 600, color: '#0F172A' }}>{v.party_name || '—'}</td>
+                    <td style={{ padding: '10px 16px', color: '#64748B', fontFamily: 'monospace' }}>{v.reference_no || v.supplier_invoice_no || '—'}</td>
+                    <td style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#0F172A' }}>
+                      {formatINR(v.total_amount_paise)}
+                    </td>
+                    <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+                      <span style={{
+                        display: 'inline-flex',
+                        padding: '2px 7px',
+                        borderRadius: '9999px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        backgroundColor: v.status === 'POSTED' ? '#DCFCE7' : '#F1F5F9',
+                        color: v.status === 'POSTED' ? '#15803D' : '#475569'
+                      }}>
+                        {v.status || 'POSTED'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+                      <span style={{
+                        display: 'inline-flex',
+                        padding: '2px 7px',
+                        borderRadius: '9999px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        backgroundColor: v.payment_status === 'PAID' ? '#DCFCE7' : v.payment_status === 'PARTIALLY_PAID' ? '#E0F2FE' : '#FFEDD5',
+                        color: v.payment_status === 'PAID' ? '#15803D' : v.payment_status === 'PARTIALLY_PAID' ? '#0369A1' : '#C2410C'
+                      }}>
+                        {v.payment_status || 'Pending'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                      <button
+                        onClick={() => onViewVoucher(v.voucher_id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#64748B',
+                          cursor: 'pointer',
+                          padding: '4px'
+                        }}
+                        title="View Voucher"
+                      >
+                        <Eye size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* ─────────────────────────────────────────────
-          Quick Actions Section (Mockup Fidelity)
-      ────────────────────────────────────────────── */}
-      <div style={{ marginTop: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-          <Zap size={16} color="#F97316" />
-          <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>Quick Actions</span>
+      {/* Quick Actions Ribbon at Bottom */}
+      <div style={{
+        backgroundColor: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: '12px',
+        padding: '20px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+          <TrendingUp size={18} color="#EA580C" />
+          <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+            Quick Actions
+          </h3>
         </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '12px'
-          }}
-        >
-          {/* Tile 1: Create Purchase Invoice */}
-          <div
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+          {/* Action 1: Create Purchase Invoice */}
+          <button
             onClick={onCreateInvoice}
-            className="ledger-card"
             style={{
-              padding: '14px 16px',
+              padding: '12px 14px',
+              backgroundColor: '#FFF7ED',
+              border: '1px solid #FFEDD5',
+              borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px',
+              gap: '10px',
               cursor: 'pointer',
-              transition: 'border-color 0.15s ease',
-              border: '1px solid rgba(249,115,22,0.25)',
-              backgroundColor: 'rgba(249,115,22,0.03)'
+              textAlign: 'left'
             }}
           >
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                backgroundColor: 'rgba(249,115,22,0.12)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#F97316'
-              }}
-            >
-              <FileText size={18} />
-            </div>
+            <Plus size={18} color="#EA580C" />
             <div>
-              <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Create Purchase Invoice
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                Record a new purchase
-              </div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#EA580C' }}>Create Purchase Invoice</div>
+              <div style={{ fontSize: '11px', color: '#64748B' }}>Record a new supplier bill</div>
             </div>
-          </div>
+          </button>
 
-          {/* Tile 2: Manage Suppliers */}
-          <div
-            onClick={() => onNavigateTab?.('parties', 'suppliers')}
-            className="ledger-card"
-            style={{
-              padding: '14px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              cursor: 'pointer',
-              transition: 'border-color 0.15s ease'
-            }}
-          >
-            <div
+          {/* Action 2: Record Purchase Return */}
+          {onOpenReturn && (
+            <button
+              onClick={onOpenReturn}
               style={{
-                width: '36px',
-                height: '36px',
+                padding: '12px 14px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
                 borderRadius: '8px',
-                backgroundColor: 'rgba(59,130,246,0.12)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                color: '#3B82F6'
+                gap: '10px',
+                cursor: 'pointer',
+                textAlign: 'left'
               }}
             >
-              <Truck size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Manage Suppliers
+              <RotateCcw size={18} color="#475569" />
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A' }}>Record Purchase Return</div>
+                <div style={{ fontSize: '11px', color: '#64748B' }}>Return items against invoice</div>
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                View and manage suppliers
-              </div>
-            </div>
-          </div>
+            </button>
+          )}
 
-          {/* Tile 3: View Purchase Register */}
-          <div
-            onClick={() => onNavigateTab?.('reports', 'purchase_register')}
-            className="ledger-card"
-            style={{
-              padding: '14px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              cursor: 'pointer',
-              transition: 'border-color 0.15s ease'
-            }}
-          >
-            <div
+          {/* Action 3: View Purchase Register */}
+          {onOpenRegister && (
+            <button
+              onClick={onOpenRegister}
               style={{
-                width: '36px',
-                height: '36px',
+                padding: '12px 14px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
                 borderRadius: '8px',
-                backgroundColor: 'rgba(16,185,129,0.12)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                color: '#10B981'
+                gap: '10px',
+                cursor: 'pointer',
+                textAlign: 'left'
               }}
             >
-              <BookOpen size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                View Purchase Register
+              <FileText size={18} color="#475569" />
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A' }}>View Purchase Register</div>
+                <div style={{ fontSize: '11px', color: '#64748B' }}>Browse all purchase entries</div>
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                Inspect purchase vouchers
-              </div>
-            </div>
-          </div>
+            </button>
+          )}
 
-          {/* Tile 4: Outstanding Payables */}
-          <div
-            onClick={() => onNavigateTab?.('reports', 'outstanding')}
-            className="ledger-card"
-            style={{
-              padding: '14px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              cursor: 'pointer',
-              transition: 'border-color 0.15s ease'
-            }}
-          >
-            <div
+          {/* Action 4: Manage Suppliers */}
+          {onNavigateTab && (
+            <button
+              onClick={() => onNavigateTab('masters', 'parties')}
               style={{
-                width: '36px',
-                height: '36px',
+                padding: '12px 14px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
                 borderRadius: '8px',
-                backgroundColor: 'rgba(239,68,68,0.12)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                color: '#EF4444'
+                gap: '10px',
+                cursor: 'pointer',
+                textAlign: 'left'
               }}
             >
-              <Users size={18} />
-            </div>
-            <div>
-              <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Outstanding Payables
+              <Building2 size={18} color="#475569" />
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A' }}>Manage Suppliers</div>
+                <div style={{ fontSize: '11px', color: '#64748B' }}>Directory & party balances</div>
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                Track supplier balances
-              </div>
-            </div>
-          </div>
+            </button>
+          )}
         </div>
       </div>
-
-      {/* Cancellation Dialog Modal */}
-      {cancelDialog && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15,23,42,0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000
-          }}
-          onClick={() => !isCancelling && setCancelDialog(null)}
-        >
-          <div
-            className="ledger-card"
-            style={{ width: '420px', padding: '24px', borderRadius: '12px' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(239,68,68,0.12)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#EF4444'
-                }}
-              >
-                <AlertCircle size={20} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
-                  Cancel Purchase Invoice
-                </h3>
-                <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: 'var(--text-muted)' }}>
-                  {cancelDialog.number}
-                </p>
-              </div>
-            </div>
-
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: '16px' }}>
-              Cancelling this invoice will preserve the audit record, restore serial availability, and reverse stock additions. This action cannot be undone.
-            </p>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>
-                Cancellation Reason:
-              </label>
-              <input
-                type="text"
-                value={cancelReason}
-                onChange={e => setCancelReason(e.target.value)}
-                placeholder="Reason for cancellation…"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-subtle)',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            {cancelError && (
-              <div style={{ fontSize: '12px', color: '#EF4444', marginBottom: '12px' }}>
-                {cancelError}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button
-                className="lf-btn lf-btn-secondary"
-                onClick={() => setCancelDialog(null)}
-                disabled={isCancelling}
-                style={{ fontSize: '12.5px', padding: '8px 14px' }}
-              >
-                Keep Invoice
-              </button>
-              <button
-                className="lf-btn"
-                onClick={handleConfirmCancel}
-                disabled={isCancelling || !cancelReason.trim()}
-                style={{
-                  backgroundColor: '#EF4444',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  fontSize: '12.5px',
-                  padding: '8px 14px',
-                  fontWeight: 600
-                }}
-              >
-                {isCancelling ? 'Cancelling…' : 'Confirm Cancel'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Permanent Deletion Dialog Modal */}
-      {permanentDeleteDialog && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.55)',
-            backdropFilter: 'blur(2px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 999
-          }}
-          onClick={e => { if (e.target === e.currentTarget) setPermanentDeleteDialog(null); }}
-        >
-          <div className="ledger-card" style={{ width: '440px', padding: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(239, 68, 68, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EF4444' }}>
-                <Trash2 size={18} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
-                  Permanently Delete Voucher?
-                </h3>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{permanentDeleteDialog.number}</span>
-              </div>
-            </div>
-            <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
-              Are you sure you want to permanently delete this cancelled voucher? This action permanently removes the record and writes an immutable audit tombstone. This action cannot be undone.
-            </p>
-            {permanentDeleteError && (
-              <div style={{ padding: '10px 12px', backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: '6px', color: 'var(--danger-red, #EF4444)', fontSize: '12px', marginBottom: '14px' }}>
-                {permanentDeleteError}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button className="lf-btn lf-btn-secondary" onClick={() => setPermanentDeleteDialog(null)} disabled={isPermanentlyDeleting}>
-                Cancel
-              </button>
-              <button
-                className="lf-btn"
-                onClick={handleConfirmPermanentDelete}
-                disabled={isPermanentlyDeleting}
-                style={{
-                  backgroundColor: '#EF4444',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  fontSize: '12.5px',
-                  padding: '8px 14px',
-                  fontWeight: 600
-                }}
-              >
-                {isPermanentlyDeleting ? 'Purging…' : 'Permanently Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Action Toast Notification */}
-      {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 24,
-            right: 24,
-            backgroundColor: '#1E293B',
-            color: '#FFFFFF',
-            padding: '10px 18px',
-            borderRadius: '8px',
-            fontSize: '13px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-            zIndex: 1000
-          }}
-        >
-          {toast}
-        </div>
-      )}
-
-      {/* Explicit Delete vs Permanent Delete Modal */}
-      <VoucherDeleteOptionsModal
-        isOpen={!!deleteModalVoucher}
-        voucher={deleteModalVoucher}
-        userRole="ADMIN"
-        onClose={() => setDeleteModalVoucher(null)}
-        onSafeDelete={handleSafeDeleteFromModal}
-        onPermanentDelete={handlePermanentDeleteFromModal}
-      />
     </div>
   );
 };
+const MONTHS_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

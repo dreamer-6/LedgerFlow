@@ -1047,7 +1047,12 @@ export function createApiRouter(db: DatabaseSync): Router {
                  JOIN vouchers rv ON ba.voucher_id = rv.voucher_id
                  WHERE ba.reference_voucher_id = v.voucher_id
                    AND rv.status != 'CANCELLED'
-               ), 0) as paid_amount_paise
+               ), 0) as paid_amount_paise,
+               COALESCE((
+                 SELECT COUNT(*)
+                 FROM voucher_lines vl
+                 WHERE vl.voucher_id = v.voucher_id
+               ), 0) as line_items_count
         FROM vouchers v
         LEFT JOIN parties p ON v.party_id = p.party_id
         LEFT JOIN (

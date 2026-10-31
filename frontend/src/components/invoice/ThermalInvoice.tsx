@@ -21,26 +21,49 @@ export const ThermalInvoice: React.FC<ThermalInvoiceProps> = ({
     showCompanyDetails = true,
     showCustomerContact = true,
     showTaxBreakdown = true,
-    showAmtWords = true
+    showAmtWords = true,
+    pageSize = 'THERMAL_80'
   } = options;
+
+  const is58mm = pageSize === 'THERMAL_58';
+  const thermalWidth = is58mm ? '225px' : '300px';
+  const thermalFontSize = is58mm ? '9.5px' : '11px';
 
   return (
     <div
       id={id}
       className="thermal-invoice-container"
       style={{
-        width: '300px',
+        width: thermalWidth,
         maxWidth: '100%',
         margin: '0 auto',
         backgroundColor: '#FFFFFF',
         color: '#000000',
         fontFamily: "'JetBrains Mono', 'Courier New', Courier, monospace",
-        fontSize: '11px',
+        fontSize: thermalFontSize,
         lineHeight: 1.35,
-        padding: '12px 10px',
+        padding: is58mm ? '8px 6px' : '12px 10px',
         boxSizing: 'border-box'
       }}
     >
+      <style>{`
+        @page {
+          size: ${is58mm ? '58mm auto' : '80mm auto'};
+          margin: 2mm;
+        }
+        @media print {
+          body {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .thermal-invoice-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 2mm !important;
+          }
+        }
+      `}</style>
       {/* ─── HEADER ─── */}
       <div style={{ textAlign: 'center', marginBottom: '8px' }}>
         {showLogo && data.companyLogo && (

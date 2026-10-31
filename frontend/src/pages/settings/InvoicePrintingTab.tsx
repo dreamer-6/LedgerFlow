@@ -170,6 +170,7 @@ export const InvoicePrintingTab: React.FC<InvoicePrintingTabProps> = ({
     setSaveError(null);
     try {
       const invoiceSettingsJson = JSON.stringify({
+        ...parsedSettings,
         templateStyle,
         prefix,
         startNumber,

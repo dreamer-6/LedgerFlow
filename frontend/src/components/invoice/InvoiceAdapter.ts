@@ -62,6 +62,8 @@ export interface NormalizedInvoiceData {
   
   // Ship To (Optional)
   hasShippingAddress: boolean;
+  actualShippingAddress?: string;
+  actualShipToName?: string;
   shipToName?: string;
   shipToAddress?: string;
 
@@ -88,10 +90,15 @@ export interface NormalizedInvoiceData {
   termsAndConditions?: string;
 }
 
+export type ShipToDisplayMode = 'SHOW' | 'SAME_AS_BILLING' | 'HIDE';
+
 export interface InvoiceVisibilityOptions {
   showLogo?: boolean;
   showCompanyDetails?: boolean;
   showCustomerContact?: boolean;
+  showBillTo?: boolean;
+  showShipTo?: boolean;
+  shipToMode?: ShipToDisplayMode;
   showHsn?: boolean;
   showUnit?: boolean;
   showTaxBreakdown?: boolean;
@@ -99,9 +106,13 @@ export interface InvoiceVisibilityOptions {
   showBankDetails?: boolean;
   showTerms?: boolean;
   showSignature?: boolean;
+  showSerial?: boolean;
+  showGridLines?: boolean;
   showLedgerflowWordmark?: boolean;
   warrantyDisplayFormat?: 'Years' | 'Months' | 'Both';
-  pageSize?: 'A4' | 'A5_LANDSCAPE' | 'A5_PORTRAIT' | 'THERMAL';
+  pageSize?: 'A4' | 'A4_LANDSCAPE' | 'A5' | 'A5_PORTRAIT' | 'A5_LANDSCAPE' | 'LETTER' | 'LETTER_LANDSCAPE' | 'THERMAL' | 'THERMAL_80' | 'THERMAL_58';
+  orientation?: 'PORTRAIT' | 'LANDSCAPE';
+  paperMargin?: 'compact' | 'normal' | 'spacious';
 }
 
 /**
@@ -178,32 +189,32 @@ export function normalizeInvoiceData(rawVoucherData: any, company: any): Normali
   const isPurchase = v.voucher_type === 'PURCHASE';
 
   // Company address formatting
-  const compAddrParts = [
-    company?.address_line1,
-    company?.address_line2,
+  // Company address formatting (wrapped across natural lines)
+  const compLine1 = [company?.address_line1, company?.address_line2].filter(Boolean).join(', ');
+  const compLine2 = [
     company?.city,
     company?.state ? (company?.pincode ? `${company.state} - ${company.pincode}` : company.state) : company?.pincode,
     company?.country
-  ].filter(Boolean);
-  const compAddressStr = compAddrParts.join(', ');
+  ].filter(Boolean).join(', ');
+  const compAddressStr = [compLine1, compLine2].filter(Boolean).join('\n') || company?.address || '';
 
-  // Buyer / Party address formatting
-  const partyAddrParts = [
-    v.address_line1,
-    v.address_line2,
+  // Buyer / Party address formatting (wrapped across natural lines)
+  const partyLine1 = [v.address_line1, v.address_line2].filter(Boolean).join(', ');
+  const partyLine2 = [
     v.city,
     v.state ? (v.pincode ? `${v.state} - ${v.pincode}` : v.state) : v.pincode,
     v.country
-  ].filter(Boolean);
-  const partyAddressStr = partyAddrParts.join(', ');
+  ].filter(Boolean).join(', ');
+  const partyAddressStr = [partyLine1, partyLine2].filter(Boolean).join('\n') || v.party_address || '';
 
-  // Shipping address
-  const shipAddrParts = [
-    v.shipping_address_line1 || v.shipping_address,
+  // Shipping address formatting
+  const shipLine1 = [v.shipping_address_line1 || v.shipping_address, v.shipping_address_line2].filter(Boolean).join(', ');
+  const shipLine2 = [
     v.shipping_city,
-    v.shipping_state ? (v.shipping_pincode ? `${v.shipping_state} - ${v.shipping_pincode}` : v.shipping_state) : v.shipping_pincode
-  ].filter(Boolean);
-  const shipAddressStr = shipAddrParts.join(', ');
+    v.shipping_state ? (v.shipping_pincode ? `${v.shipping_state} - ${v.shipping_pincode}` : v.shipping_state) : v.shipping_pincode,
+    v.shipping_country
+  ].filter(Boolean).join(', ');
+  const shipAddressStr = [shipLine1, shipLine2].filter(Boolean).join('\n');
   const hasShipping = Boolean(shipAddressStr.trim() || v.shipping_party_name);
 
   // Normalize line items
@@ -360,8 +371,10 @@ export function normalizeInvoiceData(rawVoucherData: any, company: any): Normali
     partyPan: !isPurchase ? v.party_pan : company?.pan,
 
     hasShippingAddress: hasShipping,
+    actualShippingAddress: shipAddressStr.trim() ? shipAddressStr : undefined,
+    actualShipToName: v.shipping_party_name || undefined,
     shipToName: v.shipping_party_name || v.party_name,
-    shipToAddress: shipAddressStr || partyAddressStr,
+    shipToAddress: shipAddressStr.trim() ? shipAddressStr : partyAddressStr,
 
     lines,
     subTotal,
@@ -392,4 +405,134 @@ function formatDateDisplay(dateStr?: string): string {
   } catch {
     return dateStr;
   }
+}
+
+/**
+ * Normalizes a QuotationRecord into NormalizedInvoiceData for full print preview parity.
+ */
+export function normalizeQuotationData(quotation: any, company: any): NormalizedInvoiceData {
+  const q = quotation || {};
+  const cust = q.customerDetails || {};
+  const rawItems: any[] = q.items || [];
+
+  // Company address
+  const compLine1 = [company?.address_line1, company?.address_line2].filter(Boolean).join(', ');
+  const compLine2 = [
+    company?.city,
+    company?.state ? (company?.pincode ? `${company.state} - ${company.pincode}` : company.state) : company?.pincode,
+    company?.country
+  ].filter(Boolean).join(', ');
+  const compAddressStr = [compLine1, compLine2].filter(Boolean).join('\n') || company?.address || '';
+
+  // Customer address
+  const custLine1 = cust.address;
+  const custLine2 = [
+    cust.city,
+    cust.state ? (cust.pincode ? `${cust.state} - ${cust.pincode}` : cust.state) : cust.pincode
+  ].filter(Boolean).join(', ');
+  const custAddressStr = [custLine1, custLine2].filter(Boolean).join('\n') || '';
+
+  const hasBank = !!(company?.bank_name || company?.bank_account_no);
+
+  const lines: InvoiceLineItem[] = rawItems.map((item, idx) => {
+    const qty = Number(item.quantity) || 1;
+    const rate = Number(item.unitPrice) || 0;
+    const taxRate = Number(item.gstRate) || 0;
+    const taxable = Number(item.taxableAmount) || (qty * rate);
+    const amount = Number(item.totalAmount) || (taxable + (Number(item.taxAmount) || 0));
+
+    return {
+      index: idx + 1,
+      itemName: item.description || `Item ${idx + 1}`,
+      description: item.subtext,
+      serialNumber: item.itemId && String(item.itemId).startsWith('SN') ? item.itemId : undefined,
+      warrantyMonths: item.warrantyMonths,
+      hsnSac: item.hsnSac || '',
+      quantity: qty,
+      unit: item.unit || 'Nos',
+      rate,
+      taxPercent: taxRate,
+      amount,
+      taxableAmount: taxable,
+      cgstAmount: item.cgst,
+      sgstAmount: item.sgst,
+      igstAmount: item.igst
+    };
+  });
+
+  const subTotal = Number(q.subtotal) || lines.reduce((acc, l) => acc + l.taxableAmount, 0);
+  const taxTotal = Number(q.taxAmount) || 0;
+  const grandTotal = Number(q.totalAmount) || (subTotal + taxTotal);
+
+  // Group tax breakdowns
+  const taxBreakdowns: InvoiceTaxBreakdown[] = [];
+  if (taxTotal > 0) {
+    const cgstTotal = rawItems.reduce((acc, i) => acc + (Number(i.cgst) || 0), 0);
+    const sgstTotal = rawItems.reduce((acc, i) => acc + (Number(i.sgst) || 0), 0);
+    const igstTotal = rawItems.reduce((acc, i) => acc + (Number(i.igst) || 0), 0);
+
+    if (cgstTotal > 0 || sgstTotal > 0) {
+      const effRate = rawItems.find(i => (i.gstRate || 0) > 0)?.gstRate || 18;
+      taxBreakdowns.push({ label: `CGST (${(effRate / 2).toFixed(effRate % 2 === 0 ? 0 : 1)}%)`, percent: effRate / 2, amount: cgstTotal });
+      taxBreakdowns.push({ label: `SGST (${(effRate / 2).toFixed(effRate % 2 === 0 ? 0 : 1)}%)`, percent: effRate / 2, amount: sgstTotal });
+    } else if (igstTotal > 0) {
+      const effRate = rawItems.find(i => (i.gstRate || 0) > 0)?.gstRate || 18;
+      taxBreakdowns.push({ label: `IGST (${effRate}%)`, percent: effRate, amount: igstTotal });
+    } else {
+      taxBreakdowns.push({ label: 'GST', percent: 18, amount: taxTotal });
+    }
+  }
+
+  return {
+    voucherId: q.id || 'qtn-live',
+    voucherNumber: q.quotationNumber || 'QTN-PREVIEW',
+    voucherDate: formatDateDisplay(q.quotationDate),
+    referenceNumber: q.referenceNumber,
+    voucherType: 'QUOTATION',
+    status: q.status || 'DRAFT',
+    dueDate: formatDateDisplay(q.validTill),
+    paymentTerms: q.validTill ? `Valid till ${formatDateDisplay(q.validTill)}` : 'As per quotation terms',
+    placeOfSupply: q.placeOfSupply || company?.state || '',
+
+    companyName: company?.company_name || 'Business Name',
+    companyAddress: compAddressStr,
+    companyCity: company?.city,
+    companyState: company?.state,
+    companyStateCode: company?.state_code,
+    companyPincode: company?.pincode,
+    companyPhone: company?.phone,
+    companyEmail: company?.email,
+    companyWebsite: company?.website,
+    companyGstin: company?.gstin,
+    companyPan: company?.pan,
+    companyLogo: company?.logo_base64 || company?.logo_url,
+
+    partyName: cust.name || 'Valued Customer',
+    partyAddress: custAddressStr,
+    partyCity: cust.city,
+    partyState: cust.state,
+    partyPincode: cust.pincode,
+    partyPhone: cust.phone,
+    partyEmail: cust.email,
+    partyGstin: cust.gstin,
+
+    hasShippingAddress: false,
+
+    lines,
+    subTotal,
+    taxTotal,
+    taxBreakdowns,
+    roundOff: undefined,
+    grandTotal,
+    amountInWords: numberToIndianWords(Math.round(grandTotal * 100)),
+
+    hasBankDetails: hasBank,
+    bankName: company?.bank_name,
+    bankAccountName: company?.legal_name || company?.company_name,
+    bankAccountNo: company?.bank_account_no,
+    bankIfsc: company?.bank_ifsc,
+    bankBranch: company?.bank_branch,
+
+    termsAndConditions: q.termsConditions || company?.terms_and_conditions || `1. Goods once sold will not be taken back or exchanged.\n2. Warranty as per manufacturer terms.\n3. Prices are valid until the date stated above.\n4. This quotation is not a tax invoice.`
+  };
 }

@@ -42,8 +42,8 @@ export interface SidebarProps {
   setSalesViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view_invoice' | 'return') => void;
   quotationViewMode?: 'dashboard' | 'create';
   setQuotationViewMode?: (mode: 'dashboard' | 'create') => void;
-  purchaseViewMode?: 'dashboard' | 'create';
-  setPurchaseViewMode?: (mode: 'dashboard' | 'create') => void;
+  purchaseViewMode?: 'dashboard' | 'create' | 'register' | 'return' | 'view_invoice';
+  setPurchaseViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'return' | 'view_invoice') => void;
   receiptViewMode?: 'dashboard' | 'create';
   setReceiptViewMode?: (mode: 'dashboard' | 'create') => void;
   paymentViewMode?: 'dashboard' | 'create';
@@ -80,13 +80,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed = false,
   onToggleCollapse
 }) => {
-  const [isSalesExpanded, setIsSalesExpanded] = React.useState<boolean>(activeTab === 'sales');
+  // Shared single-open accordion state: strictly only one group can remain open at a time
+  const [expandedGroup, setExpandedGroup] = React.useState<string | null>(() => {
+    if (activeTab === 'sales') return 'sales';
+    if (activeTab === 'purchase') return 'purchase';
+    return null;
+  });
+  const prevTabRef = React.useRef(activeTab);
 
   React.useEffect(() => {
+    // When active route is within an expandable group, automatically open that parent group and close others
     if (activeTab === 'sales') {
-      setIsSalesExpanded(true);
+      setExpandedGroup('sales');
+    } else if (activeTab === 'purchase') {
+      setExpandedGroup('purchase');
+    } else {
+      // Navigating to another top-level section closes the previously expanded group
+      setExpandedGroup(null);
     }
-  }, [activeTab]);
+    prevTabRef.current = activeTab;
+  }, [activeTab, salesViewMode, purchaseViewMode]);
+
+  const toggleGroup = (group: string) => {
+    setExpandedGroup(prev => (prev === group ? null : group));
+  };
+
   const handleNav = (
     tab: string,
     opts?: {
@@ -96,6 +114,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   ) => {
     setActiveTab(tab);
+    if (tab === 'sales') {
+      setExpandedGroup('sales');
+    } else if (tab === 'purchase') {
+      setExpandedGroup('purchase');
+    } else {
+      setExpandedGroup(null);
+    }
     if (opts?.reportId) setReportSubTab(opts.reportId);
     if (opts?.voucherType && setVoucherInitialType) setVoucherInitialType(opts.voucherType);
     if (opts?.masterTab && setMastersSubTab) setMastersSubTab(opts.masterTab);
@@ -256,13 +281,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <>
                 <div
                   onClick={() => {
-                    if (activeTab !== 'sales') {
-                      setActiveTab('sales');
-                      if (setSalesViewMode) setSalesViewMode('dashboard');
-                      setIsSalesExpanded(true);
-                    } else {
-                      setIsSalesExpanded(prev => !prev);
-                    }
+                    setActiveTab('sales');
+                    if (setSalesViewMode) setSalesViewMode('dashboard');
+                    setExpandedGroup('sales');
+                    if (onClose) onClose();
                   }}
                   className={`nav-item ${activeTab === 'sales' ? 'active' : ''}`}
                   title="Sales (Alt+S)"
@@ -281,7 +303,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
-                      setIsSalesExpanded(prev => !prev);
+                      toggleGroup('sales');
                     }}
                     style={{
                       display: 'flex',
@@ -291,12 +313,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       cursor: 'pointer'
                     }}
                   >
-                    {isSalesExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    {expandedGroup === 'sales' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                   </div>
                 </div>
 
                 {/* Collapsible Submenu */}
-                {isSalesExpanded && (
+                {expandedGroup === 'sales' && (
                   <div
                     style={{
                       display: 'flex',
@@ -307,23 +329,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       paddingLeft: '24px'
                     }}
                   >
-                    <div
-                      onClick={() => {
-                        setActiveTab('sales');
-                        if (setSalesViewMode) setSalesViewMode('dashboard');
-                        if (onClose) onClose();
-                      }}
-                      className={`nav-item ${activeTab === 'sales' && salesViewMode === 'dashboard' ? 'active' : ''}`}
-                      style={{
-                        fontSize: '12.5px',
-                        height: '32px',
-                        padding: '0 10px',
-                        fontWeight: activeTab === 'sales' && salesViewMode === 'dashboard' ? 600 : 400
-                      }}
-                    >
-                      <span style={{ flex: 1 }}>Sales Dashboard</span>
-                    </div>
-
                     <div
                       onClick={() => {
                         setActiveTab('sales');
@@ -378,17 +383,125 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 )}
               </>
             )}
-            {renderItem(
-              'purchase-module',
-              'Purchase',
-              <ShoppingBag size={16} />,
-              activeTab === 'purchase' || (activeTab === 'vouchers' && (window as any)._currentVoucherType === 'PURCHASE'),
-              () => {
-                setActiveTab('purchase');
-                if (setPurchaseViewMode) setPurchaseViewMode('dashboard');
-                if (onClose) onClose();
-              },
-              'Alt+P'
+            {isCollapsed ? (
+              renderItem(
+                'purchase-module',
+                'Purchase',
+                <ShoppingBag size={20} />,
+                activeTab === 'purchase' || (activeTab === 'vouchers' && (window as any)._currentVoucherType === 'PURCHASE'),
+                () => {
+                  setActiveTab('purchase');
+                  if (setPurchaseViewMode) setPurchaseViewMode('dashboard');
+                  if (onClose) onClose();
+                },
+                'Alt+P'
+              )
+            ) : (
+              <>
+                <div
+                  onClick={() => {
+                    setActiveTab('purchase');
+                    if (setPurchaseViewMode) setPurchaseViewMode('dashboard');
+                    setExpandedGroup('purchase');
+                    if (onClose) onClose();
+                  }}
+                  className={`nav-item ${activeTab === 'purchase' ? 'active' : ''}`}
+                  title="Purchase (Alt+P)"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                    <span className="nav-icon"><ShoppingBag size={16} /></span>
+                    <span style={{ flex: 1, lineHeight: 1.3, fontWeight: activeTab === 'purchase' ? 600 : 500 }}>Purchase</span>
+                  </div>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleGroup('purchase');
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '2px',
+                      color: 'var(--text-muted, #94A3B8)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {expandedGroup === 'purchase' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </div>
+                </div>
+
+                {/* Collapsible Submenu */}
+                {expandedGroup === 'purchase' && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      marginTop: '2px',
+                      marginBottom: '4px',
+                      paddingLeft: '24px'
+                    }}
+                  >
+                    <div
+                      onClick={() => {
+                        setActiveTab('purchase');
+                        if (setPurchaseViewMode) setPurchaseViewMode('create');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'purchase' && purchaseViewMode === 'create' ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'purchase' && purchaseViewMode === 'create' ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Purchase Invoice</span>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setActiveTab('purchase');
+                        if (setPurchaseViewMode) setPurchaseViewMode('register');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'purchase' && (purchaseViewMode === 'register' || purchaseViewMode === 'view_invoice') ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'purchase' && (purchaseViewMode === 'register' || purchaseViewMode === 'view_invoice') ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Purchase Register</span>
+                    </div>
+
+
+                    <div
+                      onClick={() => {
+                        setActiveTab('purchase');
+                        if (setPurchaseViewMode) setPurchaseViewMode('return');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'purchase' && purchaseViewMode === 'return' ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'purchase' && purchaseViewMode === 'return' ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Purchase Return</span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             {renderItem(
               'receipts-module',

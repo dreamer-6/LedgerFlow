@@ -9,7 +9,8 @@ import { Phone, Mail, Globe } from 'lucide-react';
 import {
   paginateItems,
   estimateItemRowHeight,
-  DEFAULT_A4_PAGINATION_CONFIG
+  DEFAULT_A4_PAGINATION_CONFIG,
+  getPaginationConfigForFormat
 } from '../../utils/printPagination';
 
 interface StandardInvoiceProps {
@@ -27,6 +28,9 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
     showLogo = true,
     showCompanyDetails = true,
     showCustomerContact = true,
+    showBillTo = true,
+    showShipTo = true,
+    shipToMode = 'SHOW',
     showHsn = true,
     showUnit = true,
     showTaxBreakdown = true,
@@ -34,16 +38,61 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
     showBankDetails = true,
     showTerms = true,
     showSignature = true,
+    showSerial = true,
+    showGridLines = true,
     showLedgerflowWordmark = false,
-    warrantyDisplayFormat = 'Years'
+    warrantyDisplayFormat = 'Years',
+    pageSize = 'A4',
+    orientation = 'PORTRAIT',
+    paperMargin = 'normal'
   } = options;
+
+  const effectiveShipToMode = shipToMode || (showShipTo ? 'SHOW' : 'HIDE');
+  const shouldShowShipTo = showShipTo !== false && effectiveShipToMode !== 'HIDE';
 
   const hasGstin = Boolean(data.companyGstin && data.companyGstin.trim());
   const hasPan = Boolean(data.companyPan && data.companyPan.trim());
-  const hasState = Boolean(data.placeOfSupply && data.placeOfSupply.trim());
+  const compStateName = data.companyState || (data.placeOfSupply ? data.placeOfSupply.replace(/\s*\(\d+\)/, '') : '');
+  const compStateCode = data.companyStateCode || (data.placeOfSupply && data.placeOfSupply.match(/\((\d+)\)/) ? data.placeOfSupply.match(/\((\d+)\)/)?.[1] : '');
+  const companyStateDisplay = compStateName ? (compStateCode ? `${compStateName} (${compStateCode})` : compStateName) : data.placeOfSupply;
+  const hasState = Boolean(companyStateDisplay && companyStateDisplay.trim());
   const hasContacts = Boolean(data.companyPhone || data.companyEmail || data.companyWebsite);
 
-  // Content-aware A4 pagination
+  // Paper & dimension calculations
+  const isLandscape = orientation === 'LANDSCAPE' || pageSize === 'A4_LANDSCAPE' || pageSize === 'A5_LANDSCAPE' || pageSize === 'LETTER_LANDSCAPE';
+  const isA5 = pageSize === 'A5' || pageSize === 'A5_PORTRAIT' || pageSize === 'A5_LANDSCAPE';
+  const isLetter = pageSize === 'LETTER' || pageSize === 'LETTER_LANDSCAPE';
+
+  let containerMaxWidth = '840px';
+  let sheetMinHeight = '1080px';
+  let printSheetMinHeight = '285mm';
+
+  if (isLandscape) {
+    containerMaxWidth = isA5 ? '800px' : isLetter ? '1100px' : '1120px';
+    sheetMinHeight = isA5 ? '560px' : '760px';
+    printSheetMinHeight = isA5 ? '140mm' : isLetter ? '205mm' : '200mm';
+  } else if (isA5) {
+    containerMaxWidth = '590px';
+    sheetMinHeight = '820px';
+    printSheetMinHeight = '200mm';
+  } else if (isLetter) {
+    containerMaxWidth = '850px';
+    sheetMinHeight = '1050px';
+    printSheetMinHeight = '270mm';
+  }
+
+  const printMarginCss = paperMargin === 'compact' ? '5mm 5mm' : paperMargin === 'spacious' ? '12mm 12mm' : '8mm 8mm';
+  const printPageSizeCss = isA5
+    ? (isLandscape ? 'A5 landscape' : 'A5 portrait')
+    : isLetter
+    ? (isLandscape ? 'letter landscape' : 'letter portrait')
+    : (isLandscape ? 'A4 landscape' : 'A4 portrait');
+
+  // Content-aware Multi-Page pagination
+  const paginationConfig = useMemo(() => {
+    return getPaginationConfigForFormat(pageSize, orientation);
+  }, [pageSize, orientation]);
+
   const pages = useMemo(() => {
     if (!data.lines || data.lines.length === 0) {
       return [
@@ -65,9 +114,9 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
           description: item.description,
           serialNumber: item.serialNumber
         }),
-      DEFAULT_A4_PAGINATION_CONFIG
+      paginationConfig
     );
-  }, [data.lines]);
+  }, [data.lines, paginationConfig]);
 
   // Section 1: Full Company Header + TAX INVOICE Metadata Grid (Page 1)
   const renderHeader = () => (
@@ -192,8 +241,8 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
                     <div style={{ display: 'grid', gridTemplateColumns: '48px 10px 1fr' }}>
                       <span style={{ color: '#64748B' }}>State</span>
                       <span>:</span>
-                      <span style={{ color: '#0F172A', fontWeight: 500 }}>
-                        {data.placeOfSupply}
+                      <span style={{ color: '#0F172A', fontWeight: 600 }}>
+                        {companyStateDisplay}
                       </span>
                     </div>
                   )}
@@ -333,218 +382,277 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
   );
 
   // Section 2: Bill To & Ship To Cards
-  const renderParties = () => (
-    <div
-      style={{
-        backgroundColor: '#F8FAFC',
-        border: '1px solid #F1F5F9',
-        borderRadius: '8px',
-        padding: '14px 18px',
-        marginBottom: '18px',
-        display: 'grid',
-        gridTemplateColumns: data.hasShippingAddress ? '1.1fr 1fr' : '1fr',
-        gap: '24px'
-      }}
-    >
-      {/* Bill To */}
-      <div>
-        <div
-          style={{
-            fontSize: '10.5px',
-            fontWeight: 800,
-            color: '#EA580C',
-            letterSpacing: '0.8px',
-            textTransform: 'uppercase',
-            marginBottom: '4px'
-          }}
-        >
-          BILL TO
-        </div>
-        <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
-          {data.partyName}
-        </div>
-        {data.partyAddress && (
-          <div
-            style={{
-              color: '#475569',
-              fontSize: '11px',
-              marginBottom: '6px',
-              whiteSpace: 'pre-line',
-              wordBreak: 'break-word',
-              overflowWrap: 'anywhere'
-            }}
-          >
-            {data.partyAddress}
-          </div>
-        )}
-        {showCustomerContact && (data.partyPhone || data.partyEmail) && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11px', color: '#475569' }}>
-            {data.partyPhone && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Phone size={11} color="#EA580C" />
-                <span>{data.partyPhone}</span>
+  const renderParties = () => {
+    if (!showBillTo && !shouldShowShipTo) return null;
+
+    const isSameAsBilling = effectiveShipToMode === 'SAME_AS_BILLING';
+    const shipName = isSameAsBilling ? data.partyName : (data.actualShipToName || data.shipToName || data.partyName);
+    const shipAddress = isSameAsBilling ? data.partyAddress : (data.actualShippingAddress || data.shipToAddress || data.partyAddress);
+
+    return (
+      <div
+        style={{
+          marginBottom: '16px',
+          display: 'grid',
+          gridTemplateColumns: shouldShowShipTo ? '1.1fr 1fr' : '1fr',
+          gap: '20px',
+          backgroundColor: '#F8FAFC',
+          border: '1px solid #F1F5F9',
+          borderRadius: '8px',
+          padding: '12px 16px'
+        }}
+      >
+        {/* Bill To */}
+        {showBillTo && (
+          <div>
+            <div
+              style={{
+                fontSize: '11px',
+                fontWeight: 800,
+                color: '#EA580C',
+                letterSpacing: '0.8px',
+                textTransform: 'uppercase',
+                marginBottom: '4px'
+              }}
+            >
+              BILL TO
+            </div>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', marginBottom: '2px' }}>
+              {data.partyName}
+            </div>
+            {data.partyAddress && (
+              <div
+                style={{
+                  color: '#475569',
+                  fontSize: '11px',
+                  marginBottom: '4px',
+                  whiteSpace: 'pre-line',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'anywhere',
+                  lineHeight: 1.4
+                }}
+              >
+                {data.partyAddress}
               </div>
             )}
-            {data.partyEmail && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Mail size={11} color="#EA580C" />
-                <span>{data.partyEmail}</span>
+            {showCustomerContact && (data.partyPhone || data.partyEmail) && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11px', color: '#475569', marginTop: '4px' }}>
+                {data.partyPhone && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Phone size={11} color="#EA580C" />
+                    <span>{data.partyPhone}</span>
+                  </div>
+                )}
+                {data.partyEmail && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Mail size={11} color="#EA580C" />
+                    <span>{data.partyEmail}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {data.partyGstin && (
+              <div style={{ fontSize: '11px', marginTop: '4px' }}>
+                <span style={{ color: '#64748B' }}>GSTIN: </span>
+                <strong style={{ fontFamily: 'monospace' }}>{data.partyGstin}</strong>
+              </div>
+            )}
+            {(data.partyState || data.partyStateCode) && (
+              <div style={{ fontSize: '11px', marginTop: '2px', color: '#475569' }}>
+                <span style={{ color: '#64748B' }}>State: </span>
+                <span>
+                  {data.partyState || ''} {data.partyStateCode ? `(${data.partyStateCode})` : ''}
+                </span>
               </div>
             )}
           </div>
         )}
-        {data.partyGstin && (
-          <div style={{ fontSize: '11px', marginTop: '4px' }}>
-            <span style={{ color: '#64748B' }}>GSTIN: </span>
-            <strong style={{ fontFamily: 'monospace' }}>{data.partyGstin}</strong>
+
+        {/* Ship To (Optional / Same as Billing) */}
+        {shouldShowShipTo && (
+          <div style={{ borderLeft: showBillTo ? '1px solid #E2E8F0' : 'none', paddingLeft: showBillTo ? '20px' : '0', minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: '11px',
+                fontWeight: 800,
+                color: '#EA580C',
+                letterSpacing: '0.8px',
+                textTransform: 'uppercase',
+                marginBottom: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>SHIP TO</span>
+              <span style={{ color: '#94A3B8', fontWeight: 500, fontSize: '10px', textTransform: 'none' }}>
+                {isSameAsBilling ? '(Same as Billing)' : '(Optional)'}
+              </span>
+            </div>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', marginBottom: '2px' }}>
+              {shipName}
+            </div>
+            <div
+              style={{
+                color: '#475569',
+                fontSize: '11px',
+                whiteSpace: 'pre-line',
+                wordBreak: 'break-word',
+                overflowWrap: 'anywhere',
+                lineHeight: 1.4
+              }}
+            >
+              {shipAddress}
+            </div>
           </div>
         )}
       </div>
+    );
+  };
 
-      {/* Ship To (Optional) */}
-      {data.hasShippingAddress && (
-        <div style={{ borderLeft: '1px solid #E2E8F0', paddingLeft: '20px', minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: '10.5px',
-              fontWeight: 800,
-              color: '#EA580C',
-              letterSpacing: '0.8px',
-              textTransform: 'uppercase',
-              marginBottom: '4px'
-            }}
-          >
-            SHIP TO <span style={{ color: '#94A3B8', fontWeight: 500 }}>(Optional)</span>
-          </div>
-          <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>
-            {data.shipToName || data.partyName}
-          </div>
-          <div
-            style={{
-              color: '#475569',
-              fontSize: '11px',
-              whiteSpace: 'pre-line',
-              wordBreak: 'break-word',
-              overflowWrap: 'anywhere'
-            }}
-          >
-            {data.shipToAddress || data.partyAddress}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  // Section 3: Line Items Table (Headers repeated on each page, Full-Height vertical column borders)
+  const renderItemsTable = (items: typeof data.lines, minTableHeight: number = 280) => {
+    const cellBorder = showGridLines ? '1px solid #E2E8F0' : undefined;
 
-  // Section 3: Line Items Table (Headers repeated on each page)
-  const renderItemsTable = (items: typeof data.lines) => (
-    <table
-      style={{
-        width: '100%',
-        borderCollapse: 'collapse',
-        marginBottom: '18px',
-        fontSize: '11.5px'
-      }}
-    >
-      <thead>
-        <tr
+    return (
+      <div
+        className="invoice-table-wrapper"
+        style={{
+          width: '100%',
+          flex: '1 1 auto',
+          minHeight: `${minTableHeight}px`,
+          display: 'flex',
+          flexDirection: 'column',
+          marginBottom: '16px'
+        }}
+      >
+        <table
           style={{
-            backgroundColor: '#FFF7ED',
-            color: '#0F172A',
+            width: '100%',
+            height: '100%',
+            minHeight: `${minTableHeight}px`,
+            borderCollapse: 'collapse',
+            fontSize: '11.5px',
             borderTop: '1px solid #FED7AA',
-            borderBottom: '1px solid #FED7AA',
-            textAlign: 'left'
+            borderBottom: '1.5px solid #CBD5E1',
+            borderLeft: cellBorder,
+            borderRight: cellBorder,
+            tableLayout: 'fixed'
           }}
         >
-          <th style={{ padding: '8px 10px', width: '28px', textAlign: 'center', fontWeight: 700 }}>#</th>
-          <th style={{ padding: '8px 10px', fontWeight: 700 }}>
-            Description
-            <div style={{ fontSize: '9px', fontWeight: 400, color: '#9A3412', marginTop: '1px' }}>
-              (Item with Serial No. or Item Description)
-            </div>
-          </th>
-          {showHsn && (
-            <th style={{ padding: '8px 10px', width: '70px', textAlign: 'center', fontWeight: 700 }}>
-              HSN
-            </th>
-          )}
-          <th style={{ padding: '8px 10px', width: '42px', textAlign: 'center', fontWeight: 700 }}>Qty</th>
-          {showUnit && (
-            <th style={{ padding: '8px 10px', width: '48px', textAlign: 'center', fontWeight: 700 }}>Unit</th>
-          )}
-          <th style={{ padding: '8px 10px', width: '80px', textAlign: 'right', fontWeight: 700 }}>
-            Rate (₹)
-          </th>
-          <th style={{ padding: '8px 10px', width: '56px', textAlign: 'center', fontWeight: 700 }}>Tax %</th>
-          <th style={{ padding: '8px 10px', width: '90px', textAlign: 'right', fontWeight: 700 }}>
-            Amount (₹)
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.length > 0 ? (
-          items.map((item, idx) => (
+          <thead>
             <tr
-              key={idx}
               style={{
-                borderBottom: '1px solid #F1F5F9',
-                verticalAlign: 'top'
+                backgroundColor: '#FFF7ED',
+                color: '#0F172A',
+                borderBottom: '1px solid #FED7AA',
+                textAlign: 'left'
               }}
             >
-              <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>
-                {item.index}
-              </td>
-              <td style={{ padding: '8px 10px' }}>
-                <div style={{ fontWeight: 700, color: '#0F172A' }}>{item.itemName}</div>
-                {item.serialNumber && (
-                  <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>
-                    S/N: {item.serialNumber}
-                  </div>
-                )}
-                {Boolean(item.warrantyMonths) && (
-                  <div style={{ fontSize: '10px', color: '#475569', marginTop: '1px', fontWeight: 500 }}>
-                    Warranty: {formatWarrantyDisplay(item.warrantyMonths, warrantyDisplayFormat)}
-                  </div>
-                )}
-                {item.description && (
-                  <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px', whiteSpace: 'pre-line' }}>
-                    {item.description}
-                  </div>
-                )}
-              </td>
+              <th style={{ padding: '8px 10px', width: '32px', textAlign: 'center', fontWeight: 700, borderRight: cellBorder }}>#</th>
+              <th style={{ padding: '8px 10px', fontWeight: 700, borderRight: cellBorder }}>
+                Description
+                <div style={{ fontSize: '9px', fontWeight: 400, color: '#9A3412', marginTop: '1px' }}>
+                  (Item with Serial No. or Details)
+                </div>
+              </th>
               {showHsn && (
-                <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: 'monospace', color: '#475569' }}>
-                  {item.hsnSac || '—'}
-                </td>
+                <th style={{ padding: '8px 10px', width: '75px', textAlign: 'center', fontWeight: 700, borderRight: cellBorder }}>
+                  HSN/SAC
+                </th>
               )}
-              <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600 }}>
-                {item.quantity}
-              </td>
+              <th style={{ padding: '8px 10px', width: '45px', textAlign: 'center', fontWeight: 700, borderRight: cellBorder }}>Qty</th>
               {showUnit && (
-                <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B' }}>
-                  {item.unit}
-                </td>
+                <th style={{ padding: '8px 10px', width: '48px', textAlign: 'center', fontWeight: 700, borderRight: cellBorder }}>Unit</th>
               )}
-              <td style={{ padding: '8px 10px', textAlign: 'right', fontFamily: 'monospace' }}>
-                {formatCurrency(item.rate)}
-              </td>
-              <td style={{ padding: '8px 10px', textAlign: 'center', color: '#475569' }}>
-                {item.taxPercent}%
-              </td>
-              <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, fontFamily: 'monospace' }}>
-                {formatCurrency(item.amount)}
-              </td>
+              <th style={{ padding: '8px 10px', width: '85px', textAlign: 'right', fontWeight: 700, borderRight: cellBorder }}>
+                Rate (₹)
+              </th>
+              <th style={{ padding: '8px 10px', width: '56px', textAlign: 'center', fontWeight: 700, borderRight: cellBorder }}>Tax %</th>
+              <th style={{ padding: '8px 10px', width: '95px', textAlign: 'right', fontWeight: 700 }}>
+                Amount (₹)
+              </th>
             </tr>
-          ))
-        ) : (
-          <tr>
-            <td colSpan={8} style={{ padding: '20px', textAlign: 'center', color: '#94A3B8' }}>
-              No line items present.
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  );
+          </thead>
+          <tbody>
+            {items.length > 0 ? (
+              items.map((item, idx) => (
+                <tr
+                  key={idx}
+                  style={{
+                    borderBottom: '1px solid #F1F5F9',
+                    verticalAlign: 'top'
+                  }}
+                >
+                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B', borderRight: cellBorder }}>
+                    {item.index}
+                  </td>
+                  <td style={{ padding: '8px 10px', borderRight: cellBorder }}>
+                    <div style={{ fontWeight: 700, color: '#0F172A' }}>{item.itemName}</div>
+                    {showSerial && item.serialNumber && (
+                      <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>
+                        S/N: {item.serialNumber}
+                      </div>
+                    )}
+                    {showSerial && Boolean(item.warrantyMonths) && (
+                      <div style={{ fontSize: '10px', color: '#475569', marginTop: '1px', fontWeight: 500 }}>
+                        Warranty: {formatWarrantyDisplay(item.warrantyMonths, warrantyDisplayFormat)}
+                      </div>
+                    )}
+                    {item.description && (
+                      <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px', whiteSpace: 'pre-line' }}>
+                        {item.description}
+                      </div>
+                    )}
+                  </td>
+                  {showHsn && (
+                    <td style={{ padding: '8px 10px', textAlign: 'center', fontFamily: 'monospace', color: '#475569', borderRight: cellBorder }}>
+                      {item.hsnSac || '—'}
+                    </td>
+                  )}
+                  <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 600, borderRight: cellBorder }}>
+                    {item.quantity}
+                  </td>
+                  {showUnit && (
+                    <td style={{ padding: '8px 10px', textAlign: 'center', color: '#64748B', borderRight: cellBorder }}>
+                      {item.unit}
+                    </td>
+                  )}
+                  <td style={{ padding: '8px 10px', textAlign: 'right', fontFamily: 'monospace', borderRight: cellBorder }}>
+                    {formatCurrency(item.rate)}
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'center', color: '#475569', borderRight: cellBorder }}>
+                    {item.taxPercent}%
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, fontFamily: 'monospace' }}>
+                    {formatCurrency(item.amount)}
+                  </td>
+                </tr>
+              ))
+            ) : null}
+
+            {/* Continuous vertical column borders stretching through available height */}
+            <tr
+              className="table-filler-row"
+              style={{
+                height: '100%',
+                borderBottom: 'none'
+              }}
+            >
+              <td style={{ padding: '0 10px', borderRight: cellBorder }}>&nbsp;</td>
+              <td style={{ padding: '0 10px', borderRight: cellBorder }}></td>
+              {showHsn && <td style={{ padding: '0 10px', borderRight: cellBorder }}></td>}
+              <td style={{ padding: '0 10px', borderRight: cellBorder }}></td>
+              {showUnit && <td style={{ padding: '0 10px', borderRight: cellBorder }}></td>}
+              <td style={{ padding: '0 10px', borderRight: cellBorder }}></td>
+              <td style={{ padding: '0 10px', borderRight: cellBorder }}></td>
+              <td style={{ padding: '0 10px' }}></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   // Section 4: Amount in Words & Totals Summary
   const renderTotals = () => (
@@ -791,13 +899,31 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
     </div>
   );
 
+  const getMinTableHeight = (page: (typeof pages)[0]) => {
+    if (isLandscape) {
+      if (isA5) {
+        return page.hasFooter ? (page.isFirstPage ? 140 : 200) : (page.isFirstPage ? 220 : 300);
+      }
+      return page.hasFooter ? (page.isFirstPage ? 220 : 360) : (page.isFirstPage ? 360 : 500);
+    }
+    if (isA5) {
+      return page.hasFooter ? (page.isFirstPage ? 240 : 380) : (page.isFirstPage ? 380 : 540);
+    }
+    // A4 / Letter portrait
+    if (page.hasFooter) {
+      return page.isFirstPage ? (shouldShowShipTo ? 440 : 490) : 660;
+    } else {
+      return page.isFirstPage ? 720 : 920;
+    }
+  };
+
   return (
     <div
       id={id}
       className="standard-invoice-container"
       style={{
         width: '100%',
-        maxWidth: '880px',
+        maxWidth: containerMaxWidth,
         margin: '0 auto',
         backgroundColor: 'transparent',
         boxSizing: 'border-box'
@@ -805,8 +931,8 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
     >
       <style>{`
         @page {
-          size: A4 portrait;
-          margin: 8mm 8mm;
+          size: ${printPageSizeCss};
+          margin: ${printMarginCss};
         }
         @media print {
           body {
@@ -822,7 +948,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
           .a4-page-sheet {
             page-break-after: always;
             break-after: page;
-            min-height: 280mm;
+            min-height: ${printSheetMinHeight};
             box-sizing: border-box;
             width: 100% !important;
             max-width: 100% !important;
@@ -832,7 +958,6 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
             border: none !important;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
           }
           .a4-page-sheet:last-child {
             page-break-after: avoid;
@@ -844,6 +969,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
       {pages.map((page) => (
         <div
           key={page.pageIndex}
+          id={`page-sheet-${page.pageIndex}`}
           className="a4-page-sheet"
           style={{
             width: '100%',
@@ -852,18 +978,18 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
             fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
             fontSize: '12px',
             lineHeight: 1.45,
-            padding: '22px 26px',
+            padding: '24px 28px',
             borderRadius: '4px',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.12)',
             margin: '0 auto 24px auto',
-            minHeight: '1060px',
+            minHeight: sheetMinHeight,
             boxSizing: 'border-box',
             display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between'
+            flexDirection: 'column'
           }}
         >
-          <div>
+          {/* Top Header Region (First page or Continuation) */}
+          <div style={{ flexShrink: 0 }}>
             {page.isFirstPage ? (
               <>
                 {renderHeader()}
@@ -872,48 +998,51 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
             ) : (
               renderContinuationHeader(page.pageIndex + 1, page.totalPages)
             )}
-
-            {renderItemsTable(page.items)}
-
-            {page.hasFooter && (
-              <>
-                {renderTotals()}
-                {renderFooter()}
-
-                {showLedgerflowWordmark && (
-                  <div
-                    className="invoice-wordmark-footer"
-                    style={{
-                      marginTop: '18px',
-                      paddingTop: '8px',
-                      borderTop: '1px solid #F1F5F9',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: '10px',
-                      color: '#94A3B8',
-                      lineHeight: 1
-                    }}
-                  >
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                      <span style={{ fontWeight: 700, color: '#334155', letterSpacing: '-0.2px' }}>Ledger</span>
-                      <span style={{ fontWeight: 800, color: '#EA580C', letterSpacing: '-0.2px' }}>Flow</span>
-                      <span style={{ fontSize: '9px', color: '#94A3B8', marginLeft: '3px' }}>ERP</span>
-                    </div>
-                    <div style={{ fontSize: '9px', color: '#94A3B8' }}>
-                      Original for Recipient
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
           </div>
+
+          {/* Full-Height Line Items Table */}
+          {renderItemsTable(page.items, getMinTableHeight(page))}
+
+          {/* Bottom Region: Totals & Footer */}
+          {page.hasFooter && (
+            <div style={{ flexShrink: 0, marginTop: '8px' }}>
+              {renderTotals()}
+              {renderFooter()}
+
+              {showLedgerflowWordmark && (
+                <div
+                  className="invoice-wordmark-footer"
+                  style={{
+                    marginTop: '16px',
+                    paddingTop: '8px',
+                    borderTop: '1px solid #F1F5F9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: '10px',
+                    color: '#94A3B8',
+                    lineHeight: 1
+                  }}
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                    <span style={{ fontWeight: 700, color: '#334155', letterSpacing: '-0.2px' }}>Ledger</span>
+                    <span style={{ fontWeight: 800, color: '#EA580C', letterSpacing: '-0.2px' }}>Flow</span>
+                    <span style={{ fontSize: '9px', color: '#94A3B8', marginLeft: '3px' }}>ERP</span>
+                  </div>
+                  <div style={{ fontSize: '9px', color: '#94A3B8' }}>
+                    Original for Recipient
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Bottom Page Numbering Bar */}
           <div
             style={{
+              flexShrink: 0,
               marginTop: 'auto',
-              paddingTop: '12px',
+              paddingTop: '10px',
               borderTop: '1px solid #F1F5F9',
               display: 'flex',
               justifyContent: 'space-between',
