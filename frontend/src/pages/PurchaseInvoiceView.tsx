@@ -458,11 +458,18 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
         return updated;
       });
 
-      // Phase 2: Tally-style auto next row
-      // When item is selected on the last row and last row is now populated, append a new blank row
+      // Auto next row: When item is selected on the last row and last row is now populated, append exactly one new blank row if one does not already exist
       if (field === 'itemId' && val) {
         const last = nextLines[nextLines.length - 1];
         if (last && last.itemId && last.itemId.trim() !== '') {
+          setTimeout(() => {
+            const lineIdx = nextLines.findIndex(l => l.id === id);
+            if (lineIdx >= 0) {
+              const qtyInput = document.querySelector(`[data-purchase-row="${lineIdx}"][data-purchase-field="qty"]`) as HTMLInputElement;
+              qtyInput?.focus();
+            }
+          }, 50);
+
           return [
             ...nextLines,
             {
@@ -553,10 +560,9 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
     const isInterState = Boolean(company?.state_code && placeOfSupply && company.state_code !== placeOfSupply);
 
     lines.forEach(l => {
-      if (l.itemId || Number(l.quantity) > 0) {
-        validItemsCount++;
-        totalQty += Number(l.quantity) || 0;
-      }
+      if (!l.itemId) return; // Do not calculate GST, quantity or totals for blank trailing rows
+      validItemsCount++;
+      totalQty += Number(l.quantity) || 0;
       const res = calcLineAmounts(l, taxMode);
       totalTaxablePaise += res.taxableAmountPaise;
       totalCgstPaise += res.cgstAmountPaise;

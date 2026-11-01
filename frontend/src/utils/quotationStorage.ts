@@ -51,6 +51,7 @@ export interface QuotationRecord {
     email?: string;
   };
   taxMode: 'EXCLUSIVE' | 'INCLUSIVE';
+  showGstBreakdown?: boolean;
   items: QuotationLineItem[];
   termsConditions: string;
   notes?: string;

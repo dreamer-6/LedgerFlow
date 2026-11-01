@@ -25,8 +25,24 @@ export const SimpleInvoice: React.FC<SimpleInvoiceProps> = ({
     showAmtWords = true,
     showBankDetails = true,
     showTerms = true,
-    showSignature = true
+    showSignature = true,
+    pageSize = 'A4',
+    orientation = 'PORTRAIT',
+    paperMargin = 'normal'
   } = options;
+
+  const isLandscape = orientation === 'LANDSCAPE' || pageSize.includes('LANDSCAPE');
+  const isA5 = pageSize.includes('A5');
+  const isLetter = pageSize.includes('LETTER');
+
+  const printMarginCss = paperMargin === 'compact' ? '5mm 5mm' : paperMargin === 'spacious' ? '12mm 12mm' : '8mm 8mm';
+  const printPageSizeCss = isA5
+    ? (isLandscape ? 'A5 landscape' : 'A5 portrait')
+    : isLetter
+    ? (isLandscape ? 'letter landscape' : 'letter portrait')
+    : (isLandscape ? 'A4 landscape' : 'A4 portrait');
+
+  const sheetPadding = paperMargin === 'compact' ? '14px 18px' : paperMargin === 'spacious' ? '36px 40px' : '24px 28px';
 
   return (
     <div
@@ -34,17 +50,38 @@ export const SimpleInvoice: React.FC<SimpleInvoiceProps> = ({
       className="simple-invoice-container"
       style={{
         width: '100%',
-        maxWidth: '820px',
+        maxWidth: isLandscape ? '1100px' : '820px',
         margin: '0 auto',
         backgroundColor: '#FFFFFF',
         color: '#1E293B',
         fontFamily: "'Inter', system-ui, sans-serif",
         fontSize: '11.5px',
         lineHeight: 1.4,
-        padding: '28px 32px',
+        padding: sheetPadding,
         boxSizing: 'border-box'
       }}
     >
+      <style>{`
+        @page {
+          size: ${printPageSizeCss};
+          margin: ${printMarginCss};
+        }
+        @media print {
+          body {
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .simple-invoice-container {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+        }
+      `}</style>
+
       {/* ─── COMPACT HEADER ─── */}
       <div
         style={{
@@ -52,8 +89,8 @@ export const SimpleInvoice: React.FC<SimpleInvoiceProps> = ({
           justifyContent: 'space-between',
           alignItems: 'flex-start',
           borderBottom: '2px solid #0F172A',
-          paddingBottom: '14px',
-          marginBottom: '16px'
+          paddingBottom: '10px',
+          marginBottom: '10px'
         }}
       >
         <div>
@@ -84,17 +121,19 @@ export const SimpleInvoice: React.FC<SimpleInvoiceProps> = ({
 
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', letterSpacing: '0.5px' }}>
-            {data.voucherType === 'PURCHASE' ? 'PURCHASE VOUCHER' : 'TAX INVOICE'}
+            {data.voucherType === 'QUOTATION' ? 'QUOTATION' : data.voucherType === 'PURCHASE' ? 'PURCHASE VOUCHER' : 'TAX INVOICE'}
           </div>
           <div style={{ fontSize: '12px', fontWeight: 700, color: '#EA580C', fontFamily: 'monospace', marginTop: '2px' }}>
             #{data.voucherNumber}
           </div>
           <div style={{ color: '#64748B', fontSize: '10.5px', marginTop: '4px' }}>
-            Date: <strong style={{ color: '#1E293B' }}>{data.voucherDate}</strong>
+            {data.voucherType === 'QUOTATION' ? 'Quotation Date: ' : 'Date: '}
+            <strong style={{ color: '#1E293B' }}>{data.voucherDate}</strong>
           </div>
           {data.dueDate && (
             <div style={{ color: '#64748B', fontSize: '10.5px' }}>
-              Due: <strong style={{ color: '#1E293B' }}>{data.dueDate}</strong>
+              {data.voucherType === 'QUOTATION' ? 'Valid Until: ' : 'Due: '}
+              <strong style={{ color: '#1E293B' }}>{data.dueDate}</strong>
             </div>
           )}
         </div>
@@ -105,11 +144,11 @@ export const SimpleInvoice: React.FC<SimpleInvoiceProps> = ({
         style={{
           display: 'grid',
           gridTemplateColumns: '1.2fr 1fr',
-          gap: '20px',
+          gap: '14px',
           backgroundColor: '#F8FAFC',
-          padding: '12px 16px',
+          padding: '8px 14px',
           borderRadius: '6px',
-          marginBottom: '16px'
+          marginBottom: '10px'
         }}
       >
         <div>

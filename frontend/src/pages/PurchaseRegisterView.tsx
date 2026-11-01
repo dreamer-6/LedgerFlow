@@ -551,131 +551,129 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
         </div>
       </div>
 
-      {/* KPI Cards Strip */}
+      {/* KPI Cards Strip — Unified with Main & Sales Standard */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-        gap: '16px',
-        marginBottom: '24px'
+        gap: '14px',
+        marginBottom: '22px'
       }}>
         {/* Total Purchase */}
         <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)',
           borderRadius: '12px',
-          padding: '16px 20px',
+          padding: '16px 18px',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Total Purchase</span>
-            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EA580C' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary, #64748B)', fontWeight: 600 }}>Total Purchase</span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: 'rgba(234, 88, 12, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EA580C' }}>
               <Layers size={15} />
             </span>
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text, #0F172A)', letterSpacing: '-0.02em', lineHeight: 1.2, marginBottom: '6px' }}>
             {formatINR(kpis.totalPurchasesPaise)}
           </div>
-          <div style={{ fontSize: '11.5px', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-            <span>&uarr; 8.6%</span>
-            <span style={{ color: '#94A3B8', fontWeight: 400 }}>vs last period</span>
+          <div style={{ fontSize: '11px', color: 'var(--color-text-muted, #94A3B8)' }}>
+            Active register total
           </div>
         </div>
 
         {/* Total Invoices */}
         <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)',
           borderRadius: '12px',
-          padding: '16px 20px',
+          padding: '16px 18px',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Total Invoices</span>
-            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary, #64748B)', fontWeight: 600 }}>Total Invoices</span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: 'rgba(100, 116, 139, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>
               <FileText size={15} />
             </span>
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text, #0F172A)', letterSpacing: '-0.02em', lineHeight: 1.2, marginBottom: '6px' }}>
             {kpis.totalInvoices}
           </div>
-          <div style={{ fontSize: '11.5px', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-            <span>&uarr; 12.3%</span>
-            <span style={{ color: '#94A3B8', fontWeight: 400 }}>vs last period</span>
+          <div style={{ fontSize: '11px', color: 'var(--color-text-muted, #94A3B8)' }}>
+            Filtered records in view
           </div>
         </div>
 
         {/* Posted */}
         <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)',
           borderRadius: '12px',
-          padding: '16px 20px',
+          padding: '16px 18px',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Posted</span>
-            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary, #64748B)', fontWeight: 600 }}>Posted</span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: 'rgba(22, 163, 74, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
               <CheckCircle2 size={15} />
             </span>
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 700, color: '#16A34A', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', fontVariantNumeric: 'tabular-nums', color: '#16A34A', letterSpacing: '-0.02em', lineHeight: 1.2, marginBottom: '6px' }}>
             {kpis.postedCount}
           </div>
-          <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+          <div style={{ fontSize: '11px', color: 'var(--color-text-muted, #94A3B8)' }}>
             Authoritative postings
           </div>
         </div>
 
         {/* Draft */}
         <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)',
           borderRadius: '12px',
-          padding: '16px 20px',
+          padding: '16px 18px',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Draft</span>
-            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#FEF3C7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary, #64748B)', fontWeight: 600 }}>Draft</span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: 'rgba(217, 119, 6, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706' }}>
               <Edit2 size={15} />
             </span>
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 700, color: '#D97706', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', fontVariantNumeric: 'tabular-nums', color: '#D97706', letterSpacing: '-0.02em', lineHeight: 1.2, marginBottom: '6px' }}>
             {kpis.draftCount}
           </div>
-          <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+          <div style={{ fontSize: '11px', color: 'var(--color-text-muted, #94A3B8)' }}>
             Unposted vouchers
           </div>
         </div>
 
         {/* Cancelled */}
         <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)',
           borderRadius: '12px',
-          padding: '16px 20px',
+          padding: '16px 18px',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Cancelled</span>
-            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary, #64748B)', fontWeight: 600 }}>Cancelled</span>
+            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: 'rgba(220, 38, 38, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626' }}>
               <X size={15} />
             </span>
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 700, color: '#DC2626', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', fontVariantNumeric: 'tabular-nums', color: '#DC2626', letterSpacing: '-0.02em', lineHeight: 1.2, marginBottom: '6px' }}>
             {kpis.cancelledCount}
           </div>
-          <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+          <div style={{ fontSize: '11px', color: 'var(--color-text-muted, #94A3B8)' }}>
             Audited cancellations
           </div>
         </div>

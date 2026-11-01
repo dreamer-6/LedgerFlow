@@ -14,6 +14,7 @@ export interface PaginationConfig {
   footerHeight: number;           // Height of totals + amount in words + terms + bank + signature
   pageNumberHeight: number;       // Height of bottom page numbering bar
   minItemsOnFinalPageWithFooter?: number;
+  maxPage1Items?: number;         // Layout preference: target max items on Page 1 (e.g. 7)
 }
 
 export interface PageChunk<T> {
@@ -32,7 +33,8 @@ export const DEFAULT_A4_PAGINATION_CONFIG: PaginationConfig = {
   tableHeaderHeight: 40,
   footerHeight: 330,
   pageNumberHeight: 30,
-  minItemsOnFinalPageWithFooter: 1
+  minItemsOnFinalPageWithFooter: 1,
+  maxPage1Items: 7
 };
 
 export const A4_LANDSCAPE_PAGINATION_CONFIG: PaginationConfig = {
@@ -87,25 +89,44 @@ export const LETTER_LANDSCAPE_PAGINATION_CONFIG: PaginationConfig = {
 
 export function getPaginationConfigForFormat(
   format: string = 'A4',
-  orientation: string = 'PORTRAIT'
+  orientation: string = 'PORTRAIT',
+  paperMargin?: 'compact' | 'normal' | 'spacious'
 ): PaginationConfig {
   const normFormat = (format || 'A4').toUpperCase();
   const normOrient = (orientation || 'PORTRAIT').toUpperCase();
 
+  let baseConfig: PaginationConfig;
   if (normFormat.includes('A5')) {
-    return normOrient === 'LANDSCAPE' || normFormat.includes('LANDSCAPE')
+    baseConfig = normOrient === 'LANDSCAPE' || normFormat.includes('LANDSCAPE')
       ? A5_LANDSCAPE_PAGINATION_CONFIG
       : A5_PORTRAIT_PAGINATION_CONFIG;
-  }
-  if (normFormat.includes('LETTER')) {
-    return normOrient === 'LANDSCAPE' || normFormat.includes('LANDSCAPE')
+  } else if (normFormat.includes('LETTER')) {
+    baseConfig = normOrient === 'LANDSCAPE' || normFormat.includes('LANDSCAPE')
       ? LETTER_LANDSCAPE_PAGINATION_CONFIG
       : LETTER_PORTRAIT_PAGINATION_CONFIG;
+  } else {
+    // Default A4
+    baseConfig = normOrient === 'LANDSCAPE' || normFormat.includes('LANDSCAPE')
+      ? A4_LANDSCAPE_PAGINATION_CONFIG
+      : DEFAULT_A4_PAGINATION_CONFIG;
   }
-  // Default A4
-  return normOrient === 'LANDSCAPE' || normFormat.includes('LANDSCAPE')
-    ? A4_LANDSCAPE_PAGINATION_CONFIG
-    : DEFAULT_A4_PAGINATION_CONFIG;
+
+  // Adjust available page height and item capacity based on user-selected margins
+  if (paperMargin === 'compact') {
+    return {
+      ...baseConfig,
+      totalPageHeight: baseConfig.totalPageHeight + 40,
+      maxPage1Items: (baseConfig.maxPage1Items || 7) + 1
+    };
+  } else if (paperMargin === 'spacious') {
+    return {
+      ...baseConfig,
+      totalPageHeight: baseConfig.totalPageHeight - 50,
+      maxPage1Items: Math.max(4, (baseConfig.maxPage1Items || 7) - 1)
+    };
+  }
+
+  return baseConfig;
 }
 
 /**
@@ -168,7 +189,7 @@ export function paginateItems<T>(
     config.footerHeight -
     config.pageNumberHeight;
 
-  if (totalItemHeight <= page1CapacityWithFooter) {
+  if (totalItemHeight <= page1CapacityWithFooter && (!config.maxPage1Items || items.length <= config.maxPage1Items)) {
     return [
       {
         pageIndex: 0,
@@ -199,7 +220,12 @@ export function paginateItems<T>(
       remainingHeight += itemHeights[i];
     }
 
-    if (remainingHeight <= availableHeightWithFooter) {
+    // On Page 1, if maxPage1Items is configured and items remain beyond maxPage1Items, do not force footer on Page 1
+    const allowedFitWithFooter = isFirst && config.maxPage1Items && (items.length - currentIndex) > config.maxPage1Items
+      ? false
+      : remainingHeight <= availableHeightWithFooter;
+
+    if (allowedFitWithFooter) {
       // All remaining items and the footer fit on this page!
       pages.push({
         items: items.slice(currentIndex),
@@ -215,6 +241,10 @@ export function paginateItems<T>(
 
     while (nextIndex < items.length) {
       const h = itemHeights[nextIndex];
+      // On Page 1, respect maxPage1Items preference if set
+      if (isFirst && config.maxPage1Items && itemsForThisPage.length >= config.maxPage1Items) {
+        break;
+      }
       if (currentHeight + h > availableHeightWithoutFooter && itemsForThisPage.length > 0) {
         break;
       }

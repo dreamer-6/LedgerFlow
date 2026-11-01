@@ -88,10 +88,12 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
     ? (isLandscape ? 'letter landscape' : 'letter portrait')
     : (isLandscape ? 'A4 landscape' : 'A4 portrait');
 
+  const sheetPadding = paperMargin === 'compact' ? '14px 18px' : paperMargin === 'spacious' ? '36px 40px' : '24px 28px';
+
   // Content-aware Multi-Page pagination
   const paginationConfig = useMemo(() => {
-    return getPaginationConfigForFormat(pageSize, orientation);
-  }, [pageSize, orientation]);
+    return getPaginationConfigForFormat(pageSize, orientation, paperMargin);
+  }, [pageSize, orientation, paperMargin]);
 
   const pages = useMemo(() => {
     if (!data.lines || data.lines.length === 0) {
@@ -124,9 +126,9 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
       style={{
         display: 'grid',
         gridTemplateColumns: '1.45fr 1fr',
-        gap: '24px',
+        gap: '16px',
         alignItems: 'start',
-        marginBottom: '20px'
+        marginBottom: '12px'
       }}
     >
       {/* Left: Company Identity */}
@@ -277,6 +279,11 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
                 <span style={{ color: '#0F172A' }}>PURCHASE </span>
                 <span style={{ color: '#EA580C' }}>VOUCHER</span>
               </>
+            ) : data.voucherType === 'QUOTATION' ? (
+              <>
+                <span style={{ color: '#0F172A' }}>QUOT</span>
+                <span style={{ color: '#EA580C' }}>ATION</span>
+              </>
             ) : (
               <>
                 <span style={{ color: '#0F172A' }}>TAX </span>
@@ -293,7 +300,11 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
               marginTop: '4px'
             }}
           >
-            {data.voucherType === 'PURCHASE' ? 'PURCHASE INVOICE RECORD' : 'ORIGINAL FOR RECIPIENT'}
+            {data.voucherType === 'PURCHASE'
+              ? 'PURCHASE INVOICE RECORD'
+              : data.voucherType === 'QUOTATION'
+              ? 'PRICE OFFER • ORIGINAL FOR CUSTOMER'
+              : 'ORIGINAL FOR RECIPIENT'}
           </div>
         </div>
 
@@ -308,7 +319,9 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
           }}
         >
           <div style={{ display: 'grid', gridTemplateColumns: '95px 12px 1fr', alignItems: 'center' }}>
-            <span style={{ color: '#475569' }}>Invoice No</span>
+            <span style={{ color: '#475569' }}>
+              {data.voucherType === 'QUOTATION' ? 'Quotation No' : data.voucherType === 'PURCHASE' ? 'Voucher No' : 'Invoice No'}
+            </span>
             <span style={{ color: '#64748B' }}>:</span>
             <strong style={{ color: '#0F172A', fontFamily: 'monospace', fontSize: '12px' }}>
               {data.voucherNumber}
@@ -316,13 +329,17 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '95px 12px 1fr', alignItems: 'center' }}>
-            <span style={{ color: '#475569' }}>Invoice Date</span>
+            <span style={{ color: '#475569' }}>
+              {data.voucherType === 'QUOTATION' ? 'Quotation Date' : 'Invoice Date'}
+            </span>
             <span style={{ color: '#64748B' }}>:</span>
             <span style={{ color: '#0F172A', fontWeight: 600 }}>{data.voucherDate}</span>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '95px 12px 1fr', alignItems: 'center' }}>
-            <span style={{ color: '#475569' }}>Due Date</span>
+            <span style={{ color: '#475569' }}>
+              {data.voucherType === 'QUOTATION' ? 'Valid Until' : 'Due Date'}
+            </span>
             <span style={{ color: '#64748B' }}>:</span>
             <span style={{ color: '#0F172A', fontWeight: 600 }}>{data.dueDate}</span>
           </div>
@@ -370,11 +387,19 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
         </span>
         <span style={{ color: '#94A3B8', fontSize: '11px' }}>•</span>
         <span style={{ color: '#EA580C', fontWeight: 800, fontSize: '12px', letterSpacing: '0.02em' }}>
-          {data.voucherType === 'PURCHASE' ? 'PURCHASE VOUCHER' : 'TAX INVOICE'} (Continuation)
+          {data.voucherType === 'QUOTATION'
+            ? 'QUOTATION'
+            : data.voucherType === 'PURCHASE'
+            ? 'PURCHASE VOUCHER'
+            : 'TAX INVOICE'}{' '}
+          (Continuation)
         </span>
       </div>
       <div style={{ fontSize: '11px', color: '#475569' }}>
-        <span>Invoice No: <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{data.voucherNumber}</strong></span>
+        <span>
+          {data.voucherType === 'QUOTATION' ? 'Quotation No: ' : 'Invoice No: '}
+          <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{data.voucherNumber}</strong>
+        </span>
         <span style={{ margin: '0 8px', color: '#CBD5E1' }}>|</span>
         <span>Date: <strong style={{ color: '#0F172A' }}>{data.voucherDate}</strong></span>
       </div>
@@ -392,14 +417,14 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
     return (
       <div
         style={{
-          marginBottom: '16px',
+          marginBottom: '10px',
           display: 'grid',
           gridTemplateColumns: shouldShowShipTo ? '1.1fr 1fr' : '1fr',
-          gap: '20px',
+          gap: '14px',
           backgroundColor: '#F8FAFC',
           border: '1px solid #F1F5F9',
           borderRadius: '8px',
-          padding: '12px 16px'
+          padding: '8px 14px'
         }}
       >
         {/* Bill To */}
@@ -900,6 +925,12 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
   );
 
   const getMinTableHeight = (page: (typeof pages)[0]) => {
+    if (data.voucherType === 'QUOTATION') {
+      if (!page.isFirstPage) {
+        return page.hasFooter ? 140 : 220;
+      }
+      return page.hasFooter ? (shouldShowShipTo ? 320 : 360) : 480;
+    }
     if (isLandscape) {
       if (isA5) {
         return page.hasFooter ? (page.isFirstPage ? 140 : 200) : (page.isFirstPage ? 220 : 300);
@@ -911,9 +942,9 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
     }
     // A4 / Letter portrait
     if (page.hasFooter) {
-      return page.isFirstPage ? (shouldShowShipTo ? 440 : 490) : 660;
+      return page.isFirstPage ? (shouldShowShipTo ? 440 : 490) : 380;
     } else {
-      return page.isFirstPage ? 720 : 920;
+      return page.isFirstPage ? 650 : 750;
     }
   };
 
@@ -953,7 +984,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 4mm 6mm !important;
+            padding: 0 !important;
             box-shadow: none !important;
             border: none !important;
             display: flex;
@@ -978,7 +1009,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
             fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
             fontSize: '12px',
             lineHeight: 1.45,
-            padding: '24px 28px',
+            padding: sheetPadding,
             borderRadius: '4px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.12)',
             margin: '0 auto 24px auto',

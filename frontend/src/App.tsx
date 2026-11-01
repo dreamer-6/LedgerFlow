@@ -42,9 +42,11 @@ import { PaymentsView } from './pages/PaymentsView';
 import { PaymentCreationView } from './pages/PaymentCreationView';
 import { JournalView } from './pages/JournalView';
 import { JournalCreationView } from './pages/JournalCreationView';
-import { QuotationsDashboardView } from './pages/QuotationsDashboardView';
+import { QuotationDashboardView } from './pages/QuotationDashboardView';
+import { QuotationRegisterView } from './pages/QuotationRegisterView';
+import { QuotationDetailsView } from './pages/QuotationDetailsView';
 import { QuotationCreationView } from './pages/QuotationCreationView';
-import { QuotationRecord } from './utils/quotationStorage';
+import { quotationStorage, QuotationRecord } from './utils/quotationStorage';
 import { CreateBusinessOnboarding } from './components/CreateBusinessOnboarding';
 import { DateChangeModal } from './components/DateChangeModal';
 import { FinancialYearModal } from './components/FinancialYearModal';
@@ -127,8 +129,11 @@ export const App: React.FC = () => {
   const [paymentViewMode, setPaymentViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [journalViewMode, setJournalViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [serviceBillViewMode, setServiceBillViewMode] = useState<'dashboard' | 'create'>('dashboard');
-  const [quotationViewMode, setQuotationViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [quotationViewMode, setQuotationViewMode] = useState<'dashboard' | 'create' | 'register' | 'view'>('dashboard');
+  const [quotationOrigin, setQuotationOrigin] = useState<'dashboard' | 'register'>('dashboard');
   const [editQuotationId, setEditQuotationId] = useState<string | null>(null);
+  const [selectedQuotationId, setSelectedQuotationId] = useState<string | null>(null);
+  const [quotationRegisterFilter, setQuotationRegisterFilter] = useState<{ status?: string; validity?: string } | undefined>(undefined);
   const [convertedQuotation, setConvertedQuotation] = useState<QuotationRecord | null>(null);
   const [reportSubTab, setReportSubTab] = useState<string>('daybook');
   const [voucherInitialType, setVoucherInitialType] = useState<string>('SALES');
@@ -946,6 +951,9 @@ export const App: React.FC = () => {
                     setSalesViewMode('register');
                   }}
                   onPostSuccess={(voucherId) => {
+                    if (convertedQuotation && company) {
+                      quotationStorage.markConverted(company.company_id, convertedQuotation.id, voucherId);
+                    }
                     setConvertedQuotation(null);
                     setSalesEditVoucherId(null);
                     setActivePrintVoucherId(voucherId);
@@ -956,19 +964,68 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* 1.1.1 Quotation Module (UI-010) — Quotations Dashboard & Create Quotation */}
+          {/* 1.1.1 Quotation Module (UI-039) — Rebuilt Quotation Dashboard, Register, Details & Create */}
           {activeTab === 'quotation' && (
             <div key="quotation" className="view-container-animated">
-              {quotationViewMode === 'dashboard' ? (
-                <QuotationsDashboardView
+              {quotationViewMode === 'dashboard' && (
+                <QuotationDashboardView
                   company={company}
                   activeFy={activeFy}
                   onNewQuotation={() => {
                     setEditQuotationId(null);
+                    setQuotationOrigin('dashboard');
                     setQuotationViewMode('create');
+                  }}
+                  onOpenRegister={(filter) => {
+                    setQuotationRegisterFilter(filter);
+                    setQuotationViewMode('register');
+                  }}
+                  onViewQuotation={(id) => {
+                    setSelectedQuotationId(id);
+                    setQuotationOrigin('dashboard');
+                    setQuotationViewMode('view');
                   }}
                   onEditQuotation={(id) => {
                     setEditQuotationId(id);
+                    setQuotationOrigin('dashboard');
+                    setQuotationViewMode('create');
+                  }}
+                  onDuplicateQuotation={(id) => {
+                    if (company) {
+                      const copy = quotationStorage.duplicate(company.company_id, id);
+                      if (copy) {
+                        setEditQuotationId(copy.id);
+                        setQuotationOrigin('dashboard');
+                        setQuotationViewMode('create');
+                      }
+                    }
+                  }}
+                  onConvertToInvoice={(quotation) => {
+                    setConvertedQuotation(quotation);
+                    setActiveTab('sales');
+                    setSalesViewMode('create');
+                  }}
+                />
+              )}
+
+              {quotationViewMode === 'register' && (
+                <QuotationRegisterView
+                  company={company}
+                  activeFy={activeFy}
+                  initialFilter={quotationRegisterFilter}
+                  onNewQuotation={() => {
+                    setEditQuotationId(null);
+                    setQuotationOrigin('register');
+                    setQuotationViewMode('create');
+                  }}
+                  onViewQuotation={(id) => {
+                    setSelectedQuotationId(id);
+                    setQuotationOrigin('register');
+                    setQuotationViewMode('view');
+                  }}
+                  onEditQuotation={(id) => {
+                    setEditQuotationId(id);
+                    setQuotationOrigin('register');
                     setQuotationViewMode('create');
                   }}
                   onConvertToInvoice={(quotation) => {
@@ -977,7 +1034,36 @@ export const App: React.FC = () => {
                     setSalesViewMode('create');
                   }}
                 />
-              ) : (
+              )}
+
+              {quotationViewMode === 'view' && (
+                <QuotationDetailsView
+                  quotationId={selectedQuotationId}
+                  company={company}
+                  activeFy={activeFy}
+                  onBack={() => setQuotationViewMode(quotationOrigin)}
+                  onEdit={(id) => {
+                    setEditQuotationId(id);
+                    setQuotationViewMode('create');
+                  }}
+                  onDuplicate={(id) => {
+                    if (company) {
+                      const copy = quotationStorage.duplicate(company.company_id, id);
+                      if (copy) {
+                        setEditQuotationId(copy.id);
+                        setQuotationViewMode('create');
+                      }
+                    }
+                  }}
+                  onConvertToInvoice={(quotation) => {
+                    setConvertedQuotation(quotation);
+                    setActiveTab('sales');
+                    setSalesViewMode('create');
+                  }}
+                />
+              )}
+
+              {quotationViewMode === 'create' && (
                 <QuotationCreationView
                   company={company}
                   activeFy={activeFy}
@@ -985,11 +1071,11 @@ export const App: React.FC = () => {
                   editQuotationId={editQuotationId}
                   onBack={() => {
                     setEditQuotationId(null);
-                    setQuotationViewMode('dashboard');
+                    setQuotationViewMode(quotationOrigin);
                   }}
                   onSaveSuccess={() => {
                     setEditQuotationId(null);
-                    setQuotationViewMode('dashboard');
+                    setQuotationViewMode('register');
                   }}
                   onConvertToInvoice={(quotation) => {
                     setEditQuotationId(null);

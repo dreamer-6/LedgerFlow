@@ -17,8 +17,8 @@ export interface AppShellProps {
   setMastersSubTab?: (tab: string) => void;
   salesViewMode?: 'dashboard' | 'create' | 'register' | 'view_invoice' | 'return';
   setSalesViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view_invoice' | 'return') => void;
-  quotationViewMode?: 'dashboard' | 'create';
-  setQuotationViewMode?: (mode: 'dashboard' | 'create') => void;
+  quotationViewMode?: 'dashboard' | 'create' | 'register' | 'view';
+  setQuotationViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   purchaseViewMode?: 'dashboard' | 'create' | 'register' | 'return' | 'view_invoice';
   setPurchaseViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'return' | 'view_invoice') => void;
   receiptViewMode?: 'dashboard' | 'create';

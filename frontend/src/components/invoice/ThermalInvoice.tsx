@@ -87,17 +87,17 @@ export const ThermalInvoice: React.FC<ThermalInvoiceProps> = ({
         )}
         <div style={{ margin: '6px 0', borderBottom: '1px dashed #000' }} />
         <div style={{ fontWeight: 800, fontSize: '12px' }}>
-          {data.voucherType === 'PURCHASE' ? '*** PURCHASE VOUCHER ***' : '*** TAX INVOICE ***'}
+          {data.voucherType === 'QUOTATION' ? '*** PRICE QUOTATION ***' : data.voucherType === 'PURCHASE' ? '*** PURCHASE VOUCHER ***' : '*** TAX INVOICE ***'}
         </div>
         <div style={{ fontSize: '10px' }}>
-          {data.voucherType === 'PURCHASE' ? 'PURCHASE RECORD' : 'ORIGINAL FOR RECIPIENT'}
+          {data.voucherType === 'QUOTATION' ? 'PRICE OFFER • ORIGINAL FOR CUSTOMER' : data.voucherType === 'PURCHASE' ? 'PURCHASE RECORD' : 'ORIGINAL FOR RECIPIENT'}
         </div>
       </div>
 
       {/* ─── METADATA ─── */}
       <div style={{ fontSize: '10.5px', marginBottom: '6px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>Inv #: <strong>{data.voucherNumber}</strong></span>
+          <span>{data.voucherType === 'QUOTATION' ? 'Qtn #: ' : 'Inv #: '}<strong>{data.voucherNumber}</strong></span>
           <span>{data.voucherDate}</span>
         </div>
         {data.partyName && (

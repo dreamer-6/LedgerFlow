@@ -40,8 +40,8 @@ export interface SidebarProps {
   setMastersSubTab?: (tab: string) => void;
   salesViewMode?: 'dashboard' | 'create' | 'register' | 'view_invoice' | 'return';
   setSalesViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view_invoice' | 'return') => void;
-  quotationViewMode?: 'dashboard' | 'create';
-  setQuotationViewMode?: (mode: 'dashboard' | 'create') => void;
+  quotationViewMode?: 'dashboard' | 'create' | 'register' | 'view';
+  setQuotationViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   purchaseViewMode?: 'dashboard' | 'create' | 'register' | 'return' | 'view_invoice';
   setPurchaseViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'return' | 'view_invoice') => void;
   receiptViewMode?: 'dashboard' | 'create';
@@ -84,6 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [expandedGroup, setExpandedGroup] = React.useState<string | null>(() => {
     if (activeTab === 'sales') return 'sales';
     if (activeTab === 'purchase') return 'purchase';
+    if (activeTab === 'quotation') return 'quotation';
     return null;
   });
   const prevTabRef = React.useRef(activeTab);
@@ -94,12 +95,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setExpandedGroup('sales');
     } else if (activeTab === 'purchase') {
       setExpandedGroup('purchase');
+    } else if (activeTab === 'quotation') {
+      setExpandedGroup('quotation');
     } else {
       // Navigating to another top-level section closes the previously expanded group
       setExpandedGroup(null);
     }
     prevTabRef.current = activeTab;
-  }, [activeTab, salesViewMode, purchaseViewMode]);
+  }, [activeTab, salesViewMode, purchaseViewMode, quotationViewMode]);
 
   const toggleGroup = (group: string) => {
     setExpandedGroup(prev => (prev === group ? null : group));
@@ -118,6 +121,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setExpandedGroup('sales');
     } else if (tab === 'purchase') {
       setExpandedGroup('purchase');
+    } else if (tab === 'quotation') {
+      setExpandedGroup('quotation');
     } else {
       setExpandedGroup(null);
     }
@@ -547,17 +552,124 @@ export const Sidebar: React.FC<SidebarProps> = ({
               () => handleNav('service_bill'),
               'Alt+W'
             )}
-            {renderItem(
-              'quotation-module',
-              'Quotation',
-              <FileText size={16} />,
-              activeTab === 'quotation',
-              () => {
-                setActiveTab('quotation');
-                if (setQuotationViewMode) setQuotationViewMode('dashboard');
-                if (onClose) onClose();
-              },
-              'Alt+Q'
+            {isCollapsed ? (
+              renderItem(
+                'quotation-module',
+                'Quotation',
+                <Package size={20} />,
+                activeTab === 'quotation',
+                () => {
+                  setActiveTab('quotation');
+                  if (setQuotationViewMode) setQuotationViewMode('dashboard');
+                  if (onClose) onClose();
+                },
+                'Alt+Q'
+              )
+            ) : (
+              <>
+                <div
+                  onClick={() => {
+                    setActiveTab('quotation');
+                    if (setQuotationViewMode) setQuotationViewMode('dashboard');
+                    setExpandedGroup('quotation');
+                    if (onClose) onClose();
+                  }}
+                  className={`nav-item ${activeTab === 'quotation' ? 'active' : ''}`}
+                  title="Quotation (Alt+Q)"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                    <span className="nav-icon"><Package size={16} /></span>
+                    <span style={{ flex: 1, lineHeight: 1.3, fontWeight: activeTab === 'quotation' ? 600 : 500 }}>Quotation</span>
+                  </div>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleGroup('quotation');
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '2px',
+                      color: 'var(--text-muted, #94A3B8)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {expandedGroup === 'quotation' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </div>
+                </div>
+
+                {/* Collapsible Submenu */}
+                {expandedGroup === 'quotation' && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      marginTop: '2px',
+                      marginBottom: '4px',
+                      paddingLeft: '24px'
+                    }}
+                  >
+                    <div
+                      onClick={() => {
+                        setActiveTab('quotation');
+                        if (setQuotationViewMode) setQuotationViewMode('dashboard');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'quotation' && quotationViewMode === 'dashboard' ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'quotation' && quotationViewMode === 'dashboard' ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Quotation Dashboard</span>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setActiveTab('quotation');
+                        if (setQuotationViewMode) setQuotationViewMode('create');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'quotation' && quotationViewMode === 'create' ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'quotation' && quotationViewMode === 'create' ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Create Quotation</span>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setActiveTab('quotation');
+                        if (setQuotationViewMode) setQuotationViewMode('register');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'quotation' && (quotationViewMode === 'register' || quotationViewMode === 'view') ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'quotation' && (quotationViewMode === 'register' || quotationViewMode === 'view') ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Quotation Register</span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

@@ -77,6 +77,7 @@ export interface NormalizedInvoiceData {
   roundOff?: number;
   grandTotal: number;
   amountInWords: string;
+  showGstBreakdown?: boolean;
   
   // Bank Details (only when configured)
   hasBankDetails: boolean;
@@ -436,10 +437,13 @@ export function normalizeQuotationData(quotation: any, company: any): Normalized
 
   const lines: InvoiceLineItem[] = rawItems.map((item, idx) => {
     const qty = Number(item.quantity) || 1;
-    const rate = Number(item.unitPrice) || 0;
-    const taxRate = Number(item.gstRate) || 0;
-    const taxable = Number(item.taxableAmount) || (qty * rate);
-    const amount = Number(item.totalAmount) || (taxable + (Number(item.taxAmount) || 0));
+    const rate = Number(item.rate ?? item.unitPrice ?? 0);
+    const taxRate = Number(item.gstRate ?? item.taxPercent ?? 0);
+    const taxable = Number(item.taxableAmount ?? 0) || (qty * rate);
+    const cgst = Number(item.cgstAmount ?? item.cgst ?? 0);
+    const sgst = Number(item.sgstAmount ?? item.sgst ?? 0);
+    const igst = Number(item.igstAmount ?? item.igst ?? 0);
+    const amount = Number(item.totalAmount ?? 0) || (taxable + cgst + sgst + igst);
 
     return {
       index: idx + 1,
@@ -454,34 +458,40 @@ export function normalizeQuotationData(quotation: any, company: any): Normalized
       taxPercent: taxRate,
       amount,
       taxableAmount: taxable,
-      cgstAmount: item.cgst,
-      sgstAmount: item.sgst,
-      igstAmount: item.igst
+      cgstAmount: cgst,
+      sgstAmount: sgst,
+      igstAmount: igst
     };
   });
 
-  const subTotal = Number(q.subtotal) || lines.reduce((acc, l) => acc + l.taxableAmount, 0);
-  const taxTotal = Number(q.taxAmount) || 0;
-  const grandTotal = Number(q.totalAmount) || (subTotal + taxTotal);
+  const rawSubTotal = Number(q.subtotal ?? q.subTotal ?? lines.reduce((acc, l) => acc + l.taxableAmount, 0));
+  const cgstTotal = Number(q.cgstAmount ?? rawItems.reduce((acc, i) => acc + (Number(i.cgstAmount ?? i.cgst) || 0), 0));
+  const sgstTotal = Number(q.sgstAmount ?? rawItems.reduce((acc, i) => acc + (Number(i.sgstAmount ?? i.sgst) || 0), 0));
+  const igstTotal = Number(q.igstAmount ?? rawItems.reduce((acc, i) => acc + (Number(i.igstAmount ?? i.igst) || 0), 0));
+  const taxTotal = cgstTotal + sgstTotal + igstTotal;
+  const roundOff = typeof q.roundOff === 'number' ? q.roundOff : 0;
+  const grandTotal = Number(q.grandTotal ?? q.totalAmount ?? (rawSubTotal + taxTotal + roundOff));
+
+  // Check quotation-level tax presentation setting: Show GST Breakdown vs Final Price Only
+  const showGstBreakdown = q.showGstBreakdown !== false;
 
   // Group tax breakdowns
   const taxBreakdowns: InvoiceTaxBreakdown[] = [];
-  if (taxTotal > 0) {
-    const cgstTotal = rawItems.reduce((acc, i) => acc + (Number(i.cgst) || 0), 0);
-    const sgstTotal = rawItems.reduce((acc, i) => acc + (Number(i.sgst) || 0), 0);
-    const igstTotal = rawItems.reduce((acc, i) => acc + (Number(i.igst) || 0), 0);
-
+  if (showGstBreakdown && taxTotal > 0) {
     if (cgstTotal > 0 || sgstTotal > 0) {
-      const effRate = rawItems.find(i => (i.gstRate || 0) > 0)?.gstRate || 18;
+      const effRate = rawItems.find(i => (i.gstRate || i.taxPercent || 0) > 0)?.gstRate || 18;
       taxBreakdowns.push({ label: `CGST (${(effRate / 2).toFixed(effRate % 2 === 0 ? 0 : 1)}%)`, percent: effRate / 2, amount: cgstTotal });
       taxBreakdowns.push({ label: `SGST (${(effRate / 2).toFixed(effRate % 2 === 0 ? 0 : 1)}%)`, percent: effRate / 2, amount: sgstTotal });
     } else if (igstTotal > 0) {
-      const effRate = rawItems.find(i => (i.gstRate || 0) > 0)?.gstRate || 18;
+      const effRate = rawItems.find(i => (i.gstRate || i.taxPercent || 0) > 0)?.gstRate || 18;
       taxBreakdowns.push({ label: `IGST (${effRate}%)`, percent: effRate, amount: igstTotal });
     } else {
       taxBreakdowns.push({ label: 'GST', percent: 18, amount: taxTotal });
     }
   }
+
+  // If user chooses not to show separate GST breakdown, subTotal displays final quotation value
+  const subTotal = showGstBreakdown ? rawSubTotal : grandTotal;
 
   return {
     voucherId: q.id || 'qtn-live',
@@ -522,9 +532,10 @@ export function normalizeQuotationData(quotation: any, company: any): Normalized
     subTotal,
     taxTotal,
     taxBreakdowns,
-    roundOff: undefined,
+    roundOff: roundOff !== 0 ? roundOff : undefined,
     grandTotal,
     amountInWords: numberToIndianWords(Math.round(grandTotal * 100)),
+    showGstBreakdown,
 
     hasBankDetails: hasBank,
     bankName: company?.bank_name,

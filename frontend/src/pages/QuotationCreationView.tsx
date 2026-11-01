@@ -161,6 +161,7 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
   // Items State
   const [stockItems, setStockItems] = useState<any[]>([]);
   const [taxMode, setTaxMode] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('INCLUSIVE');
+  const [showGstBreakdown, setShowGstBreakdown] = useState<boolean>(true);
   const [items, setItems] = useState<QuotationLineItem[]>([
     {
       id: 'item_row_1',
@@ -245,6 +246,9 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
           setCustomerSearchQuery('');
         }
         setTaxMode(existing.taxMode || 'INCLUSIVE');
+        if (existing.showGstBreakdown !== undefined) {
+          setShowGstBreakdown(existing.showGstBreakdown);
+        }
         setItems(existing.items || []);
         setTermsConditions(existing.termsConditions || '');
         setNotes(existing.notes || '');
@@ -360,6 +364,24 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
     setToastMessage('Smart pricing successfully applied to quotation.');
   };
 
+  const createBlankRow = (): QuotationLineItem => ({
+    id: 'item_row_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+    description: '',
+    subtext: '',
+    hsnSac: '',
+    quantity: 1,
+    unit: 'NOS',
+    rate: 0,
+    discountPercent: 0,
+    gstRate: 18,
+    taxableAmount: 0,
+    cgstAmount: 0,
+    sgstAmount: 0,
+    igstAmount: 0,
+    totalAmount: 0,
+    isService: false
+  });
+
   const handleItemDescriptionChange = (index: number, val: string) => {
     const matched = stockItems.find(
       (s) => s.item_name && s.item_name.trim().toLowerCase() === val.trim().toLowerCase()
@@ -386,10 +408,30 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
           isService: matched.item_type === 'Service'
         };
         copy[index] = recalculateLine(updated, taxMode);
+
+        // Auto-advance focus to quantity input
+        setTimeout(() => {
+          (document.querySelector(`[data-quotation-row="${index}"][data-quotation-field="qty"]`) as HTMLInputElement)?.focus();
+        }, 50);
+
+        // Auto-append single trailing blank row if this is the last row
+        if (index === prev.length - 1) {
+          return [...copy, createBlankRow()];
+        }
         return copy;
       });
     } else {
-      updateLineField(index, 'description', val);
+      setItems((prev) => {
+        const copy = [...prev];
+        const updated = { ...copy[index], description: val };
+        copy[index] = recalculateLine(updated, taxMode);
+
+        // Auto-append trailing blank row if this was the last row and user started entering text
+        if (index === prev.length - 1 && val.trim() !== '') {
+          return [...copy, createBlankRow()];
+        }
+        return copy;
+      });
     }
   };
 
@@ -403,43 +445,33 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
   };
 
   const addEmptyRow = () => {
-    const newRow: QuotationLineItem = {
-      id: 'item_row_' + Date.now().toString(36),
-      description: '',
-      subtext: '',
-      hsnSac: '',
-      quantity: 1,
-      unit: 'NOS',
-      rate: 0,
-      discountPercent: 0,
-      gstRate: 18,
-      taxableAmount: 0,
-      cgstAmount: 0,
-      sgstAmount: 0,
-      igstAmount: 0,
-      totalAmount: 0,
-      isService: false
-    };
-    setItems((prev) => [...prev, newRow]);
+    const last = items[items.length - 1];
+    if (last && !last.description.trim() && !last.itemId) {
+      // Maintain only one trailing empty row
+      return;
+    }
+    setItems((prev) => [...prev, createBlankRow()]);
   };
 
   const removeRow = (index: number) => {
     if (items.length <= 1) {
-      setToastType('error');
-      setToastMessage('At least one line item is required.');
+      setItems([createBlankRow()]);
       return;
     }
     setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Summary Computations
+  // Summary Computations (Only counting valid non-empty items)
   const summary = useMemo(() => {
-    const totalItems = items.length;
-    const totalQty = items.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0);
-    const subtotal = items.reduce((acc, curr) => acc + (curr.taxableAmount || 0), 0);
-    const cgstTotal = items.reduce((acc, curr) => acc + (curr.cgstAmount || 0), 0);
-    const sgstTotal = items.reduce((acc, curr) => acc + (curr.sgstAmount || 0), 0);
-    const igstTotal = items.reduce((acc, curr) => acc + (curr.igstAmount || 0), 0);
+    const validItems = items.filter(
+      (curr) => (curr.itemId && curr.itemId.trim() !== '') || (curr.description && curr.description.trim() !== '')
+    );
+    const totalItems = validItems.length;
+    const totalQty = validItems.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0);
+    const subtotal = validItems.reduce((acc, curr) => acc + (curr.taxableAmount || 0), 0);
+    const cgstTotal = validItems.reduce((acc, curr) => acc + (curr.cgstAmount || 0), 0);
+    const sgstTotal = validItems.reduce((acc, curr) => acc + (curr.sgstAmount || 0), 0);
+    const igstTotal = validItems.reduce((acc, curr) => acc + (curr.igstAmount || 0), 0);
     const rawGrandTotal = subtotal + cgstTotal + sgstTotal + igstTotal;
     const roundedGrandTotal = Math.round(rawGrandTotal);
     const roundOff = parseFloat((roundedGrandTotal - rawGrandTotal).toFixed(2));
@@ -458,6 +490,11 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
   }, [items]);
 
   const assembleQuotationRecord = (status: QuotationRecord['status']): QuotationRecord => {
+    // Only persist valid items, never trailing empty rows
+    const validPersistedItems = items.filter(
+      (i) => (i.itemId && i.itemId.trim() !== '') || (i.description && i.description.trim() !== '')
+    );
+
     return {
       id: editQuotationId || 'qtn_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
       companyId,
@@ -471,17 +508,18 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
       subject,
       customerId: selectedCustomerId,
       customerDetails: {
-        name: customerDetails.name || 'ABC Enterprises',
-        code: customerDetails.code || 'CUS-001',
+        name: customerDetails.name || '',
+        code: customerDetails.code || '',
         address: customerDetails.address || '',
-        city: customerDetails.city || 'Coimbatore',
-        state: customerDetails.state || 'Tamil Nadu',
+        city: customerDetails.city || '',
+        state: customerDetails.state || placeOfSupply || '',
         gstin: customerDetails.gstin || '',
         phone: customerDetails.phone || '',
         email: customerDetails.email || ''
       },
       taxMode,
-      items,
+      showGstBreakdown,
+      items: validPersistedItems,
       termsConditions,
       notes,
       transportMode,
@@ -577,11 +615,9 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
-            <span>Sales</span>
-            <span>&gt;</span>
             <span style={{ cursor: 'pointer', color: 'var(--text-primary)' }} onClick={onBack}>Quotation</span>
             <span>&gt;</span>
-            <span style={{ color: 'var(--brand-primary, #FF641F)', fontWeight: 600 }}>Create</span>
+            <span style={{ color: 'var(--brand-primary, #FF641F)', fontWeight: 600 }}>{editQuotationId ? 'Edit Quotation' : 'Create Quotation'}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button
@@ -1048,6 +1084,42 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
                   </button>
                 </div>
 
+                {/* GST Presentation Setting */}
+                <div style={{ display: 'flex', background: 'var(--surface-elevated, #0f172a)', padding: '2px', borderRadius: '6px', border: '1px solid var(--border)' }} title="Choose whether to show itemized GST breakdown or single final price in customer documents">
+                  <button
+                    type="button"
+                    onClick={() => setShowGstBreakdown(true)}
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: '11.5px',
+                      fontWeight: showGstBreakdown ? 700 : 500,
+                      borderRadius: '4px',
+                      background: showGstBreakdown ? 'var(--surface)' : 'transparent',
+                      color: showGstBreakdown ? 'var(--brand-primary, #FF641F)' : 'var(--text-secondary)',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Show GST Breakdown
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowGstBreakdown(false)}
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: '11.5px',
+                      fontWeight: !showGstBreakdown ? 700 : 500,
+                      borderRadius: '4px',
+                      background: !showGstBreakdown ? 'var(--surface)' : 'transparent',
+                      color: !showGstBreakdown ? 'var(--brand-primary, #FF641F)' : 'var(--text-secondary)',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Final Price Only
+                  </button>
+                </div>
+
                 {/* Smart Pricing Trigger Button */}
                 <button
                   type="button"
@@ -1129,6 +1201,8 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
                           list="quotation-stock-items-datalist"
                           value={row.description}
                           onChange={(e) => handleItemDescriptionChange(idx, e.target.value)}
+                          data-quotation-row={idx}
+                          data-quotation-field="description"
                           placeholder="Item name / service description"
                           style={{
                             width: '100%',
@@ -1190,6 +1264,14 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
                           min="1"
                           value={row.quantity}
                           onChange={(e) => updateLineField(idx, 'quantity', parseFloat(e.target.value) || 0)}
+                          data-quotation-row={idx}
+                          data-quotation-field="qty"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              (document.querySelector(`[data-quotation-row="${idx}"][data-quotation-field="rate"]`) as HTMLElement)?.focus();
+                            }
+                          }}
                           style={{
                             width: '100%',
                             padding: '6px',
@@ -1212,6 +1294,14 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
                           min="0"
                           value={row.rate}
                           onChange={(e) => updateLineField(idx, 'rate', parseFloat(e.target.value) || 0)}
+                          data-quotation-row={idx}
+                          data-quotation-field="rate"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              (document.querySelector(`[data-quotation-row="${idx + 1}"][data-quotation-field="description"]`) as HTMLElement)?.focus();
+                            }
+                          }}
                           style={{
                             width: '100%',
                             padding: '6px',

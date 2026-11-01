@@ -39,7 +39,8 @@ import {
   PieChart,
   BarChart3,
   Calendar,
-  DollarSign
+  DollarSign,
+  MoreVertical
 } from 'lucide-react';
 
 export interface PurchaseViewProps {
@@ -121,11 +122,34 @@ const CircularGauge: React.FC<{ percentage: number; size?: number; strokeWidth?:
           fontSize: '12px',
           fontWeight: 800,
           fontFamily: 'var(--font-mono, monospace)',
-          color: '#0F172A'
+          color: 'var(--color-text, #0F172A)'
         }}
       >
         {percentage}%
       </div>
+    </div>
+  );
+};
+
+/* ─────────────────────────────────────────────
+   Mini Sparkline Bars (Derived strictly from real data)
+────────────────────────────────────────────── */
+const MiniBars: React.FC<{ values: number[]; color?: string }> = ({ values, color = '#EA580C' }) => {
+  const max = Math.max(...values, 1);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2.5px', height: '22px' }}>
+      {values.slice(-6).map((v, i) => (
+        <div
+          key={i}
+          style={{
+            width: '4px',
+            height: Math.max(3, Math.round((v / max) * 20)),
+            backgroundColor: color,
+            borderRadius: '1.5px',
+            opacity: v > 0 ? 0.35 + i * 0.12 : 0.2
+          }}
+        />
+      ))}
     </div>
   );
 };
@@ -238,7 +262,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
   }, [vouchers, suppliers, outstandingPayables]);
 
   // Monthly Purchase Trend extracted from dashData or vouchers
-  const monthlyTrend = useMemo(() => {
+  const monthlyTrend: Array<{ month: string; purchasePaise: number }> = useMemo(() => {
     if (dashData?.trendData && Array.isArray(dashData.trendData) && dashData.trendData.length > 0) {
       return dashData.trendData.map((t: any) => ({
         month: t.month || t.label || '',
@@ -263,6 +287,34 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
   const maxTrendPaise = useMemo(() => {
     return Math.max(...monthlyTrend.map((t: { month: string; purchasePaise: number }) => t.purchasePaise), 10000);
   }, [monthlyTrend]);
+
+  // Real month-over-month growth strictly from real transactions
+  const purchaseGrowth = useMemo(() => {
+    if (monthlyTrend.length < 2) return null;
+    const curr = monthlyTrend[monthlyTrend.length - 1].purchasePaise;
+    const prev = monthlyTrend[monthlyTrend.length - 2].purchasePaise;
+    if (prev <= 0) return null;
+    return Math.round(((curr - prev) / prev) * 1000) / 10;
+  }, [monthlyTrend]);
+
+  const { invoiceGrowth, monthlyCounts } = useMemo(() => {
+    const cMap = new Map<string, number>();
+    vouchers.forEach(v => {
+      const m = (v.voucher_date || '').substring(0, 7);
+      if (m) cMap.set(m, (cMap.get(m) || 0) + 1);
+    });
+    const months = Array.from(cMap.keys()).sort();
+    const counts = months.map(m => cMap.get(m) || 0);
+    let growth: number | null = null;
+    if (months.length >= 2) {
+      const curr = cMap.get(months[months.length - 1]) || 0;
+      const prev = cMap.get(months[months.length - 2]) || 0;
+      if (prev > 0) {
+        growth = Math.round(((curr - prev) / prev) * 1000) / 10;
+      }
+    }
+    return { invoiceGrowth: growth, monthlyCounts: counts };
+  }, [vouchers]);
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: '1600px', margin: '0 auto', color: '#0F172A', fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)' }}>
@@ -376,129 +428,189 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
         </div>
       )}
 
-      {/* 5 KPI Cards Strip */}
+      {/* 5 KPI Cards Strip — Unified with Sales & Main Dashboard Standard */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '16px',
-        marginBottom: '24px'
+        gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+        gap: '14px',
+        marginBottom: '22px'
       }}>
         {/* 1. Total Purchases */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
-          borderRadius: '12px',
-          padding: '18px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Total Purchase</span>
-            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EA580C' }}>
-              <Layers size={15} />
-            </span>
+        <div
+          style={{
+            backgroundColor: 'var(--color-surface, #FFFFFF)',
+            border: '1px solid var(--color-border, #E2E8F0)',
+            borderRadius: '12px',
+            padding: '16px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+            cursor: 'pointer'
+          }}
+          onClick={onOpenRegister}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: 'rgba(234, 88, 12, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EA580C' }}>
+                <Layers size={15} />
+              </div>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)' }}>Total Purchase</span>
+            </div>
+            <MoreVertical size={14} style={{ color: 'var(--color-text-muted, #94A3B8)' }} />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text, #0F172A)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             {formatINR(metrics.totalPurchasesPaise)}
           </div>
-          <div style={{ fontSize: '11.5px', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-            <span>&uarr; 8.6%</span>
-            <span style={{ color: '#94A3B8', fontWeight: 400 }}>vs last period</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: purchaseGrowth !== null && purchaseGrowth >= 0 ? '#16A34A' : purchaseGrowth !== null ? '#DC2626' : 'var(--color-text-secondary, #64748B)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+              {purchaseGrowth !== null ? (
+                <>
+                  <span>{purchaseGrowth >= 0 ? '↑' : '↓'} {Math.abs(purchaseGrowth)}%</span>
+                  <span style={{ color: 'var(--color-text-muted, #94A3B8)', fontWeight: 400 }}>vs last month</span>
+                </>
+              ) : (
+                <span style={{ color: 'var(--color-text-muted, #94A3B8)', fontWeight: 500 }}>Active Period</span>
+              )}
+            </span>
+            <MiniBars values={monthlyTrend.map(t => t.purchasePaise)} color="#EA580C" />
           </div>
         </div>
 
         {/* 2. Total Invoices */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
-          borderRadius: '12px',
-          padding: '18px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Total Invoices</span>
-            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>
-              <FileText size={15} />
-            </span>
+        <div
+          style={{
+            backgroundColor: 'var(--color-surface, #FFFFFF)',
+            border: '1px solid var(--color-border, #E2E8F0)',
+            borderRadius: '12px',
+            padding: '16px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+            transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+            cursor: 'pointer'
+          }}
+          onClick={onOpenRegister}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: 'rgba(100, 116, 139, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>
+                <FileText size={15} />
+              </div>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)' }}>Total Invoices</span>
+            </div>
+            <MoreVertical size={14} style={{ color: 'var(--color-text-muted, #94A3B8)' }} />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text, #0F172A)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             {metrics.totalInvoices}
           </div>
-          <div style={{ fontSize: '11.5px', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-            <span>&uarr; 12.3%</span>
-            <span style={{ color: '#94A3B8', fontWeight: 400 }}>vs last period</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: invoiceGrowth !== null && invoiceGrowth >= 0 ? '#16A34A' : invoiceGrowth !== null ? '#DC2626' : 'var(--color-text-secondary, #64748B)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+              {invoiceGrowth !== null ? (
+                <>
+                  <span>{invoiceGrowth >= 0 ? '↑' : '↓'} {Math.abs(invoiceGrowth)}%</span>
+                  <span style={{ color: 'var(--color-text-muted, #94A3B8)', fontWeight: 400 }}>vs last month</span>
+                </>
+              ) : (
+                <span style={{ color: 'var(--color-text-muted, #94A3B8)', fontWeight: 500 }}>Active Period</span>
+              )}
+            </span>
+            <MiniBars values={monthlyCounts} color="#64748B" />
           </div>
         </div>
 
         {/* 3. Outstanding (To Pay) */}
         <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)',
           borderRadius: '12px',
-          padding: '18px 20px',
+          padding: '16px 18px',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          transition: 'transform 0.18s ease, box-shadow 0.18s ease'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Outstanding (To Pay)</span>
-            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626' }}>
-              <CreditCard size={15} />
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: 'rgba(220, 38, 38, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626' }}>
+                <CreditCard size={15} />
+              </div>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)' }}>Outstanding (To Pay)</span>
+            </div>
+            <MoreVertical size={14} style={{ color: 'var(--color-text-muted, #94A3B8)' }} />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#DC2626', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', fontVariantNumeric: 'tabular-nums', color: '#DC2626', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             {formatINR(metrics.totalOutstandingPaise)}
           </div>
-          <div style={{ fontSize: '11.5px', color: '#64748B' }}>
-            Payable to {outstandingPayables.length} supplier{outstandingPayables.length !== 1 ? 's' : ''}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--color-text-muted, #94A3B8)' }}>
+              Payable to {outstandingPayables.length} supplier{outstandingPayables.length !== 1 ? 's' : ''}
+            </span>
+            <span style={{ fontSize: '10.5px', fontWeight: 600, color: '#DC2626', backgroundColor: 'rgba(220, 38, 38, 0.08)', padding: '2px 6px', borderRadius: '4px' }}>
+              Due
+            </span>
           </div>
         </div>
 
-        {/* 4. Paid Invoices (Radial Gauge) */}
+        {/* 4. Paid Invoices (Radial Progress Ring) */}
         <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)',
           borderRadius: '12px',
-          padding: '18px 20px',
+          padding: '16px 18px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          transition: 'transform 0.18s ease, box-shadow 0.18s ease'
         }}>
           <div>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Paid Invoices</span>
-            <div style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10B981' }}>
+                <CheckCircle2 size={15} />
+              </div>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)' }}>Paid Invoices</span>
+            </div>
+            <div style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text, #0F172A)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
               {metrics.paidInvoices}
             </div>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>of {metrics.totalInvoices} invoices</span>
+            <span style={{ fontSize: '11px', color: 'var(--color-text-muted, #94A3B8)', marginTop: '4px', display: 'block' }}>
+              of {metrics.totalInvoices} invoices
+            </span>
           </div>
           <CircularGauge percentage={metrics.paidPercentage} color="#EA580C" />
         </div>
 
         {/* 5. Total Suppliers */}
         <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)',
           borderRadius: '12px',
-          padding: '18px 20px',
+          padding: '16px 18px',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+          transition: 'transform 0.18s ease, box-shadow 0.18s ease'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 500 }}>Suppliers</span>
-            <span style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: '#F0FDF4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
-              <Users size={15} />
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: 'rgba(22, 163, 74, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16A34A' }}>
+                <Users size={15} />
+              </div>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)' }}>Suppliers</span>
+            </div>
+            <MoreVertical size={14} style={{ color: 'var(--color-text-muted, #94A3B8)' }} />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 800, fontFamily: 'var(--font-mono, monospace)', fontVariantNumeric: 'tabular-nums', color: 'var(--color-text, #0F172A)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
             {metrics.totalSuppliersCount}
           </div>
-          <div style={{ fontSize: '11.5px', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-            <span>&uarr; Active vendors</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
+            <span style={{ fontSize: '11px', color: '#16A34A', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+              <span>✓ Active vendors</span>
+            </span>
+            <span style={{ fontSize: '10.5px', color: 'var(--color-text-muted, #94A3B8)' }}>
+              Master record
+            </span>
           </div>
         </div>
       </div>
