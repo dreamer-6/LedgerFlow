@@ -55,6 +55,12 @@ export interface CreateVoucherInput {
     allocationType: 'NEW_REF' | 'AGAINST_REF' | 'ADVANCE' | 'ON_ACCOUNT';
     dueDate?: string;
   };
+  billAllocations?: Array<{
+    referenceVoucherId?: string;
+    allocationType?: 'NEW_REF' | 'AGAINST_REF' | 'ADVANCE' | 'ON_ACCOUNT';
+    amountPaise: number;
+    dueDate?: string;
+  }>;
   // Immediate Payment & Settlement (Phase 4)
   immediatePayment?: {
     mode: 'CASH' | 'BANK' | 'UPI';
@@ -818,6 +824,40 @@ export class PostingEngine {
       }
     }
 
+    // UI-042: Validate multiple bill allocations if supplied
+    if (input.billAllocations && Array.isArray(input.billAllocations)) {
+      for (const alloc of input.billAllocations) {
+        if (alloc.referenceVoucherId) {
+          const refRow = db.prepare('SELECT voucher_id, voucher_number, total_amount_paise, company_id, status FROM vouchers WHERE voucher_id = ?')
+            .get(alloc.referenceVoucherId) as { voucher_id: string; voucher_number: string; total_amount_paise: number; company_id: string; status: string } | undefined;
+
+          if (!refRow) {
+            throw new Error(`Referenced voucher '${alloc.referenceVoucherId}' not found.`);
+          }
+          if (refRow.company_id !== input.companyId) {
+            throw new Error(`Security violation: Referenced voucher '${alloc.referenceVoucherId}' does not belong to company '${input.companyId}'.`);
+          }
+          if (refRow.status === 'CANCELLED') {
+            throw new Error(`Referenced voucher '${refRow.voucher_number || alloc.referenceVoucherId}' is cancelled and cannot be allocated against.`);
+          }
+          const allocPaise = Number(alloc.amountPaise) || 0;
+          if (allocPaise > 0) {
+            const paidRow = db.prepare(`
+              SELECT COALESCE(SUM(ba.amount_paise), 0) as paid_paise
+              FROM bill_allocations ba
+              JOIN vouchers rv ON ba.voucher_id = rv.voucher_id
+              WHERE ba.reference_voucher_id = ? AND rv.status != 'CANCELLED'
+            `).get(alloc.referenceVoucherId) as any;
+            const alreadyPaidPaise = Number(paidRow?.paid_paise || 0);
+            const outstandingPaise = Math.max(0, refRow.total_amount_paise - alreadyPaidPaise);
+            if (allocPaise > outstandingPaise) {
+              throw new Error(`Allocation amount ₹${(allocPaise / 100).toFixed(2)} exceeds outstanding balance ₹${(outstandingPaise / 100).toFixed(2)} on invoice '${refRow.voucher_number}'.`);
+            }
+          }
+        }
+      }
+    }
+
     // 5. ATOMIC DATABASE TRANSACTION (H-1: Concurrency-safe atomic transaction with retry)
     const fyId = input.fyId || (input as any).financialYearId || 'fy_2026_27';
     const referenceNumber = input.referenceNumber || (input as any).referenceNo || (input as any).supplierInvoiceNo || null;
@@ -891,6 +931,7 @@ export class PostingEngine {
           _draftMeta: {
             customLedgerLines: input.customLedgerLines || undefined,
             billAllocation: input.billAllocation || undefined,
+            billAllocations: input.billAllocations || undefined,
             originalTerms: termsConditions || undefined,
             lines: input.lines?.map(l => ({
               itemId: l.itemId,
@@ -1204,7 +1245,37 @@ export class PostingEngine {
                                  input.voucherType === 'CREDIT_NOTE' || input.voucherType === 'DEBIT_NOTE' ||
                                  input.voucherType === 'SALES_RETURN' || input.voucherType === 'PURCHASE_RETURN';
 
-            if (input.billAllocation?.referenceVoucherId) {
+            // UI-042: Support multi-invoice allocation breakdown alongside singular allocation
+            if (input.billAllocations && Array.isArray(input.billAllocations) && input.billAllocations.length > 0) {
+              let totalAllocatedPaise = 0;
+              for (const alloc of input.billAllocations) {
+                const amt = Number(alloc.amountPaise) || 0;
+                if (amt <= 0) continue;
+                const mAllocId = 'ba_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+                const allocType = alloc.allocationType || (alloc.referenceVoucherId ? 'AGAINST_REF' : 'ON_ACCOUNT');
+                db.prepare(`
+                  INSERT INTO bill_allocations (
+                    allocation_id, voucher_id, ledger_id, reference_voucher_id,
+                    allocation_type, amount_paise, due_date
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                `).run(
+                  mAllocId, voucherId, partyLedgerId, alloc.referenceVoucherId || null,
+                  allocType, amt, alloc.dueDate || null
+                );
+                totalAllocatedPaise += amt;
+              }
+              // If settlement voucher and unallocated remainder remains, auto-assign as ON_ACCOUNT
+              if (isSettlement && totalAllocatedPaise < partyAmountPaise) {
+                const unallocPaise = partyAmountPaise - totalAllocatedPaise;
+                const unallocId = 'ba_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+                db.prepare(`
+                  INSERT INTO bill_allocations (
+                    allocation_id, voucher_id, ledger_id, reference_voucher_id,
+                    allocation_type, amount_paise, due_date
+                  ) VALUES (?, ?, ?, NULL, 'ON_ACCOUNT', ?, NULL)
+                `).run(unallocId, voucherId, partyLedgerId, unallocPaise);
+              }
+            } else if (input.billAllocation?.referenceVoucherId) {
               const allocType = input.billAllocation.allocationType || 'AGAINST_REF';
               let refVoucher = input.billAllocation.referenceVoucherId;
               db.prepare(`
@@ -1765,6 +1836,7 @@ export class PostingEngine {
       // DEF-008-03 / DEF-008-13: Restore canonical draft intent from terms_conditions JSON metadata
       let customLedgerLines: LedgerPostingLine[] | undefined;
       let billAllocation: any | undefined;
+      let billAllocations: any[] | undefined;
       let termsConditions: string | undefined = vch.terms_conditions || undefined;
       let lines: CreateVoucherLineInput[] = [];
 
@@ -1782,6 +1854,7 @@ export class PostingEngine {
         // Canonical draft representation
         customLedgerLines = parsedMeta.customLedgerLines;
         billAllocation = parsedMeta.billAllocation;
+        billAllocations = parsedMeta.billAllocations;
         termsConditions = parsedMeta.originalTerms || undefined;
         if (Array.isArray(parsedMeta.lines)) {
           lines = parsedMeta.lines;
@@ -1835,6 +1908,7 @@ export class PostingEngine {
         lines,
         customLedgerLines,
         billAllocation,
+        billAllocations,
         status: 'POSTED',
         createdBy: userId
       };

@@ -36,8 +36,11 @@ import { PurchaseView } from './pages/PurchaseView';
 import { PurchaseInvoiceView } from './pages/PurchaseInvoiceView';
 import { PurchaseRegisterView } from './pages/PurchaseRegisterView';
 import { PurchaseReturnView } from './pages/PurchaseReturnView';
-import { ReceiptsView } from './pages/ReceiptsView';
-import { ReceiptCreationView } from './pages/ReceiptCreationView';
+import { ReceiptDashboardView } from './pages/ReceiptDashboardView';
+import { ReceiptRegisterView } from './pages/ReceiptRegisterView';
+import { RecordReceiptView } from './pages/RecordReceiptView';
+import { ReceiptDetailsView } from './pages/ReceiptDetailsView';
+import { ReceiptPrintModal } from './components/receipt/ReceiptPrintModal';
 import { PaymentsView } from './pages/PaymentsView';
 import { PaymentCreationView } from './pages/PaymentCreationView';
 import { JournalView } from './pages/JournalView';
@@ -125,7 +128,12 @@ export const App: React.FC = () => {
   const [salesEditVoucherId, setSalesEditVoucherId] = useState<string | null>(null);
   const [purchaseViewMode, setPurchaseViewMode] = useState<'dashboard' | 'create' | 'register' | 'return' | 'view_invoice'>('dashboard');
   const [purchaseEditVoucherId, setPurchaseEditVoucherId] = useState<string | null>(null);
-  const [receiptViewMode, setReceiptViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [receiptViewMode, setReceiptViewMode] = useState<'dashboard' | 'create' | 'register' | 'view'>('dashboard');
+  const [receiptOrigin, setReceiptOrigin] = useState<'dashboard' | 'register'>('dashboard');
+  const [selectedReceiptId, setSelectedReceiptId] = useState<string | null>(null);
+  const [activePrintReceiptId, setActivePrintReceiptId] = useState<string | null>(null);
+  const [receiptPreviewData, setReceiptPreviewData] = useState<any | null>(null);
+  const [receiptRegisterFilter, setReceiptRegisterFilter] = useState<{ allocation?: string; status?: string } | undefined>(undefined);
   const [paymentViewMode, setPaymentViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [journalViewMode, setJournalViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [serviceBillViewMode, setServiceBillViewMode] = useState<'dashboard' | 'create'>('dashboard');
@@ -594,6 +602,7 @@ export const App: React.FC = () => {
     { label: 'Create Purchase Invoice', tab: 'purchase_create', category: 'Voucher', icon: <ReceiptText size={14} />, hotkey: 'F9' },
     { label: 'Receipts Dashboard', tab: 'receipts', category: 'Module', icon: <ArrowDownToLine size={14} />, hotkey: 'Alt+R' },
     { label: 'Create Customer Receipt', tab: 'receipts_create', category: 'Voucher', icon: <ArrowDownToLine size={14} />, hotkey: 'F6' },
+    { label: 'Receipt Register', tab: 'receipts_register', category: 'Register', icon: <ArrowDownToLine size={14} /> },
     { label: 'Payments Dashboard', tab: 'payments', category: 'Module', icon: <ArrowLeftRight size={14} />, hotkey: 'Alt+M' },
     { label: 'Create Payment', tab: 'payments_create', category: 'Voucher', icon: <ArrowLeftRight size={14} />, hotkey: 'F5' },
     { label: 'Journal Dashboard', tab: 'journal', category: 'Module', icon: <BookText size={14} />, hotkey: 'Alt+J' },
@@ -671,6 +680,13 @@ export const App: React.FC = () => {
     }
     if (item.tab === 'receipts_create') {
       setReceiptViewMode('create');
+      setActiveTab('receipts');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'receipts_register') {
+      setReceiptViewMode('register');
       setActiveTab('receipts');
       setShowSearchModal(false);
       setSearchQuery('');
@@ -1161,29 +1177,89 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* 1.3 Receipts Module (UI-008) — Receipts Dashboard & New Receipt */}
+          {/* 1.3 Receipts Module (UI-042) — Dashboard, Register, Record, Details */}
           {activeTab === 'receipts' && (
             <div key="receipts" className="view-container-animated">
-              {receiptViewMode === 'dashboard' ? (
-                <ReceiptsView
+              {receiptViewMode === 'dashboard' && (
+                <ReceiptDashboardView
                   company={company}
                   activeFy={activeFy}
-                  onCreateReceipt={() => setReceiptViewMode('create')}
-                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
-                  onNavigateTab={(tab, sub) => {
-                    setActiveTab(tab);
-                    if (sub) setReportSubTab(sub);
+                  onRecordReceipt={() => {
+                    setReceiptOrigin('dashboard');
+                    setReceiptViewMode('create');
+                  }}
+                  onViewRegister={(filter) => {
+                    setReceiptRegisterFilter(filter);
+                    setReceiptViewMode('register');
+                  }}
+                  onSelectReceipt={(id) => {
+                    setSelectedReceiptId(id);
+                    setReceiptOrigin('dashboard');
+                    setReceiptViewMode('view');
                   }}
                 />
-              ) : (
-                <ReceiptCreationView
+              )}
+
+              {receiptViewMode === 'register' && (
+                <ReceiptRegisterView
+                  company={company}
+                  activeFy={activeFy}
+                  initialFilter={receiptRegisterFilter}
+                  onRecordReceipt={() => {
+                    setReceiptOrigin('register');
+                    setReceiptViewMode('create');
+                  }}
+                  onSelectReceipt={(id) => {
+                    setSelectedReceiptId(id);
+                    setReceiptOrigin('register');
+                    setReceiptViewMode('view');
+                  }}
+                  onPrintReceipt={(id) => {
+                    setActivePrintReceiptId(id);
+                  }}
+                />
+              )}
+
+              {receiptViewMode === 'create' && (
+                <RecordReceiptView
                   company={company}
                   activeFy={activeFy}
                   currentDate={currentDate}
-                  onBack={() => setReceiptViewMode('dashboard')}
-                  onPostSuccess={(voucherId) => {
-                    setActivePrintVoucherId(voucherId);
-                    setReceiptViewMode('dashboard');
+                  preselectedPartyId={(window as any)._preselectedReceiptPartyId || null}
+                  onBack={() => {
+                    setReceiptViewMode(receiptOrigin);
+                  }}
+                  onSaveSuccess={(voucherId, isPosted) => {
+                    if (isPosted) {
+                      setActivePrintReceiptId(voucherId);
+                    }
+                    setReceiptViewMode(receiptOrigin);
+                  }}
+                  onPreview={(previewPayload) => {
+                    setReceiptPreviewData(previewPayload);
+                  }}
+                />
+              )}
+
+              {receiptViewMode === 'view' && selectedReceiptId && (
+                <ReceiptDetailsView
+                  voucherId={selectedReceiptId}
+                  company={company}
+                  activeFy={activeFy}
+                  onBack={() => {
+                    setReceiptViewMode(receiptOrigin);
+                  }}
+                  onPrint={(id) => {
+                    setActivePrintReceiptId(id);
+                  }}
+                  onDuplicate={(vch) => {
+                    (window as any)._preselectedReceiptPartyId = vch.party_id;
+                    setReceiptOrigin('register');
+                    setReceiptViewMode('create');
+                  }}
+                  onNavigateInvoice={() => {
+                    setActiveTab('sales');
+                    if (setSalesViewMode) setSalesViewMode('register');
                   }}
                 />
               )}
@@ -1882,6 +1958,19 @@ export const App: React.FC = () => {
           handleSelectFy(newFy);
         }}
       />
+
+      {/* Receipt Print / PDF Modal */}
+      {(activePrintReceiptId || receiptPreviewData) && (
+        <ReceiptPrintModal
+          voucherId={activePrintReceiptId || undefined}
+          previewData={receiptPreviewData || undefined}
+          company={company}
+          onClose={() => {
+            setActivePrintReceiptId(null);
+            setReceiptPreviewData(null);
+          }}
+        />
+      )}
     </>
   );
 };

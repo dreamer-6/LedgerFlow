@@ -21,8 +21,8 @@ export interface AppShellProps {
   setQuotationViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   purchaseViewMode?: 'dashboard' | 'create' | 'register' | 'return' | 'view_invoice';
   setPurchaseViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'return' | 'view_invoice') => void;
-  receiptViewMode?: 'dashboard' | 'create';
-  setReceiptViewMode?: (mode: 'dashboard' | 'create') => void;
+  receiptViewMode?: 'dashboard' | 'create' | 'register' | 'view';
+  setReceiptViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   paymentViewMode?: 'dashboard' | 'create';
   setPaymentViewMode?: (mode: 'dashboard' | 'create') => void;
   journalViewMode?: 'dashboard' | 'create';

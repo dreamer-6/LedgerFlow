@@ -1049,6 +1049,20 @@ export function createApiRouter(db: DatabaseSync): Router {
                    AND rv.status != 'CANCELLED'
                ), 0) as paid_amount_paise,
                COALESCE((
+                 SELECT SUM(ba.amount_paise)
+                 FROM bill_allocations ba
+                 WHERE ba.voucher_id = v.voucher_id
+                   AND ba.allocation_type = 'AGAINST_REF'
+               ), 0) as allocated_amount_paise,
+               (
+                 SELECT l.ledger_name
+                 FROM ledger_entries le
+                 JOIN ledgers l ON le.ledger_id = l.ledger_id
+                 WHERE le.voucher_id = v.voucher_id
+                   AND le.debit_paise > 0
+                 LIMIT 1
+               ) as received_into_ledger_name,
+               COALESCE((
                  SELECT COUNT(*)
                  FROM voucher_lines vl
                  WHERE vl.voucher_id = v.voucher_id
@@ -1141,11 +1155,28 @@ export function createApiRouter(db: DatabaseSync): Router {
       `).all(req.params.id);
 
       const billAllocations = db.prepare(`
-        SELECT ba.*, v.voucher_number as ref_voucher_number, v.voucher_type as ref_voucher_type,
-               v.voucher_date as ref_voucher_date, v.payment_mode as ref_payment_mode,
-               v.status as ref_voucher_status
+        SELECT ba.*,
+               v.voucher_number as alloc_voucher_number,
+               v.voucher_type as alloc_voucher_type,
+               v.voucher_date as alloc_voucher_date,
+               v.payment_mode as alloc_payment_mode,
+               v.status as alloc_voucher_status,
+               COALESCE(ref_v.voucher_number, v.voucher_number) as ref_voucher_number,
+               COALESCE(ref_v.voucher_type, v.voucher_type) as ref_voucher_type,
+               COALESCE(ref_v.voucher_date, v.voucher_date) as ref_voucher_date,
+               COALESCE(ref_v.payment_mode, v.payment_mode) as ref_payment_mode,
+               COALESCE(ref_v.status, v.status) as ref_voucher_status,
+               ref_v.total_amount_paise as ref_total_amount_paise,
+               (
+                 SELECT COALESCE(SUM(sub_ba.amount_paise), 0)
+                 FROM bill_allocations sub_ba
+                 JOIN vouchers sub_rv ON sub_ba.voucher_id = sub_rv.voucher_id
+                 WHERE sub_ba.reference_voucher_id = ref_v.voucher_id
+                   AND sub_rv.status != 'CANCELLED'
+               ) as ref_paid_amount_paise
         FROM bill_allocations ba
         LEFT JOIN vouchers v ON (ba.voucher_id = v.voucher_id)
+        LEFT JOIN vouchers ref_v ON (ba.reference_voucher_id = ref_v.voucher_id)
         WHERE (ba.reference_voucher_id = ? OR ba.voucher_id = ?)
           AND COALESCE(v.status, 'POSTED') != 'CANCELLED'
         ORDER BY ba.created_at ASC

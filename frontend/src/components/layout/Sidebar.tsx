@@ -44,8 +44,8 @@ export interface SidebarProps {
   setQuotationViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   purchaseViewMode?: 'dashboard' | 'create' | 'register' | 'return' | 'view_invoice';
   setPurchaseViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'return' | 'view_invoice') => void;
-  receiptViewMode?: 'dashboard' | 'create';
-  setReceiptViewMode?: (mode: 'dashboard' | 'create') => void;
+  receiptViewMode?: 'dashboard' | 'create' | 'register' | 'view';
+  setReceiptViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   paymentViewMode?: 'dashboard' | 'create';
   setPaymentViewMode?: (mode: 'dashboard' | 'create') => void;
   journalViewMode?: 'dashboard' | 'create';
@@ -85,6 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (activeTab === 'sales') return 'sales';
     if (activeTab === 'purchase') return 'purchase';
     if (activeTab === 'quotation') return 'quotation';
+    if (activeTab === 'receipts') return 'receipts';
     return null;
   });
   const prevTabRef = React.useRef(activeTab);
@@ -97,12 +98,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setExpandedGroup('purchase');
     } else if (activeTab === 'quotation') {
       setExpandedGroup('quotation');
+    } else if (activeTab === 'receipts') {
+      setExpandedGroup('receipts');
     } else {
       // Navigating to another top-level section closes the previously expanded group
       setExpandedGroup(null);
     }
     prevTabRef.current = activeTab;
-  }, [activeTab, salesViewMode, purchaseViewMode, quotationViewMode]);
+  }, [activeTab, salesViewMode, purchaseViewMode, quotationViewMode, receiptViewMode]);
 
   const toggleGroup = (group: string) => {
     setExpandedGroup(prev => (prev === group ? null : group));
@@ -508,17 +511,107 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 )}
               </>
             )}
-            {renderItem(
-              'receipts-module',
-              'Receipts',
-              <ArrowDownToLine size={16} />,
-              activeTab === 'receipts' || (activeTab === 'vouchers' && (window as any)._currentVoucherType === 'RECEIPT'),
-              () => {
-                setActiveTab('receipts');
-                if (setReceiptViewMode) setReceiptViewMode('dashboard');
-                if (onClose) onClose();
-              },
-              'Alt+R'
+            {isCollapsed ? (
+              renderItem(
+                'receipts-module',
+                'Receipts',
+                <ArrowDownToLine size={20} />,
+                activeTab === 'receipts' || (activeTab === 'vouchers' && (window as any)._currentVoucherType === 'RECEIPT'),
+                () => {
+                  setActiveTab('receipts');
+                  if (setReceiptViewMode) setReceiptViewMode('dashboard');
+                  if (onClose) onClose();
+                },
+                'Alt+R'
+              )
+            ) : (
+              <>
+                <div
+                  onClick={() => {
+                    setActiveTab('receipts');
+                    if (setReceiptViewMode) setReceiptViewMode('dashboard');
+                    setExpandedGroup('receipts');
+                    if (onClose) onClose();
+                  }}
+                  className={`nav-item ${activeTab === 'receipts' ? 'active' : ''}`}
+                  title="Receipts (Alt+R)"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                    <span className="nav-icon"><ArrowDownToLine size={16} /></span>
+                    <span style={{ flex: 1, lineHeight: 1.3, fontWeight: activeTab === 'receipts' ? 600 : 500 }}>Receipts</span>
+                  </div>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleGroup('receipts');
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '2px',
+                      color: 'var(--text-muted, #94A3B8)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {expandedGroup === 'receipts' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </div>
+                </div>
+
+                {/* Collapsible Submenu */}
+                {expandedGroup === 'receipts' && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      marginTop: '2px',
+                      marginBottom: '4px',
+                      paddingLeft: '24px'
+                    }}
+                  >
+                    <div
+                      onClick={() => {
+                        setActiveTab('receipts');
+                        if (setReceiptViewMode) setReceiptViewMode('create');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'receipts' && receiptViewMode === 'create' ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'receipts' && receiptViewMode === 'create' ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Record Receipt</span>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setActiveTab('receipts');
+                        if (setReceiptViewMode) setReceiptViewMode('register');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'receipts' && (receiptViewMode === 'register' || receiptViewMode === 'view') ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'receipts' && (receiptViewMode === 'register' || receiptViewMode === 'view') ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Receipt Register</span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             {renderItem(
               'payments-module',
@@ -620,23 +713,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div
                       onClick={() => {
                         setActiveTab('quotation');
-                        if (setQuotationViewMode) setQuotationViewMode('dashboard');
-                        if (onClose) onClose();
-                      }}
-                      className={`nav-item ${activeTab === 'quotation' && quotationViewMode === 'dashboard' ? 'active' : ''}`}
-                      style={{
-                        fontSize: '12.5px',
-                        height: '32px',
-                        padding: '0 10px',
-                        fontWeight: activeTab === 'quotation' && quotationViewMode === 'dashboard' ? 600 : 400
-                      }}
-                    >
-                      <span style={{ flex: 1 }}>Quotation Dashboard</span>
-                    </div>
-
-                    <div
-                      onClick={() => {
-                        setActiveTab('quotation');
                         if (setQuotationViewMode) setQuotationViewMode('create');
                         if (onClose) onClose();
                       }}
@@ -648,7 +724,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         fontWeight: activeTab === 'quotation' && quotationViewMode === 'create' ? 600 : 400
                       }}
                     >
-                      <span style={{ flex: 1 }}>Create Quotation</span>
+                      <span style={{ flex: 1 }}>Quotation Creation</span>
                     </div>
 
                     <div
