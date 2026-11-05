@@ -46,8 +46,8 @@ export interface SidebarProps {
   setPurchaseViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'return' | 'view_invoice') => void;
   receiptViewMode?: 'dashboard' | 'create' | 'register' | 'view';
   setReceiptViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
-  paymentViewMode?: 'dashboard' | 'create';
-  setPaymentViewMode?: (mode: 'dashboard' | 'create') => void;
+  paymentViewMode?: 'dashboard' | 'create' | 'register' | 'view';
+  setPaymentViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   journalViewMode?: 'dashboard' | 'create';
   setJournalViewMode?: (mode: 'dashboard' | 'create') => void;
   isOpen?: boolean;
@@ -86,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (activeTab === 'purchase') return 'purchase';
     if (activeTab === 'quotation') return 'quotation';
     if (activeTab === 'receipts') return 'receipts';
+    if (activeTab === 'payments') return 'payments';
     return null;
   });
   const prevTabRef = React.useRef(activeTab);
@@ -100,12 +101,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setExpandedGroup('quotation');
     } else if (activeTab === 'receipts') {
       setExpandedGroup('receipts');
+    } else if (activeTab === 'payments') {
+      setExpandedGroup('payments');
     } else {
       // Navigating to another top-level section closes the previously expanded group
       setExpandedGroup(null);
     }
     prevTabRef.current = activeTab;
-  }, [activeTab, salesViewMode, purchaseViewMode, quotationViewMode, receiptViewMode]);
+  }, [activeTab, salesViewMode, purchaseViewMode, quotationViewMode, receiptViewMode, paymentViewMode]);
 
   const toggleGroup = (group: string) => {
     setExpandedGroup(prev => (prev === group ? null : group));
@@ -613,17 +616,107 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 )}
               </>
             )}
-            {renderItem(
-              'payments-module',
-              'Payments',
-              <ArrowLeftRight size={16} />,
-              activeTab === 'payments' || (activeTab === 'vouchers' && (window as any)._currentVoucherType === 'PAYMENT'),
-              () => {
-                setActiveTab('payments');
-                if (setPaymentViewMode) setPaymentViewMode('dashboard');
-                if (onClose) onClose();
-              },
-              'Alt+M'
+            {isCollapsed ? (
+              renderItem(
+                'payments-module',
+                'Payments',
+                <ArrowLeftRight size={20} />,
+                activeTab === 'payments',
+                () => {
+                  setActiveTab('payments');
+                  if (setPaymentViewMode) setPaymentViewMode('dashboard');
+                  if (onClose) onClose();
+                },
+                'Alt+M'
+              )
+            ) : (
+              <>
+                <div
+                  onClick={() => {
+                    setActiveTab('payments');
+                    if (setPaymentViewMode) setPaymentViewMode('dashboard');
+                    setExpandedGroup('payments');
+                    if (onClose) onClose();
+                  }}
+                  className={`nav-item ${activeTab === 'payments' ? 'active' : ''}`}
+                  title="Payments (Alt+M)"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                    <span className="nav-icon"><ArrowLeftRight size={16} /></span>
+                    <span style={{ flex: 1, lineHeight: 1.3, fontWeight: activeTab === 'payments' ? 600 : 500 }}>Payments</span>
+                  </div>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleGroup('payments');
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '2px',
+                      color: 'var(--text-muted, #94A3B8)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {expandedGroup === 'payments' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </div>
+                </div>
+
+                {/* Collapsible Submenu */}
+                {expandedGroup === 'payments' && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      marginTop: '2px',
+                      marginBottom: '4px',
+                      paddingLeft: '24px'
+                    }}
+                  >
+                    <div
+                      onClick={() => {
+                        setActiveTab('payments');
+                        if (setPaymentViewMode) setPaymentViewMode('create');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'payments' && paymentViewMode === 'create' ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'payments' && paymentViewMode === 'create' ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Record Payment</span>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setActiveTab('payments');
+                        if (setPaymentViewMode) setPaymentViewMode('register');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'payments' && (paymentViewMode === 'register' || paymentViewMode === 'view') ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'payments' && (paymentViewMode === 'register' || paymentViewMode === 'view') ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Payment Register</span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             {renderItem(
               'journal-module',

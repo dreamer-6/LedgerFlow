@@ -23,8 +23,8 @@ export interface AppShellProps {
   setPurchaseViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'return' | 'view_invoice') => void;
   receiptViewMode?: 'dashboard' | 'create' | 'register' | 'view';
   setReceiptViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
-  paymentViewMode?: 'dashboard' | 'create';
-  setPaymentViewMode?: (mode: 'dashboard' | 'create') => void;
+  paymentViewMode?: 'dashboard' | 'create' | 'register' | 'view';
+  setPaymentViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   journalViewMode?: 'dashboard' | 'create';
   setJournalViewMode?: (mode: 'dashboard' | 'create') => void;
   currentDate?: string;

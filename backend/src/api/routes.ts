@@ -1054,14 +1054,30 @@ export function createApiRouter(db: DatabaseSync): Router {
                  WHERE ba.voucher_id = v.voucher_id
                    AND ba.allocation_type = 'AGAINST_REF'
                ), 0) as allocated_amount_paise,
-               (
-                 SELECT l.ledger_name
-                 FROM ledger_entries le
-                 JOIN ledgers l ON le.ledger_id = l.ledger_id
-                 WHERE le.voucher_id = v.voucher_id
-                   AND le.debit_paise > 0
-                 LIMIT 1
-               ) as received_into_ledger_name,
+                (
+                  SELECT l.ledger_name
+                  FROM ledger_entries le
+                  JOIN ledgers l ON le.ledger_id = l.ledger_id
+                  WHERE le.voucher_id = v.voucher_id
+                    AND le.debit_paise > 0
+                  LIMIT 1
+                ) as received_into_ledger_name,
+                (
+                  SELECT l.ledger_name
+                  FROM ledger_entries le
+                  JOIN ledgers l ON le.ledger_id = l.ledger_id
+                  WHERE le.voucher_id = v.voucher_id
+                    AND le.credit_paise > 0
+                  LIMIT 1
+                ) as paid_from_ledger_name,
+                (
+                  SELECT l.ledger_name
+                  FROM ledger_entries le
+                  JOIN ledgers l ON le.ledger_id = l.ledger_id
+                  WHERE le.voucher_id = v.voucher_id
+                    AND le.debit_paise > 0
+                  LIMIT 1
+                ) as paid_to_ledger_name,
                COALESCE((
                  SELECT COUNT(*)
                  FROM voucher_lines vl

@@ -951,7 +951,8 @@ export const QuotationRegisterView: React.FC<QuotationRegisterViewProps> = ({
                         padding: '6px 14px',
                         borderRadius: '6px',
                         border: '1px solid var(--color-border, #CBD5E1)',
-                        backgroundColor: '#FFFFFF',
+                        backgroundColor: 'var(--color-surface, #FFFFFF)',
+                        color: 'var(--color-text, #334155)',
                         fontSize: '12.5px',
                         cursor: 'pointer'
                       }}

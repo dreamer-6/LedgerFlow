@@ -535,12 +535,12 @@ export const ReceiptRegisterView: React.FC<ReceiptRegisterViewProps> = ({
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            border: '1px solid #CBD5E1',
+            border: '1px solid var(--color-border, #CBD5E1)',
             borderRadius: '8px',
             padding: '7px 14px',
             fontSize: '13px',
-            backgroundColor: showMoreFilters ? '#F1F5F9' : '#FFFFFF',
-            color: '#334155',
+            backgroundColor: showMoreFilters ? 'var(--color-surface-secondary, #F1F5F9)' : 'var(--color-surface, #FFFFFF)',
+            color: 'var(--color-text, #334155)',
             cursor: 'pointer'
           }}
         >
@@ -553,10 +553,10 @@ export const ReceiptRegisterView: React.FC<ReceiptRegisterViewProps> = ({
           onClick={loadData}
           title="Refresh register data"
           style={{
-            border: '1px solid #CBD5E1',
+            border: '1px solid var(--color-border, #CBD5E1)',
             borderRadius: '8px',
             padding: '7px 10px',
-            backgroundColor: '#FFFFFF',
+            backgroundColor: 'var(--color-surface, #FFFFFF)',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -569,7 +569,7 @@ export const ReceiptRegisterView: React.FC<ReceiptRegisterViewProps> = ({
 
       {/* Optional More Filters Row */}
       {showMoreFilters && (
-        <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px 16px', display: 'flex', gap: '16px', alignItems: 'center', fontSize: '13px' }}>
+        <div style={{ background: 'var(--color-surface-secondary, #F8FAFC)', border: '1px solid var(--color-border, #E2E8F0)', borderRadius: '8px', padding: '12px 16px', display: 'flex', gap: '16px', alignItems: 'center', fontSize: '13px' }}>
           <span style={{ fontWeight: 600, color: '#475569' }}>Status:</span>
           {['ALL', 'POSTED', 'DRAFT', 'CANCELLED'].map(s => (
             <label key={s} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
@@ -684,7 +684,7 @@ export const ReceiptRegisterView: React.FC<ReceiptRegisterViewProps> = ({
                       <td style={{ padding: '12px 14px', fontWeight: 600, color: '#F97316', fontFamily: 'var(--font-mono)' }}>
                         {r.voucher_number}
                       </td>
-                      <td style={{ padding: '12px 14px', fontWeight: 600, color: '#0F172A' }}>
+                      <td style={{ padding: '12px 14px', fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>
                         {getPartyName(r.party_id, r.party_name)}
                       </td>
                       <td style={{ padding: '12px 14px', color: '#475569' }}>
@@ -817,10 +817,11 @@ export const ReceiptRegisterView: React.FC<ReceiptRegisterViewProps> = ({
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 disabled={currentPage === 1}
                 style={{
-                  border: '1px solid #CBD5E1',
+                  border: '1px solid var(--color-border, #CBD5E1)',
                   borderRadius: '6px',
                   padding: '4px 8px',
-                  background: '#FFFFFF',
+                  background: 'var(--color-surface, #FFFFFF)',
+                  color: 'var(--color-text, #334155)',
                   cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
                   opacity: currentPage === 1 ? 0.5 : 1
                 }}
@@ -834,11 +835,11 @@ export const ReceiptRegisterView: React.FC<ReceiptRegisterViewProps> = ({
                   onClick={() => setCurrentPage(p)}
                   style={{
                     border: '1px solid',
-                    borderColor: currentPage === p ? '#F97316' : '#CBD5E1',
+                    borderColor: currentPage === p ? '#F97316' : 'var(--color-border, #CBD5E1)',
                     borderRadius: '6px',
                     padding: '4px 10px',
-                    backgroundColor: currentPage === p ? '#F97316' : '#FFFFFF',
-                    color: currentPage === p ? '#FFFFFF' : '#334155',
+                    backgroundColor: currentPage === p ? '#F97316' : 'var(--color-surface, #FFFFFF)',
+                    color: currentPage === p ? '#FFFFFF' : 'var(--color-text, #334155)',
                     fontWeight: 600,
                     fontSize: '12px',
                     cursor: 'pointer'
@@ -852,10 +853,11 @@ export const ReceiptRegisterView: React.FC<ReceiptRegisterViewProps> = ({
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                 disabled={currentPage === totalPages}
                 style={{
-                  border: '1px solid #CBD5E1',
+                  border: '1px solid var(--color-border, #CBD5E1)',
                   borderRadius: '6px',
                   padding: '4px 8px',
-                  background: '#FFFFFF',
+                  background: 'var(--color-surface, #FFFFFF)',
+                  color: 'var(--color-text, #334155)',
                   cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
                   opacity: currentPage === totalPages ? 0.5 : 1
                 }}
@@ -882,7 +884,7 @@ export const ReceiptRegisterView: React.FC<ReceiptRegisterViewProps> = ({
         >
           <div
             style={{
-              backgroundColor: '#FFFFFF',
+              backgroundColor: 'var(--color-surface, #FFFFFF)',
               borderRadius: '12px',
               padding: '24px',
               width: '100%',
@@ -894,13 +896,13 @@ export const ReceiptRegisterView: React.FC<ReceiptRegisterViewProps> = ({
               <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#FEE2E2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#DC2626' }}>
                 <Ban size={20} />
               </div>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>Cancel Receipt Voucher</h3>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--color-text, #0F172A)' }}>Cancel Receipt Voucher</h3>
             </div>
-            <p style={{ fontSize: '13px', color: '#64748B', lineHeight: 1.5, marginBottom: '16px' }}>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary, #64748B)', lineHeight: 1.5, marginBottom: '16px' }}>
               Cancelling this posted receipt will automatically reverse all ledger entries and restore unpaid balances on any allocated sales invoices. An audit reason is mandatory.
             </p>
             <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, marginBottom: '6px' }}>
+              <label style={{ display: 'block', fontSize: '12.5px', fontWeight: 600, color: 'var(--color-text, #0F172A)', marginBottom: '6px' }}>
                 Cancellation Reason *
               </label>
               <textarea
@@ -912,7 +914,9 @@ export const ReceiptRegisterView: React.FC<ReceiptRegisterViewProps> = ({
                   width: '100%',
                   padding: '10px',
                   borderRadius: '8px',
-                  border: '1px solid #CBD5E1',
+                  border: '1px solid var(--color-border, #CBD5E1)',
+                  backgroundColor: 'var(--input-bg, #FFFFFF)',
+                  color: 'var(--color-text, #0F172A)',
                   fontSize: '13px',
                   outline: 'none'
                 }}
@@ -927,8 +931,9 @@ export const ReceiptRegisterView: React.FC<ReceiptRegisterViewProps> = ({
                 style={{
                   padding: '8px 16px',
                   borderRadius: '8px',
-                  border: '1px solid #CBD5E1',
-                  background: '#FFFFFF',
+                  border: '1px solid var(--color-border, #CBD5E1)',
+                  background: 'transparent',
+                  color: 'var(--color-text, #334155)',
                   fontSize: '13px',
                   cursor: 'pointer'
                 }}

@@ -8,12 +8,14 @@ export const ThemeToggle: React.FC<{ className?: string }> = ({ className = '' }
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
     localStorage.setItem('ledgerflow-theme', theme);
   }, [theme]);
 
   const toggle = (target: 'light' | 'dark') => {
     setTheme(target);
     document.documentElement.setAttribute('data-theme', target);
+    document.documentElement.classList.toggle('dark', target === 'dark');
     localStorage.setItem('ledgerflow-theme', target);
   };
 

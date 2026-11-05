@@ -14,7 +14,10 @@ import {
   BarChart3,
   ExternalLink,
   SlidersHorizontal,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { api, Company, FinancialYear, StockSummaryItem, StockItem, GodownMaster } from '../api/client';
 
@@ -47,6 +50,71 @@ export const StockSummaryView: React.FC<StockSummaryViewProps> = ({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewMode, setViewMode] = useState<'Summary' | 'Detailed'>('Summary');
   const [movementMetric, setMovementMetric] = useState<'Value' | 'Quantity'>('Value');
+
+  // Sorting state
+  const [sortField, setSortField] = useState<
+    'code' | 'name' | 'category' | 'unit' | 'openingQty' | 'inwardQty' | 'outwardQty' | 'closingQty' | 'rate' | 'value' | 'status'
+  >('name');
+  const [sortAsc, setSortAsc] = useState<boolean>(true);
+
+  const handleSort = (
+    field: 'code' | 'name' | 'category' | 'unit' | 'openingQty' | 'inwardQty' | 'outwardQty' | 'closingQty' | 'rate' | 'value' | 'status'
+  ) => {
+    if (sortField === field) {
+      setSortAsc(prev => !prev);
+    } else {
+      setSortField(field);
+      const isNumeric = ['openingQty', 'inwardQty', 'outwardQty', 'closingQty', 'rate', 'value'].includes(field);
+      setSortAsc(!isNumeric);
+    }
+  };
+
+  const renderSortHeader = (
+    field: 'code' | 'name' | 'category' | 'unit' | 'openingQty' | 'inwardQty' | 'outwardQty' | 'closingQty' | 'rate' | 'value' | 'status',
+    label: string,
+    align: 'left' | 'center' | 'right' = 'left',
+    width?: string,
+    isBold?: boolean
+  ) => {
+    const isActive = sortField === field;
+    return (
+      <th
+        style={{
+          width,
+          padding: '10px 12px',
+          cursor: 'pointer',
+          userSelect: 'none',
+          textAlign: align,
+          fontWeight: isBold ? 700 : 600,
+          color: isActive ? 'var(--color-primary, #F97316)' : 'inherit',
+          transition: 'color 0.15s ease'
+        }}
+        onClick={() => handleSort(field)}
+        title={`Sort by ${label} (${isActive ? (sortAsc ? 'Ascending — click for Descending' : 'Descending — click for Ascending') : 'click to sort'})`}
+      >
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
+            width: align === 'center' ? '100%' : undefined
+          }}
+        >
+          <span>{label}</span>
+          {isActive ? (
+            sortAsc ? (
+              <ArrowUp size={12} style={{ color: 'var(--color-primary, #F97316)', flexShrink: 0 }} />
+            ) : (
+              <ArrowDown size={12} style={{ color: 'var(--color-primary, #F97316)', flexShrink: 0 }} />
+            )
+          ) : (
+            <ArrowUpDown size={11} style={{ opacity: 0.35, flexShrink: 0 }} />
+          )}
+        </div>
+      </th>
+    );
+  };
 
   // Data states
   const [stockSummary, setStockSummary] = useState<StockSummaryItem[]>([]);
@@ -220,7 +288,7 @@ export const StockSummaryView: React.FC<StockSummaryViewProps> = ({
     return Array.from(cats);
   }, [enrichedStockList]);
 
-  // Filtered Stock Items
+  // Filtered & Sorted Stock Items
   const filteredItems = useMemo(() => {
     return enrichedStockList.filter(item => {
       // Category filter
@@ -240,8 +308,51 @@ export const StockSummaryView: React.FC<StockSummaryViewProps> = ({
         if (!matchesName && !matchesCode && !matchesCat) return false;
       }
       return true;
+    }).sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'code':
+          comparison = a.itemCode.localeCompare(b.itemCode, undefined, { numeric: true, sensitivity: 'base' });
+          break;
+        case 'name':
+          comparison = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+          break;
+        case 'category':
+          comparison = a.category.localeCompare(b.category, undefined, { sensitivity: 'base' });
+          break;
+        case 'unit':
+          comparison = a.unit.localeCompare(b.unit, undefined, { sensitivity: 'base' });
+          break;
+        case 'openingQty':
+          comparison = a.openingQty - b.openingQty;
+          break;
+        case 'inwardQty':
+          comparison = a.inwardQty - b.inwardQty;
+          break;
+        case 'outwardQty':
+          comparison = a.outwardQty - b.outwardQty;
+          break;
+        case 'closingQty':
+          comparison = a.closingQty - b.closingQty;
+          break;
+        case 'rate':
+          comparison = a.ratePaise - b.ratePaise;
+          break;
+        case 'value':
+          comparison = a.totalValPaise - b.totalValPaise;
+          break;
+        case 'status':
+          comparison = a.status.localeCompare(b.status);
+          break;
+        default:
+          comparison = a.name.localeCompare(b.name);
+      }
+      if (comparison === 0 && sortField !== 'name') {
+        comparison = a.name.localeCompare(b.name, undefined, { numeric: true });
+      }
+      return sortAsc ? comparison : -comparison;
     });
-  }, [enrichedStockList, selectedCategory, statusFilter, searchTerm]);
+  }, [enrichedStockList, selectedCategory, statusFilter, searchTerm, sortField, sortAsc]);
 
   // KPI Calculations
   const kpiData = useMemo(() => {
@@ -1069,21 +1180,21 @@ export const StockSummaryView: React.FC<StockSummaryViewProps> = ({
             <thead>
               <tr style={{ backgroundColor: 'var(--color-surface-secondary, #f8f7f4)', borderBottom: '1px solid var(--color-border, #e2e8f0)' }}>
                 <th style={{ width: '40px', textAlign: 'center', padding: '10px 12px' }}>#</th>
-                <th style={{ width: '100px', padding: '10px 12px' }}>Item Code</th>
-                <th style={{ padding: '10px 12px' }}>Item Name</th>
-                <th style={{ width: '130px', padding: '10px 12px' }}>Category</th>
-                <th style={{ width: '70px', padding: '10px 12px' }}>Unit</th>
+                {renderSortHeader('code', 'Item Code', 'left', '100px')}
+                {renderSortHeader('name', 'Item Name', 'left')}
+                {renderSortHeader('category', 'Category', 'left', '130px')}
+                {renderSortHeader('unit', 'Unit', 'left', '70px')}
                 {viewMode === 'Detailed' && (
                   <>
-                    <th style={{ width: '90px', textAlign: 'right', padding: '10px 12px' }}>Opening Qty</th>
-                    <th style={{ width: '90px', textAlign: 'right', padding: '10px 12px' }}>Inward Qty</th>
-                    <th style={{ width: '90px', textAlign: 'right', padding: '10px 12px' }}>Outward Qty</th>
+                    {renderSortHeader('openingQty', 'Opening Qty', 'right', '90px')}
+                    {renderSortHeader('inwardQty', 'Inward Qty', 'right', '90px')}
+                    {renderSortHeader('outwardQty', 'Outward Qty', 'right', '90px')}
                   </>
                 )}
-                <th style={{ width: '100px', textAlign: 'right', padding: '10px 12px', fontWeight: 700 }}>Closing Qty</th>
-                <th style={{ width: '110px', textAlign: 'right', padding: '10px 12px' }}>Rate (₹)</th>
-                <th style={{ width: '120px', textAlign: 'right', padding: '10px 12px', fontWeight: 700 }}>Value (₹)</th>
-                <th style={{ width: '100px', textAlign: 'center', padding: '10px 12px' }}>Status</th>
+                {renderSortHeader('closingQty', 'Closing Qty', 'right', '100px', true)}
+                {renderSortHeader('rate', 'Rate (₹)', 'right', '110px')}
+                {renderSortHeader('value', 'Value (₹)', 'right', '120px', true)}
+                {renderSortHeader('status', 'Status', 'center', '100px')}
               </tr>
             </thead>
             <tbody>

@@ -17,6 +17,11 @@
       try {
         const savedTheme = localStorage.getItem('ledgerflow-theme') || (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
         document.documentElement.setAttribute('data-theme', savedTheme);
+        if (savedTheme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
         const meta = document.querySelector('meta[name="color-scheme"]');
         if (meta) meta.content = savedTheme;
       } catch (e) { }

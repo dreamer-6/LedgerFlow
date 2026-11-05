@@ -14,6 +14,8 @@ import {
   Plus,
   Search,
   ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   MoreVertical,
   ChevronDown,
   AlertCircle,
@@ -30,6 +32,17 @@ import {
   Download,
   Info
 } from 'lucide-react';
+
+export type ItemSortField =
+  | 'code'
+  | 'name'
+  | 'category'
+  | 'hsn'
+  | 'unit'
+  | 'purchase_rate'
+  | 'rate'
+  | 'stock'
+  | 'status';
 
 interface ItemsViewProps {
   company: Company | null;
@@ -89,8 +102,71 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
   const [selectedBrand, setSelectedBrand] = useState<string>('All Brands');
   const [selectedGodown, setSelectedGodown] = useState<string>('ALL');
-  const [sortField, setSortField] = useState<'name' | 'code' | 'stock' | 'rate'>('name');
+  const [sortField, setSortField] = useState<ItemSortField>('code');
   const [sortAsc, setSortAsc] = useState<boolean>(true);
+
+  // Sorting handler with smart defaults (numeric desc, text asc)
+  const handleSort = (field: ItemSortField) => {
+    if (sortField === field) {
+      setSortAsc(prev => !prev);
+    } else {
+      setSortField(field);
+      const defaultDesc = field === 'stock' || field === 'rate' || field === 'purchase_rate';
+      setSortAsc(!defaultDesc);
+    }
+    setCurrentPage(1);
+  };
+
+  // Render sortable column header with directional arrow indicator
+  const renderSortHeader = (
+    field: ItemSortField,
+    label: string,
+    align: 'left' | 'center' | 'right' = 'left',
+    extraSubtitle?: string,
+    width?: string
+  ) => {
+    const isActive = sortField === field;
+    return (
+      <th
+        style={{
+          cursor: 'pointer',
+          textAlign: align,
+          userSelect: 'none',
+          width: width,
+          color: isActive ? 'var(--color-primary, #F97316)' : undefined,
+          transition: 'all 0.15s ease'
+        }}
+        onClick={() => handleSort(field)}
+        title={`Sort by ${label} (${isActive ? (sortAsc ? 'Ascending — click for Descending' : 'Descending — click for Ascending') : 'click to sort'})`}
+      >
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '5px',
+            justifyContent: align === 'right' ? 'flex-end' : align === 'center' ? 'center' : 'flex-start',
+            width: align === 'center' ? '100%' : undefined
+          }}
+        >
+          <span style={{ fontWeight: isActive ? 700 : 600 }}>{label}</span>
+          {isActive ? (
+            sortAsc ? (
+              <ArrowUp size={13} style={{ color: 'var(--color-primary, #F97316)', flexShrink: 0 }} />
+            ) : (
+              <ArrowDown size={13} style={{ color: 'var(--color-primary, #F97316)', flexShrink: 0 }} />
+            )
+          ) : (
+            <ArrowUpDown size={12} style={{ opacity: 0.35, flexShrink: 0 }} />
+          )}
+        </div>
+        {extraSubtitle && (
+          <span style={{ display: 'block', fontSize: '11px', fontWeight: 400, opacity: 0.85 }}>
+            {extraSubtitle}
+          </span>
+        )}
+      </th>
+    );
+  };
 
   // Selection & Details panel
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -341,20 +417,75 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
 
       return true;
     }).sort((a, b) => {
-      if (sortField === 'name') {
-        return sortAsc
-          ? a.item_name.localeCompare(b.item_name)
-          : b.item_name.localeCompare(a.item_name);
-      } else if (sortField === 'stock') {
-        const stockA = Number(a.current_stock ?? a.opening_qty ?? 0);
-        const stockB = Number(b.current_stock ?? b.opening_qty ?? 0);
-        return sortAsc ? stockA - stockB : stockB - stockA;
-      } else if (sortField === 'rate') {
-        return sortAsc
-          ? a.selling_rate_paise - b.selling_rate_paise
-          : b.selling_rate_paise - a.selling_rate_paise;
+      let comparison = 0;
+
+      switch (sortField) {
+        case 'code': {
+          const codeA = formatItemCode(a);
+          const codeB = formatItemCode(b);
+          comparison = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+          break;
+        }
+        case 'name': {
+          comparison = (a.item_name || '').localeCompare(b.item_name || '', undefined, { numeric: true, sensitivity: 'base' });
+          break;
+        }
+        case 'category': {
+          const catA = deriveCategory(a);
+          const catB = deriveCategory(b);
+          comparison = catA.localeCompare(catB, undefined, { sensitivity: 'base' });
+          break;
+        }
+        case 'hsn': {
+          const hsnA = a.hsn_sac || '';
+          const hsnB = b.hsn_sac || '';
+          comparison = hsnA.localeCompare(hsnB, undefined, { numeric: true, sensitivity: 'base' });
+          break;
+        }
+        case 'unit': {
+          const unitA = a.unit_symbol || 'Nos';
+          const unitB = b.unit_symbol || 'Nos';
+          comparison = unitA.localeCompare(unitB, undefined, { sensitivity: 'base' });
+          break;
+        }
+        case 'purchase_rate': {
+          const prA = Number(a.purchase_rate_paise || 0);
+          const prB = Number(b.purchase_rate_paise || 0);
+          comparison = prA - prB;
+          break;
+        }
+        case 'rate': {
+          const srA = Number(a.selling_rate_paise || 0);
+          const srB = Number(b.selling_rate_paise || 0);
+          comparison = srA - srB;
+          break;
+        }
+        case 'stock': {
+          const isServiceA = a.hsn_sac?.startsWith('99') || a.item_name?.toLowerCase().includes('service');
+          const isServiceB = b.hsn_sac?.startsWith('99') || b.item_name?.toLowerCase().includes('service');
+          const stockA = isServiceA ? -999999 : Number(a.current_stock ?? a.opening_qty ?? 0);
+          const stockB = isServiceB ? -999999 : Number(b.current_stock ?? b.opening_qty ?? 0);
+          comparison = stockA - stockB;
+          break;
+        }
+        case 'status': {
+          const isServiceA = a.hsn_sac?.startsWith('99') || a.item_name?.toLowerCase().includes('service');
+          const isServiceB = b.hsn_sac?.startsWith('99') || b.item_name?.toLowerCase().includes('service');
+          const statusValA = isServiceA ? 2 : (a.is_active === 1 ? 1 : 0);
+          const statusValB = isServiceB ? 2 : (b.is_active === 1 ? 1 : 0);
+          comparison = statusValA - statusValB;
+          break;
+        }
+        default:
+          comparison = (a.item_name || '').localeCompare(b.item_name || '', undefined, { numeric: true });
       }
-      return 0;
+
+      // Tie-breaker: secondary sort by item_name or code for deterministic ordering
+      if (comparison === 0 && sortField !== 'name') {
+        comparison = (a.item_name || '').localeCompare(b.item_name || '', undefined, { numeric: true });
+      }
+
+      return sortAsc ? comparison : -comparison;
     });
   }, [items, activeTab, searchQuery, selectedCategory, selectedBrand, sortField, sortAsc]);
 
@@ -1675,72 +1806,15 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
                       style={{ accentColor: 'var(--color-primary, #F97316)' }}
                     />
                   </th>
-                  <th
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      if (sortField === 'code') setSortAsc(!sortAsc);
-                      else {
-                        setSortField('code');
-                        setSortAsc(true);
-                      }
-                    }}
-                  >
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                      <span>Code</span>
-                      <ArrowUpDown size={13} />
-                    </div>
-                  </th>
-                  <th
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      if (sortField === 'name') setSortAsc(!sortAsc);
-                      else {
-                        setSortField('name');
-                        setSortAsc(true);
-                      }
-                    }}
-                  >
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                      <span>Item Name</span>
-                      <ArrowUpDown size={13} />
-                    </div>
-                  </th>
-                  <th>Category</th>
-                  <th>HSN/SAC</th>
-                  <th>Unit</th>
-                  <th style={{ textAlign: 'right' }}>Purchase Rate (₹)<br /><span style={{ fontSize: '11px', fontWeight: 400 }}>(Excl. Tax)</span></th>
-                  <th
-                    style={{ textAlign: 'right', cursor: 'pointer' }}
-                    onClick={() => {
-                      if (sortField === 'rate') setSortAsc(!sortAsc);
-                      else {
-                        setSortField('rate');
-                        setSortAsc(false);
-                      }
-                    }}
-                  >
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
-                      <span>Sales Rate (₹)</span>
-                      <ArrowUpDown size={13} />
-                    </div>
-                    <span style={{ fontSize: '11px', fontWeight: 400 }}>(Incl. Tax)</span>
-                  </th>
-                  <th
-                    style={{ textAlign: 'center', cursor: 'pointer' }}
-                    onClick={() => {
-                      if (sortField === 'stock') setSortAsc(!sortAsc);
-                      else {
-                        setSortField('stock');
-                        setSortAsc(false);
-                      }
-                    }}
-                  >
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                      <span>Stock Qty</span>
-                      <ArrowUpDown size={13} />
-                    </div>
-                  </th>
-                  <th>Status</th>
+                  {renderSortHeader('code', 'Code', 'left', undefined, '85px')}
+                  {renderSortHeader('name', 'Item Name', 'left')}
+                  {renderSortHeader('category', 'Category', 'left')}
+                  {renderSortHeader('hsn', 'HSN/SAC', 'left', undefined, '85px')}
+                  {renderSortHeader('unit', 'Unit', 'left', undefined, '60px')}
+                  {renderSortHeader('purchase_rate', 'Purchase Rate (₹)', 'right', '(Excl. Tax)')}
+                  {renderSortHeader('rate', 'Sales Rate (₹)', 'right', '(Incl. Tax)')}
+                  {renderSortHeader('stock', 'Stock Qty', 'center', undefined, '90px')}
+                  {renderSortHeader('status', 'Status', 'left', undefined, '80px')}
                   <th style={{ width: '40px', textAlign: 'center' }}>•••</th>
                 </tr>
               </thead>

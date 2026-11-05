@@ -528,7 +528,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
   };
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: '1600px', margin: '0 auto', color: '#0F172A', fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)' }}>
+    <div style={{ padding: '24px 32px', maxWidth: '1600px', margin: '0 auto', color: 'var(--color-text, #0F172A)', fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)' }}>
       {/* Toast Notification */}
       {toast && (
         <div style={{
@@ -554,24 +554,24 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
 
       {/* Breadcrumb & Navigation */}
       <div style={{ marginBottom: '20px' }}>
-        <div style={{ fontSize: '13px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+        <div style={{ fontSize: '13px', color: 'var(--color-text-secondary, #64748B)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
           <span>Purchase</span>
           <span>&rsaquo;</span>
           <span>Purchase Return</span>
           <span>&rsaquo;</span>
-          <span style={{ color: '#0F172A', fontWeight: 600 }}>{activeSubTab === 'create' ? 'Create' : 'Register'}</span>
+          <span style={{ color: 'var(--color-text, #0F172A)', fontWeight: 600 }}>{activeSubTab === 'create' ? 'Create' : 'Register'}</span>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EA580C', border: '1px solid #FFEDD5' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--color-surface-secondary, #FFF7ED)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EA580C', border: '1px solid var(--color-border, #FFEDD5)' }}>
               <RotateCcw size={20} />
             </div>
             <div>
-              <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+              <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-text, #0F172A)', margin: 0, letterSpacing: '-0.02em' }}>
                 Purchase Return
               </h1>
-              <p style={{ margin: '2px 0 0', fontSize: '13.5px', color: '#64748B' }}>
+              <p style={{ margin: '2px 0 0', fontSize: '13.5px', color: 'var(--color-text-secondary, #64748B)' }}>
                 Return purchased goods to supplier and record the return invoice.
               </p>
             </div>
@@ -579,7 +579,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
 
           {/* Subtab Switch & Actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '8px' }}>
+            <div style={{ display: 'flex', backgroundColor: 'var(--color-surface-secondary, #F1F5F9)', padding: '3px', borderRadius: '8px' }}>
               <button
                 onClick={() => setActiveSubTab('create')}
                 style={{
@@ -589,8 +589,8 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                   borderRadius: '6px',
                   border: 'none',
                   cursor: 'pointer',
-                  backgroundColor: activeSubTab === 'create' ? '#FFFFFF' : 'transparent',
-                  color: activeSubTab === 'create' ? '#EA580C' : '#64748B',
+                  backgroundColor: activeSubTab === 'create' ? 'var(--color-surface, #FFFFFF)' : 'transparent',
+                  color: activeSubTab === 'create' ? '#EA580C' : 'var(--color-text-secondary, #64748B)',
                   boxShadow: activeSubTab === 'create' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
                 }}
               >
@@ -605,8 +605,8 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                   borderRadius: '6px',
                   border: 'none',
                   cursor: 'pointer',
-                  backgroundColor: activeSubTab === 'register' ? '#FFFFFF' : 'transparent',
-                  color: activeSubTab === 'register' ? '#EA580C' : '#64748B',
+                  backgroundColor: activeSubTab === 'register' ? 'var(--color-surface, #FFFFFF)' : 'transparent',
+                  color: activeSubTab === 'register' ? '#EA580C' : 'var(--color-text-secondary, #64748B)',
                   boxShadow: activeSubTab === 'register' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
                 }}
               >
@@ -627,9 +627,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                     padding: '9px 16px',
                     fontSize: '13px',
                     fontWeight: 600,
-                    color: '#334155',
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #CBD5E1',
+                    color: 'var(--color-text, #334155)',
+                    backgroundColor: 'var(--color-surface, #FFFFFF)',
+                    border: '1px solid var(--color-border, #CBD5E1)',
                     borderRadius: '8px',
                     cursor: 'pointer'
                   }}
@@ -691,8 +691,8 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {/* Supplier Details Card */}
             <div style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
+              backgroundColor: 'var(--color-surface, #FFFFFF)',
+              border: '1px solid var(--color-border, #E2E8F0)',
               borderRadius: '12px',
               padding: '20px',
               boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
@@ -700,7 +700,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Building2 size={18} color="#EA580C" />
-                  <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Supplier Details</h3>
+                  <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text, #0F172A)', margin: 0 }}>Supplier Details</h3>
                 </div>
                 <button
                   onClick={() => setShowSupplierModal(true)}
@@ -731,9 +731,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                     padding: '10px 32px 10px 12px',
                     fontSize: '13.5px',
                     borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    backgroundColor: '#FFFFFF',
-                    color: '#0F172A',
+                    border: '1px solid var(--color-border, #CBD5E1)',
+                    backgroundColor: 'var(--color-surface, #FFFFFF)',
+                    color: 'var(--color-text, #0F172A)',
                     cursor: 'pointer',
                     appearance: 'none',
                     fontWeight: 500
@@ -752,8 +752,8 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
               {/* Selected Supplier Info Card */}
               {selectedSupplier ? (
                 <div style={{
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid #E2E8F0',
+                  backgroundColor: 'var(--color-surface-secondary, #F8FAFC)',
+                  border: '1px solid var(--color-border, #E2E8F0)',
                   borderRadius: '8px',
                   padding: '14px 18px',
                   display: 'grid',
@@ -762,39 +762,39 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                   fontSize: '12.5px'
                 }}>
                   <div>
-                    <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '14px', marginBottom: '2px' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--color-text, #0F172A)', fontSize: '14px', marginBottom: '2px' }}>
                       {selectedSupplier.party_name}
                     </div>
-                    <div style={{ color: '#64748B' }}>
+                    <div style={{ color: 'var(--color-text-secondary, #64748B)' }}>
                       {selectedSupplier.address_line1 || selectedSupplier.city || 'No address registered'}
                     </div>
                   </div>
                   <div>
-                    <div style={{ color: '#64748B' }}>
-                      <strong style={{ color: '#334155' }}>GSTIN:</strong> {selectedSupplier.gstin || 'Unregistered'}
+                    <div style={{ color: 'var(--color-text-secondary, #64748B)' }}>
+                      <strong style={{ color: 'var(--color-text, #334155)' }}>GSTIN:</strong> {selectedSupplier.gstin || 'Unregistered'}
                     </div>
-                    <div style={{ color: '#64748B', marginTop: '2px' }}>
-                      <strong style={{ color: '#334155' }}>Phone:</strong> {selectedSupplier.phone || '—'}
+                    <div style={{ color: 'var(--color-text-secondary, #64748B)', marginTop: '2px' }}>
+                      <strong style={{ color: 'var(--color-text, #334155)' }}>Phone:</strong> {selectedSupplier.phone || '—'}
                     </div>
                   </div>
                   <div>
-                    <div style={{ color: '#64748B' }}>
-                      <strong style={{ color: '#334155' }}>Email:</strong> {selectedSupplier.email || '—'}
+                    <div style={{ color: 'var(--color-text-secondary, #64748B)' }}>
+                      <strong style={{ color: 'var(--color-text, #334155)' }}>Email:</strong> {selectedSupplier.email || '—'}
                     </div>
-                    <div style={{ color: '#64748B', marginTop: '2px' }}>
-                      <strong style={{ color: '#334155' }}>State:</strong> {selectedSupplier.state || 'Tamil Nadu (33)'}
+                    <div style={{ color: 'var(--color-text-secondary, #64748B)', marginTop: '2px' }}>
+                      <strong style={{ color: 'var(--color-text, #334155)' }}>State:</strong> {selectedSupplier.state || 'Tamil Nadu (33)'}
                     </div>
                   </div>
                 </div>
               ) : (
                 <div style={{
                   padding: '16px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1px dashed #CBD5E1',
+                  backgroundColor: 'var(--color-surface-secondary, #F8FAFC)',
+                  border: '1px dashed var(--color-border, #CBD5E1)',
                   borderRadius: '8px',
                   textAlign: 'center',
                   fontSize: '13px',
-                  color: '#64748B'
+                  color: 'var(--color-text-secondary, #64748B)'
                 }}>
                   Select a supplier to load their eligible purchase invoices and line items.
                 </div>
@@ -803,8 +803,8 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
 
             {/* Item Details Card */}
             <div style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
+              backgroundColor: 'var(--color-surface, #FFFFFF)',
+              border: '1px solid var(--color-border, #E2E8F0)',
               borderRadius: '12px',
               padding: '20px',
               boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
@@ -812,12 +812,12 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Package size={18} color="#EA580C" />
-                  <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Item Details</h3>
+                  <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text, #0F172A)', margin: 0 }}>Item Details</h3>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   {/* Tax Mode Toggle */}
-                  <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '2px', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', backgroundColor: 'var(--color-surface-secondary, #F1F5F9)', padding: '2px', borderRadius: '6px' }}>
                     <button
                       type="button"
                       onClick={() => setTaxMode('EXCLUSIVE')}
@@ -828,8 +828,8 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                         borderRadius: '4px',
                         border: 'none',
                         cursor: 'pointer',
-                        backgroundColor: taxMode === 'EXCLUSIVE' ? '#FFFFFF' : 'transparent',
-                        color: taxMode === 'EXCLUSIVE' ? '#EA580C' : '#64748B',
+                        backgroundColor: taxMode === 'EXCLUSIVE' ? 'var(--color-surface, #FFFFFF)' : 'transparent',
+                        color: taxMode === 'EXCLUSIVE' ? '#EA580C' : 'var(--color-text-secondary, #64748B)',
                         boxShadow: taxMode === 'EXCLUSIVE' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
                       }}
                     >
@@ -846,7 +846,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                         border: 'none',
                         cursor: 'pointer',
                         backgroundColor: taxMode === 'INCLUSIVE' ? '#EA580C' : 'transparent',
-                        color: taxMode === 'INCLUSIVE' ? '#FFFFFF' : '#64748B',
+                        color: taxMode === 'INCLUSIVE' ? '#FFFFFF' : 'var(--color-text-secondary, #64748B)',
                         boxShadow: taxMode === 'INCLUSIVE' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none'
                       }}
                     >
@@ -864,9 +864,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                       padding: '5px 10px',
                       fontSize: '12px',
                       fontWeight: 600,
-                      color: '#334155',
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #CBD5E1',
+                      color: 'var(--color-text, #334155)',
+                      backgroundColor: 'var(--color-surface-secondary, #F8FAFC)',
+                      border: '1px solid var(--color-border, #CBD5E1)',
                       borderRadius: '6px',
                       cursor: 'pointer'
                     }}
@@ -881,7 +881,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
                   <thead>
-                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: '12px', fontWeight: 600 }}>
+                    <tr style={{ backgroundColor: 'var(--color-surface-secondary, #F8FAFC)', borderBottom: '1px solid var(--color-border, #E2E8F0)', color: 'var(--color-text-secondary, #475569)', fontSize: '12px', fontWeight: 600 }}>
                       <th style={{ padding: '10px 12px', width: '30px' }}>#</th>
                       <th style={{ padding: '10px 12px' }}>Item Name & Description</th>
                       <th style={{ padding: '10px 12px', width: '100px' }}>HSN/SAC</th>
@@ -904,16 +904,16 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                       lineItems.map((line, idx) => {
                         const lineAmtPaise = line.returnQty * line.ratePaise;
                         return (
-                          <tr key={line.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                            <td style={{ padding: '10px 12px', color: '#64748B' }}>{idx + 1}</td>
+                          <tr key={line.id} style={{ borderBottom: '1px solid var(--color-border, #F1F5F9)' }}>
+                            <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary, #64748B)' }}>{idx + 1}</td>
                             <td style={{ padding: '10px 12px' }}>
-                              <div style={{ fontWeight: 600, color: '#0F172A' }}>{line.itemName}</div>
-                              <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', gap: '8px', marginTop: '2px' }}>
+                              <div style={{ fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{line.itemName}</div>
+                              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748B)', display: 'flex', gap: '8px', marginTop: '2px' }}>
                                 <span>Original Qty: {line.originalPurchasedQty} {line.unit}</span>
                                 {line.serialNumber && <span>S/N: {line.serialNumber}</span>}
                               </div>
                             </td>
-                            <td style={{ padding: '10px 12px', color: '#64748B', fontFamily: 'var(--font-mono, monospace)', fontSize: '12px' }}>
+                            <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary, #64748B)', fontFamily: 'var(--font-mono, monospace)', fontSize: '12px' }}>
                               {line.hsnSac}
                             </td>
                             <td style={{ padding: '10px 12px' }}>
@@ -928,14 +928,16 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                                   padding: '6px 8px',
                                   fontSize: '13px',
                                   borderRadius: '6px',
-                                  border: '1px solid #CBD5E1',
+                                  border: '1px solid var(--color-border, #CBD5E1)',
+                                  backgroundColor: 'var(--color-surface, #FFFFFF)',
+                                  color: 'var(--color-text, #0F172A)',
                                   textAlign: 'center',
                                   fontWeight: 600,
                                   boxSizing: 'border-box'
                                 }}
                               />
                             </td>
-                            <td style={{ padding: '10px 12px', color: '#64748B' }}>{line.unit}</td>
+                            <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary, #64748B)' }}>{line.unit}</td>
                             <td style={{ padding: '10px 12px' }}>
                               <input
                                 type="number"
@@ -946,7 +948,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                                   padding: '6px 8px',
                                   fontSize: '13px',
                                   borderRadius: '6px',
-                                  border: '1px solid #CBD5E1',
+                                  border: '1px solid var(--color-border, #CBD5E1)',
+                                  backgroundColor: 'var(--color-surface, #FFFFFF)',
+                                  color: 'var(--color-text, #0F172A)',
                                   textAlign: 'right',
                                   boxSizing: 'border-box'
                                 }}
@@ -961,8 +965,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                                   padding: '6px 4px',
                                   fontSize: '12px',
                                   borderRadius: '6px',
-                                  border: '1px solid #CBD5E1',
-                                  backgroundColor: '#FFFFFF'
+                                  border: '1px solid var(--color-border, #CBD5E1)',
+                                  backgroundColor: 'var(--color-surface, #FFFFFF)',
+                                  color: 'var(--color-text, #0F172A)'
                                 }}
                               >
                                 <option value={0}>0%</option>
@@ -972,7 +977,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                                 <option value={28}>28%</option>
                               </select>
                             </td>
-                            <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: '#0F172A' }}>
+                            <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>
                               {formatINR(lineAmtPaise)}
                             </td>
                             <td style={{ padding: '10px 12px', textAlign: 'center' }}>
@@ -1011,9 +1016,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                     padding: '6px 12px',
                     fontSize: '12.5px',
                     fontWeight: 600,
-                    color: '#334155',
-                    backgroundColor: '#F8FAFC',
-                    border: '1px solid #CBD5E1',
+                    color: 'var(--color-text, #334155)',
+                    backgroundColor: 'var(--color-surface-secondary, #F8FAFC)',
+                    border: '1px solid var(--color-border, #CBD5E1)',
                     borderRadius: '6px',
                     cursor: 'pointer'
                   }}
@@ -1025,8 +1030,8 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
 
             {/* Terms and Notes Card */}
             <div style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
+              backgroundColor: 'var(--color-surface, #FFFFFF)',
+              border: '1px solid var(--color-border, #E2E8F0)',
               borderRadius: '12px',
               padding: '20px',
               boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
@@ -1035,7 +1040,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
               gap: '20px'
             }}>
               <div>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A', display: 'block', marginBottom: '8px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text, #0F172A)', display: 'block', marginBottom: '8px' }}>
                   Terms & Conditions
                 </label>
                 <textarea
@@ -1047,8 +1052,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                     padding: '10px',
                     fontSize: '12.5px',
                     borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    color: '#334155',
+                    border: '1px solid var(--color-border, #CBD5E1)',
+                    backgroundColor: 'var(--color-surface, #FFFFFF)',
+                    color: 'var(--color-text, #334155)',
                     resize: 'vertical',
                     boxSizing: 'border-box'
                   }}
@@ -1056,7 +1062,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
               </div>
 
               <div>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A', display: 'block', marginBottom: '8px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text, #0F172A)', display: 'block', marginBottom: '8px' }}>
                   Notes (Optional)
                 </label>
                 <textarea
@@ -1069,8 +1075,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                     padding: '10px',
                     fontSize: '12.5px',
                     borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    color: '#334155',
+                    border: '1px solid var(--color-border, #CBD5E1)',
+                    backgroundColor: 'var(--color-surface, #FFFFFF)',
+                    color: 'var(--color-text, #334155)',
                     resize: 'vertical',
                     boxSizing: 'border-box'
                   }}
@@ -1083,21 +1090,21 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             {/* Return Details Card */}
             <div style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
+              backgroundColor: 'var(--color-surface, #FFFFFF)',
+              border: '1px solid var(--color-border, #E2E8F0)',
               borderRadius: '12px',
               padding: '20px',
               boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                 <FileText size={18} color="#EA580C" />
-                <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Return Details</h3>
+                <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text, #0F172A)', margin: 0 }}>Return Details</h3>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {/* Return Voucher No */}
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #475569)', display: 'block', marginBottom: '4px' }}>
                     Return Voucher No. *
                   </label>
                   <input
@@ -1110,8 +1117,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                       fontSize: '13px',
                       fontWeight: 600,
                       borderRadius: '6px',
-                      border: '1px solid #CBD5E1',
-                      color: '#0F172A',
+                      border: '1px solid var(--color-border, #CBD5E1)',
+                      backgroundColor: 'var(--color-surface, #FFFFFF)',
+                      color: 'var(--color-text, #0F172A)',
                       boxSizing: 'border-box'
                     }}
                   />
@@ -1119,7 +1127,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
 
                 {/* Return Date */}
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #475569)', display: 'block', marginBottom: '4px' }}>
                     Return Date *
                   </label>
                   <input
@@ -1131,8 +1139,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                       padding: '8px 12px',
                       fontSize: '13px',
                       borderRadius: '6px',
-                      border: '1px solid #CBD5E1',
-                      color: '#0F172A',
+                      border: '1px solid var(--color-border, #CBD5E1)',
+                      backgroundColor: 'var(--color-surface, #FFFFFF)',
+                      color: 'var(--color-text, #0F172A)',
                       boxSizing: 'border-box'
                     }}
                   />
@@ -1140,7 +1149,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
 
                 {/* Original Invoice Selector */}
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #475569)', display: 'block', marginBottom: '4px' }}>
                     Original Purchase Invoice No. *
                   </label>
                   <div style={{ position: 'relative' }}>
@@ -1153,9 +1162,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                         padding: '8px 28px 8px 12px',
                         fontSize: '13px',
                         borderRadius: '6px',
-                        border: '1px solid #CBD5E1',
-                        backgroundColor: !partyId || originalInvoices.length === 0 ? '#F8FAFC' : '#FFFFFF',
-                        color: '#0F172A',
+                        border: '1px solid var(--color-border, #CBD5E1)',
+                        backgroundColor: !partyId || originalInvoices.length === 0 ? 'var(--color-surface-secondary, #F8FAFC)' : 'var(--color-surface, #FFFFFF)',
+                        color: 'var(--color-text, #0F172A)',
                         cursor: !partyId ? 'not-allowed' : 'pointer',
                         appearance: 'none',
                         fontWeight: 500
@@ -1176,7 +1185,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
 
                 {/* Original Invoice Date */}
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #475569)', display: 'block', marginBottom: '4px' }}>
                     Original Invoice Date
                   </label>
                   <input
@@ -1188,9 +1197,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                       padding: '8px 12px',
                       fontSize: '13px',
                       borderRadius: '6px',
-                      border: '1px solid #CBD5E1',
-                      backgroundColor: '#F8FAFC',
-                      color: '#64748B',
+                      border: '1px solid var(--color-border, #CBD5E1)',
+                      backgroundColor: 'var(--color-surface-secondary, #F8FAFC)',
+                      color: 'var(--color-text-secondary, #64748B)',
                       boxSizing: 'border-box'
                     }}
                   />
@@ -1198,7 +1207,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
 
                 {/* Return Type */}
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #475569)', display: 'block', marginBottom: '4px' }}>
                     Return Type
                   </label>
                   <div style={{ position: 'relative' }}>
@@ -1210,9 +1219,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                         padding: '8px 28px 8px 12px',
                         fontSize: '13px',
                         borderRadius: '6px',
-                        border: '1px solid #CBD5E1',
-                        backgroundColor: '#FFFFFF',
-                        color: '#0F172A',
+                        border: '1px solid var(--color-border, #CBD5E1)',
+                        backgroundColor: 'var(--color-surface, #FFFFFF)',
+                        color: 'var(--color-text, #0F172A)',
                         cursor: 'pointer',
                         appearance: 'none'
                       }}
@@ -1227,7 +1236,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
 
                 {/* Place of Supply */}
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #475569)', display: 'block', marginBottom: '4px' }}>
                     Place of Supply
                   </label>
                   <div style={{ position: 'relative' }}>
@@ -1239,9 +1248,9 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                         padding: '8px 28px 8px 12px',
                         fontSize: '13px',
                         borderRadius: '6px',
-                        border: '1px solid #CBD5E1',
-                        backgroundColor: '#FFFFFF',
-                        color: '#0F172A',
+                        border: '1px solid var(--color-border, #CBD5E1)',
+                        backgroundColor: 'var(--color-surface, #FFFFFF)',
+                        color: 'var(--color-text, #0F172A)',
                         cursor: 'pointer',
                         appearance: 'none'
                       }}
@@ -1260,47 +1269,47 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
 
             {/* Return Summary Card */}
             <div style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
+              backgroundColor: 'var(--color-surface, #FFFFFF)',
+              border: '1px solid var(--color-border, #E2E8F0)',
               borderRadius: '12px',
               padding: '20px',
               boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                 <Layers size={18} color="#EA580C" />
-                <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Return Summary</h3>
+                <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text, #0F172A)', margin: 0 }}>Return Summary</h3>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13.5px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-secondary, #64748B)' }}>
                   <span>Sub Total:</span>
-                  <span style={{ fontWeight: 600, color: '#0F172A' }}>{formatINR(summary.subtotalPaise)}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{formatINR(summary.subtotalPaise)}</span>
                 </div>
 
                 {summary.cgstPaise > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-secondary, #64748B)' }}>
                     <span>CGST Reversal:</span>
-                    <span style={{ fontWeight: 600, color: '#0F172A' }}>{formatINR(summary.cgstPaise)}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{formatINR(summary.cgstPaise)}</span>
                   </div>
                 )}
 
                 {summary.sgstPaise > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-secondary, #64748B)' }}>
                     <span>SGST Reversal:</span>
-                    <span style={{ fontWeight: 600, color: '#0F172A' }}>{formatINR(summary.sgstPaise)}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{formatINR(summary.sgstPaise)}</span>
                   </div>
                 )}
 
                 {summary.igstPaise > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-secondary, #64748B)' }}>
                     <span>IGST Reversal:</span>
-                    <span style={{ fontWeight: 600, color: '#0F172A' }}>{formatINR(summary.igstPaise)}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{formatINR(summary.igstPaise)}</span>
                   </div>
                 )}
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-secondary, #64748B)' }}>
                   <span>Round Off:</span>
-                  <span style={{ fontWeight: 600, color: '#0F172A' }}>{formatINR(summary.roundOffPaise)}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{formatINR(summary.roundOffPaise)}</span>
                 </div>
 
                 <div style={{
@@ -1309,11 +1318,11 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                   alignItems: 'center',
                   paddingTop: '12px',
                   marginTop: '4px',
-                  borderTop: '2px solid #F1F5F9',
+                  borderTop: '2px solid var(--color-border, #F1F5F9)',
                   fontWeight: 700,
                   fontSize: '16px'
                 }}>
-                  <span style={{ color: '#0F172A' }}>Return Total:</span>
+                  <span style={{ color: 'var(--color-text, #0F172A)' }}>Return Total:</span>
                   <span style={{ color: '#EA580C', fontSize: '19px' }}>{formatINR(summary.grandTotalPaise)}</span>
                 </div>
               </div>
@@ -1323,22 +1332,22 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
       ) : (
         /* ================= PURCHASE RETURN REGISTER TAB ================= */
         <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)',
           borderRadius: '12px',
           overflow: 'hidden',
           boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
         }}>
           {registerLoading ? (
-            <div style={{ padding: '60px', textAlign: 'center', color: '#64748B' }}>
-              <div style={{ display: 'inline-block', width: '28px', height: '28px', border: '3px solid #E2E8F0', borderTopColor: '#EA580C', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary, #64748B)' }}>
+              <div style={{ display: 'inline-block', width: '28px', height: '28px', border: '3px solid var(--color-border, #E2E8F0)', borderTopColor: '#EA580C', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
               <div style={{ marginTop: '12px', fontSize: '14px', fontWeight: 500 }}>Loading purchase returns...</div>
             </div>
           ) : registerVouchers.length === 0 ? (
-            <div style={{ padding: '60px 24px', textAlign: 'center', color: '#64748B' }}>
+            <div style={{ padding: '60px 24px', textAlign: 'center', color: 'var(--color-text-secondary, #64748B)' }}>
               <RotateCcw size={32} style={{ marginBottom: '8px', color: '#94A3B8' }} />
-              <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#0F172A', margin: 0 }}>No purchase returns found</h3>
-              <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text, #0F172A)', margin: 0 }}>No purchase returns found</h3>
+              <p style={{ fontSize: '13px', color: 'var(--color-text-secondary, #64748B)', marginTop: '4px' }}>
                 You haven&apos;t recorded any purchase returns yet.
               </p>
               <button
@@ -1362,7 +1371,7 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                 <thead>
-                  <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                  <tr style={{ backgroundColor: 'var(--color-surface-secondary, #F8FAFC)', borderBottom: '1px solid var(--color-border, #E2E8F0)', color: 'var(--color-text-secondary, #475569)', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                     <th style={{ padding: '12px 16px' }}>Date</th>
                     <th style={{ padding: '12px 16px' }}>Return Voucher No.</th>
                     <th style={{ padding: '12px 16px' }}>Supplier</th>
@@ -1374,12 +1383,12 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                 </thead>
                 <tbody>
                   {registerVouchers.map((v, idx) => (
-                    <tr key={v.voucher_id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA' }}>
-                      <td style={{ padding: '12px 16px', color: '#334155' }}>{formatDateDisplay(v.voucher_date)}</td>
+                    <tr key={v.voucher_id || idx} style={{ borderBottom: '1px solid var(--color-border, #F1F5F9)', backgroundColor: idx % 2 === 0 ? 'var(--color-surface, #FFFFFF)' : 'var(--color-surface-secondary, #FAFAFA)' }}>
+                      <td style={{ padding: '12px 16px', color: 'var(--color-text-secondary, #334155)' }}>{formatDateDisplay(v.voucher_date)}</td>
                       <td style={{ padding: '12px 16px', fontWeight: 600, color: '#EA580C' }}>{v.voucher_number}</td>
-                      <td style={{ padding: '12px 16px', fontWeight: 600, color: '#0F172A' }}>{v.party_name || '—'}</td>
-                      <td style={{ padding: '12px 16px', color: '#64748B' }}>{v.reference_no || '—'}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#0F172A' }}>
+                      <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{v.party_name || '—'}</td>
+                      <td style={{ padding: '12px 16px', color: 'var(--color-text-secondary, #64748B)' }}>{v.reference_no || '—'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text, #0F172A)' }}>
                         {formatINR(v.total_amount_paise)}
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'center' }}>

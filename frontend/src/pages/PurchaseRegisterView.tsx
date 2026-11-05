@@ -432,7 +432,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
   };
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: '1600px', margin: '0 auto', color: '#0F172A', fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)' }}>
+    <div style={{ padding: '24px 32px', maxWidth: '1600px', margin: '0 auto', color: 'var(--color-text, #0F172A)', fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)' }}>
       {/* Toast Notification */}
       {toast && (
         <div style={{
@@ -458,23 +458,23 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
 
       {/* Breadcrumb & Header */}
       <div style={{ marginBottom: '24px' }}>
-        <div style={{ fontSize: '13px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+        <div style={{ fontSize: '13px', color: 'var(--color-text-secondary, #64748B)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
           <span>Purchase</span>
           <span>&rsaquo;</span>
-          <span style={{ color: '#0F172A', fontWeight: 600 }}>Purchase Register</span>
+          <span style={{ color: 'var(--color-text, #0F172A)', fontWeight: 600 }}>Purchase Register</span>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EA580C', border: '1px solid #FFEDD5' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--color-surface-secondary, #FFF7ED)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EA580C', border: '1px solid var(--color-border, #FFEDD5)' }}>
                 <FileText size={22} />
               </div>
               <div>
-                <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+                <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-text, #0F172A)', margin: 0, letterSpacing: '-0.02em' }}>
                   Purchase Register
                 </h1>
-                <p style={{ margin: '2px 0 0', fontSize: '13.5px', color: '#64748B' }}>
+                <p style={{ margin: '2px 0 0', fontSize: '13.5px', color: 'var(--color-text-secondary, #64748B)' }}>
                   View, search and manage all purchase invoices.
                 </p>
               </div>
@@ -491,9 +491,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                 padding: '9px 14px',
                 fontSize: '13px',
                 fontWeight: 600,
-                color: '#334155',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #CBD5E1',
+                color: 'var(--color-text, #334155)',
+                backgroundColor: 'var(--color-surface, #FFFFFF)',
+                border: '1px solid var(--color-border, #CBD5E1)',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease'
@@ -513,9 +513,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                 padding: '9px 14px',
                 fontSize: '13px',
                 fontWeight: 600,
-                color: '#334155',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #CBD5E1',
+                color: 'var(--color-text, #334155)',
+                backgroundColor: 'var(--color-surface, #FFFFFF)',
+                border: '1px solid var(--color-border, #CBD5E1)',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease'
@@ -681,8 +681,8 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
 
       {/* Filter and Search Bar */}
       <div style={{
-        backgroundColor: '#FFFFFF',
-        border: '1px solid #E2E8F0',
+        backgroundColor: 'var(--color-surface, #FFFFFF)',
+        border: '1px solid var(--color-border, #E2E8F0)',
         borderRadius: '12px',
         padding: '16px 20px',
         marginBottom: '20px',
@@ -694,7 +694,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           {/* Period selector */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '160px' }}>
-            <label style={{ fontSize: '11.5px', fontWeight: 600, color: '#64748B' }}>Period</label>
+            <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)' }}>Period</label>
             <div style={{ position: 'relative' }}>
               <select
                 value={periodFilter}
@@ -704,9 +704,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                   padding: '8px 28px 8px 12px',
                   fontSize: '13px',
                   borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                  color: '#0F172A',
+                  border: '1px solid var(--color-border, #CBD5E1)',
+                  backgroundColor: 'var(--color-surface, #FFFFFF)',
+                  color: 'var(--color-text, #0F172A)',
                   cursor: 'pointer',
                   appearance: 'none',
                   fontWeight: 500
@@ -725,7 +725,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
 
           {/* Supplier selector */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '190px' }}>
-            <label style={{ fontSize: '11.5px', fontWeight: 600, color: '#64748B' }}>Supplier</label>
+            <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)' }}>Supplier</label>
             <div style={{ position: 'relative' }}>
               <select
                 value={supplierFilter}
@@ -735,9 +735,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                   padding: '8px 28px 8px 12px',
                   fontSize: '13px',
                   borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                  color: '#0F172A',
+                  border: '1px solid var(--color-border, #CBD5E1)',
+                  backgroundColor: 'var(--color-surface, #FFFFFF)',
+                  color: 'var(--color-text, #0F172A)',
                   cursor: 'pointer',
                   appearance: 'none',
                   fontWeight: 500
@@ -756,7 +756,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
 
           {/* Status selector */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '140px' }}>
-            <label style={{ fontSize: '11.5px', fontWeight: 600, color: '#64748B' }}>Status</label>
+            <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)' }}>Status</label>
             <div style={{ position: 'relative' }}>
               <select
                 value={statusFilter}
@@ -766,9 +766,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                   padding: '8px 28px 8px 12px',
                   fontSize: '13px',
                   borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                  color: '#0F172A',
+                  border: '1px solid var(--color-border, #CBD5E1)',
+                  backgroundColor: 'var(--color-surface, #FFFFFF)',
+                  color: 'var(--color-text, #0F172A)',
                   cursor: 'pointer',
                   appearance: 'none',
                   fontWeight: 500
@@ -785,7 +785,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
 
           {/* Payment Status selector */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '150px' }}>
-            <label style={{ fontSize: '11.5px', fontWeight: 600, color: '#64748B' }}>Payment Status</label>
+            <label style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)' }}>Payment Status</label>
             <div style={{ position: 'relative' }}>
               <select
                 value={paymentStatusFilter}
@@ -795,9 +795,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                   padding: '8px 28px 8px 12px',
                   fontSize: '13px',
                   borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                  color: '#0F172A',
+                  border: '1px solid var(--color-border, #CBD5E1)',
+                  backgroundColor: 'var(--color-surface, #FFFFFF)',
+                  color: 'var(--color-text, #0F172A)',
                   cursor: 'pointer',
                   appearance: 'none',
                   fontWeight: 500
@@ -823,10 +823,10 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                 padding: '8px 12px',
                 fontSize: '12.5px',
                 fontWeight: 600,
-                color: showMoreFilters ? '#EA580C' : '#475569',
-                backgroundColor: showMoreFilters ? '#FFF7ED' : '#F8FAFC',
+                color: showMoreFilters ? '#EA580C' : 'var(--color-text-secondary, #475569)',
+                backgroundColor: showMoreFilters ? 'var(--color-surface-secondary, #FFF7ED)' : 'var(--color-surface-secondary, #F8FAFC)',
                 border: '1px solid',
-                borderColor: showMoreFilters ? '#FDBA74' : '#CBD5E1',
+                borderColor: showMoreFilters ? '#FDBA74' : 'var(--color-border, #CBD5E1)',
                 borderRadius: '6px',
                 cursor: 'pointer'
               }}
@@ -844,9 +844,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                 padding: '8px 12px',
                 fontSize: '12.5px',
                 fontWeight: 600,
-                color: '#64748B',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #CBD5E1',
+                color: 'var(--color-text-secondary, #64748B)',
+                backgroundColor: 'var(--color-surface-secondary, #F8FAFC)',
+                border: '1px solid var(--color-border, #CBD5E1)',
                 borderRadius: '6px',
                 cursor: 'pointer'
               }}
@@ -865,11 +865,11 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
             alignItems: 'center',
             gap: '12px',
             paddingTop: '12px',
-            borderTop: '1px solid #F1F5F9',
+            borderTop: '1px solid var(--color-border, #F1F5F9)',
             flexWrap: 'wrap'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>From:</span>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary, #64748B)', fontWeight: 500 }}>From:</span>
               <input
                 type="date"
                 value={fromDate}
@@ -881,14 +881,15 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                   padding: '6px 10px',
                   fontSize: '12.5px',
                   borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  color: '#0F172A'
+                  border: '1px solid var(--color-border, #CBD5E1)',
+                  backgroundColor: 'var(--color-surface, #FFFFFF)',
+                  color: 'var(--color-text, #0F172A)'
                 }}
               />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>To:</span>
+              <span style={{ fontSize: '12px', color: 'var(--color-text-secondary, #64748B)', fontWeight: 500 }}>To:</span>
               <input
                 type="date"
                 value={toDate}
@@ -900,8 +901,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                   padding: '6px 10px',
                   fontSize: '12.5px',
                   borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  color: '#0F172A'
+                  border: '1px solid var(--color-border, #CBD5E1)',
+                  backgroundColor: 'var(--color-surface, #FFFFFF)',
+                  color: 'var(--color-text, #0F172A)'
                 }}
               />
             </div>
@@ -940,8 +942,8 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                 border: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
-                backgroundColor: activeTabStatus === tab.id ? '#EA580C' : '#FFFFFF',
-                color: activeTabStatus === tab.id ? '#FFFFFF' : '#475569',
+                backgroundColor: activeTabStatus === tab.id ? '#EA580C' : 'var(--color-surface, #FFFFFF)',
+                color: activeTabStatus === tab.id ? '#FFFFFF' : 'var(--color-text-secondary, #475569)',
                 boxShadow: activeTabStatus === tab.id ? '0 2px 4px rgba(234, 88, 12, 0.25)' : 'none'
               }}
             >
@@ -966,9 +968,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
               padding: '9px 12px 9px 36px',
               fontSize: '13px',
               borderRadius: '8px',
-              border: '1px solid #CBD5E1',
-              backgroundColor: '#FFFFFF',
-              color: '#0F172A',
+              border: '1px solid var(--color-border, #CBD5E1)',
+              backgroundColor: 'var(--color-surface, #FFFFFF)',
+              color: 'var(--color-text, #0F172A)',
               outline: 'none',
               boxSizing: 'border-box'
             }}
@@ -997,8 +999,8 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
       {/* Bulk Action Ribbon (appears when rows selected) */}
       {selectedIds.size > 0 && (
         <div style={{
-          backgroundColor: '#FFF7ED',
-          border: '1px solid #FFEDD5',
+          backgroundColor: 'var(--color-surface-secondary, #FFF7ED)',
+          border: '1px solid var(--color-border, #FFEDD5)',
           borderRadius: '8px',
           padding: '10px 16px',
           marginBottom: '16px',
@@ -1021,8 +1023,8 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                 fontSize: '12.5px',
                 fontWeight: 600,
                 color: '#EA580C',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #FDBA74',
+                backgroundColor: 'var(--color-surface, #FFFFFF)',
+                border: '1px solid var(--color-border, #FDBA74)',
                 borderRadius: '6px',
                 cursor: 'pointer'
               }}
@@ -1035,7 +1037,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                 padding: '6px 10px',
                 fontSize: '12px',
                 fontWeight: 500,
-                color: '#64748B',
+                color: 'var(--color-text-secondary, #64748B)',
                 backgroundColor: 'transparent',
                 border: 'none',
                 cursor: 'pointer'
@@ -1049,22 +1051,22 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
 
       {/* Register Table Container */}
       <div style={{
-        backgroundColor: '#FFFFFF',
-        border: '1px solid #E2E8F0',
+        backgroundColor: 'var(--color-surface, #FFFFFF)',
+        border: '1px solid var(--color-border, #E2E8F0)',
         borderRadius: '12px',
         overflow: 'hidden',
         boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
       }}>
         {loading ? (
-          <div style={{ padding: '60px', textAlign: 'center', color: '#64748B' }}>
-            <div style={{ display: 'inline-block', width: '28px', height: '28px', border: '3px solid #E2E8F0', borderTopColor: '#EA580C', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <div style={{ padding: '60px', textAlign: 'center', color: 'var(--color-text-secondary, #64748B)' }}>
+            <div style={{ display: 'inline-block', width: '28px', height: '28px', border: '3px solid var(--color-border, #E2E8F0)', borderTopColor: '#EA580C', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
             <div style={{ marginTop: '12px', fontSize: '14px', fontWeight: 500 }}>Loading purchase register...</div>
           </div>
         ) : error ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#DC2626' }}>
             <AlertCircle size={32} style={{ marginBottom: '8px' }} />
             <div style={{ fontSize: '15px', fontWeight: 600 }}>Failed to load purchase invoices</div>
-            <div style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>{error}</div>
+            <div style={{ fontSize: '13px', color: 'var(--color-text-secondary, #64748B)', marginTop: '4px' }}>{error}</div>
             <button
               onClick={loadData}
               style={{ marginTop: '16px', padding: '8px 16px', backgroundColor: '#EA580C', color: '#FFFFFF', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}
@@ -1073,12 +1075,12 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
             </button>
           </div>
         ) : paginatedVouchers.length === 0 ? (
-          <div style={{ padding: '60px 24px', textAlign: 'center', color: '#64748B' }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: '#94A3B8' }}>
+          <div style={{ padding: '60px 24px', textAlign: 'center', color: 'var(--color-text-secondary, #64748B)' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'var(--color-surface-secondary, #F8FAFC)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: '#94A3B8' }}>
               <FileText size={24} />
             </div>
-            <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#0F172A', margin: 0 }}>No purchase invoices found</h3>
-            <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px', maxWidth: '380px', margin: '4px auto 16px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-text, #0F172A)', margin: 0 }}>No purchase invoices found</h3>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary, #64748B)', marginTop: '4px', maxWidth: '380px', margin: '4px auto 16px' }}>
               {searchQuery || supplierFilter !== 'ALL' || statusFilter !== 'ALL'
                 ? 'Try clearing or modifying your filter criteria.'
                 : 'Start recording purchase invoices from your vendors and suppliers.'}
@@ -1086,7 +1088,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
             {searchQuery || supplierFilter !== 'ALL' || statusFilter !== 'ALL' ? (
               <button
                 onClick={handleClearFilters}
-                style={{ padding: '8px 16px', backgroundColor: '#F1F5F9', color: '#334155', border: '1px solid #CBD5E1', borderRadius: '6px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
+                style={{ padding: '8px 16px', backgroundColor: 'var(--color-surface-secondary, #F1F5F9)', color: 'var(--color-text, #334155)', border: '1px solid var(--color-border, #CBD5E1)', borderRadius: '6px', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
               >
                 Clear Filters
               </button>
@@ -1103,7 +1105,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
               <thead>
-                <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                <tr style={{ backgroundColor: 'var(--color-surface-secondary, #F8FAFC)', borderBottom: '1px solid var(--color-border, #E2E8F0)', color: 'var(--color-text-secondary, #475569)', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                   <th style={{ padding: '12px 16px', width: '38px', textAlign: 'center' }}>
                     <input
                       type="checkbox"
@@ -1174,8 +1176,8 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                     <tr
                       key={v.voucher_id || idx}
                       style={{
-                        borderBottom: '1px solid #F1F5F9',
-                        backgroundColor: isChecked ? '#FFF7ED' : idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA',
+                        borderBottom: '1px solid var(--color-border, #F1F5F9)',
+                        backgroundColor: isChecked ? 'var(--color-surface-secondary, #FFF7ED)' : idx % 2 === 0 ? 'var(--color-surface, #FFFFFF)' : 'var(--color-surface-secondary, #FAFAFA)',
                         transition: 'background-color 0.15s ease'
                       }}
                     >
@@ -1189,7 +1191,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                       </td>
 
                       {/* Date */}
-                      <td style={{ padding: '12px 16px', color: '#334155', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '12px 16px', color: 'var(--color-text-secondary, #334155)', fontWeight: 500, whiteSpace: 'nowrap' }}>
                         {formatDateDisplay(v.voucher_date)}
                       </td>
 
@@ -1215,7 +1217,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                       </td>
 
                       {/* Supplier */}
-                      <td style={{ padding: '12px 16px', color: '#0F172A', fontWeight: 600 }}>
+                      <td style={{ padding: '12px 16px', color: 'var(--color-text, #0F172A)', fontWeight: 600 }}>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
                           <span>{v.party_name || '—'}</span>
                           {v.supplier_code && (
@@ -1227,17 +1229,17 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                       </td>
 
                       {/* Bill No */}
-                      <td style={{ padding: '12px 16px', color: '#64748B', fontFamily: 'var(--font-mono, monospace)', fontSize: '12.5px' }}>
+                      <td style={{ padding: '12px 16px', color: 'var(--color-text-secondary, #64748B)', fontFamily: 'var(--font-mono, monospace)', fontSize: '12.5px' }}>
                         {v.billNumber || '—'}
                       </td>
 
                       {/* Items */}
-                      <td style={{ padding: '12px 16px', color: '#64748B', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '12px 16px', color: 'var(--color-text-secondary, #64748B)', whiteSpace: 'nowrap' }}>
                         {v.line_items_count ? `${v.line_items_count} item${v.line_items_count > 1 ? 's' : ''}` : '1 item'}
                       </td>
 
                       {/* Amount */}
-                      <td style={{ padding: '12px 16px', color: '#0F172A', fontWeight: 700, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '12px 16px', color: 'var(--color-text, #0F172A)', fontWeight: 700, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         {formatINR(v.total_amount_paise)}
                       </td>
 
@@ -1357,8 +1359,8 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                               position: 'absolute',
                               right: 0,
                               top: '100%',
-                              backgroundColor: '#FFFFFF',
-                              border: '1px solid #E2E8F0',
+                              backgroundColor: 'var(--color-surface, #FFFFFF)',
+                              border: '1px solid var(--color-border, #E2E8F0)',
                               borderRadius: '8px',
                               boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
                               minWidth: '160px',
@@ -1375,7 +1377,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                                   width: '100%',
                                   padding: '8px 14px',
                                   fontSize: '12.5px',
-                                  color: '#334155',
+                                  color: 'var(--color-text, #334155)',
                                   background: 'none',
                                   border: 'none',
                                   display: 'flex',
@@ -1383,7 +1385,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                                   gap: '8px',
                                   cursor: 'pointer'
                                 }}
-                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-secondary, #F8FAFC)')}
                                 onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                               >
                                 <Eye size={14} color="#64748B" />
@@ -1401,7 +1403,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                                       width: '100%',
                                       padding: '8px 14px',
                                       fontSize: '12.5px',
-                                      color: '#334155',
+                                      color: 'var(--color-text, #334155)',
                                       background: 'none',
                                       border: 'none',
                                       display: 'flex',
@@ -1409,7 +1411,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                                       gap: '8px',
                                       cursor: 'pointer'
                                     }}
-                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-secondary, #F8FAFC)')}
                                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                                   >
                                     <Edit2 size={14} color="#EA580C" />
@@ -1434,7 +1436,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                                       cursor: 'pointer',
                                       fontWeight: 600
                                     }}
-                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
+                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-secondary, #F8FAFC)')}
                                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                                   >
                                     <Check size={14} color="#16A34A" />
@@ -1461,7 +1463,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                                     gap: '8px',
                                     cursor: 'pointer'
                                   }}
-                                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#FEF2F2')}
+                                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-secondary, #FEF2F2)')}
                                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                                 >
                                   <Trash2 size={14} color="#DC2626" />
@@ -1483,15 +1485,15 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
         {/* Pagination Strip */}
         <div style={{
           padding: '14px 20px',
-          borderTop: '1px solid #E2E8F0',
+          borderTop: '1px solid var(--color-border, #E2E8F0)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '12px',
-          backgroundColor: '#FFFFFF',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
           fontSize: '13px',
-          color: '#64748B'
+          color: 'var(--color-text-secondary, #64748B)'
         }}>
           <div>
             Showing {sortedVouchers.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} to{' '}
@@ -1507,9 +1509,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                 style={{
                   padding: '5px 8px',
                   borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                  color: currentPage <= 1 ? '#CBD5E1' : '#334155',
+                  border: '1px solid var(--color-border, #CBD5E1)',
+                  backgroundColor: 'var(--color-surface, #FFFFFF)',
+                  color: currentPage <= 1 ? 'var(--color-text-muted, #CBD5E1)' : 'var(--color-text, #334155)',
                   cursor: currentPage <= 1 ? 'not-allowed' : 'pointer'
                 }}
               >
@@ -1531,9 +1533,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                       height: '30px',
                       borderRadius: '6px',
                       border: '1px solid',
-                      borderColor: currentPage === p ? '#EA580C' : '#CBD5E1',
-                      backgroundColor: currentPage === p ? '#EA580C' : '#FFFFFF',
-                      color: currentPage === p ? '#FFFFFF' : '#334155',
+                      borderColor: currentPage === p ? '#EA580C' : 'var(--color-border, #CBD5E1)',
+                      backgroundColor: currentPage === p ? '#EA580C' : 'var(--color-surface, #FFFFFF)',
+                      color: currentPage === p ? '#FFFFFF' : 'var(--color-text, #334155)',
                       fontWeight: 600,
                       fontSize: '12px',
                       cursor: 'pointer'
@@ -1550,9 +1552,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                 style={{
                   padding: '5px 8px',
                   borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
-                  backgroundColor: '#FFFFFF',
-                  color: currentPage >= totalPages ? '#CBD5E1' : '#334155',
+                  border: '1px solid var(--color-border, #CBD5E1)',
+                  backgroundColor: 'var(--color-surface, #FFFFFF)',
+                  color: currentPage >= totalPages ? 'var(--color-text-muted, #CBD5E1)' : 'var(--color-text, #334155)',
                   cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer'
                 }}
               >
@@ -1570,9 +1572,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
               style={{
                 padding: '5px 10px',
                 borderRadius: '6px',
-                border: '1px solid #CBD5E1',
-                backgroundColor: '#FFFFFF',
-                color: '#334155',
+                border: '1px solid var(--color-border, #CBD5E1)',
+                backgroundColor: 'var(--color-surface, #FFFFFF)',
+                color: 'var(--color-text, #334155)',
                 fontSize: '12px',
                 cursor: 'pointer',
                 fontWeight: 500

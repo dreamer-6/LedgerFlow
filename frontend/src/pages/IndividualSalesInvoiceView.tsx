@@ -330,15 +330,15 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
           className="ledger-card"
           style={{
             padding: '28px 32px',
-            backgroundColor: '#FFFFFF',
+            backgroundColor: 'var(--color-surface, #FFFFFF)',
             borderRadius: '10px',
-            border: '1px solid #E2E8F0',
+            border: '1px solid var(--color-border, #E2E8F0)',
             boxShadow: '0 2px 12px rgba(0,0,0,0.03)',
-            color: '#0F172A'
+            color: 'var(--color-text, #0F172A)'
           }}
         >
           {/* Header Section matching mockup */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 310px', gap: '24px', alignItems: 'start', paddingBottom: '20px', borderBottom: '1px solid #E2E8F0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 310px', gap: '24px', alignItems: 'start', paddingBottom: '20px', borderBottom: '1px solid var(--color-border, #E2E8F0)' }}>
             {/* Left: Company Details */}
             <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
               <div
@@ -346,7 +346,7 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
                   width: '48px',
                   height: '48px',
                   borderRadius: '10px',
-                  backgroundColor: '#FFF7ED',
+                  backgroundColor: 'var(--color-surface-secondary, #FFF7ED)',
                   color: '#EA580C',
                   display: 'flex',
                   alignItems: 'center',
@@ -360,15 +360,15 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
                 {company?.company_name ? company.company_name.substring(0, 2).toUpperCase() : 'SC'}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.3px' }}>
+                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, color: 'var(--color-text, #0F172A)', letterSpacing: '-0.3px' }}>
                   {company?.company_name || 'SkyTech Computers'}
                 </h2>
-                <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '3px', lineHeight: 1.45 }}>
+                <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary, #64748B)', marginTop: '3px', lineHeight: 1.45 }}>
                   {company?.address_line1 || '123, Main Road, Gandhipuram'}
                   <div>{company?.city || 'Coimbatore'}, {company?.state || 'Tamil Nadu'}{company?.pincode ? ` - ${company.pincode}` : ' - 641012'}, India</div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px', marginTop: '10px', fontSize: '11px', color: '#475569' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px', marginTop: '10px', fontSize: '11px', color: 'var(--color-text-secondary, #475569)' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Smartphone size={11} color="#EA580C" />
@@ -384,19 +384,19 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
                     </div>
                   </div>
 
-                  <div style={{ borderLeft: '1px solid #E2E8F0', paddingLeft: '12px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  <div style={{ borderLeft: '1px solid var(--color-border, #E2E8F0)', paddingLeft: '12px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '46px 8px 1fr' }}>
-                      <span style={{ color: '#64748B' }}>GSTIN</span>
+                      <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>GSTIN</span>
                       <span>:</span>
-                      <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{company?.gstin || '33ABCDE1234F1Z5'}</strong>
+                      <strong style={{ color: 'var(--color-text, #0F172A)', fontFamily: 'monospace' }}>{company?.gstin || '33ABCDE1234F1Z5'}</strong>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '46px 8px 1fr' }}>
-                      <span style={{ color: '#64748B' }}>PAN</span>
+                      <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>PAN</span>
                       <span>:</span>
-                      <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{company?.pan || 'ABCDE1234F'}</strong>
+                      <strong style={{ color: 'var(--color-text, #0F172A)', fontFamily: 'monospace' }}>{company?.pan || 'ABCDE1234F'}</strong>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '46px 8px 1fr' }}>
-                      <span style={{ color: '#64748B' }}>State</span>
+                      <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>State</span>
                       <span>:</span>
                       <span>{company?.state || 'Tamil Nadu'} ({company?.state_code || '33'})</span>
                     </div>
@@ -408,44 +408,44 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
             {/* Right: TAX INVOICE Header Box */}
             <div
               style={{
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #F1F5F9',
+                backgroundColor: 'var(--color-surface-secondary, #F8FAFC)',
+                border: '1px solid var(--color-border, #F1F5F9)',
                 borderRadius: '8px',
                 padding: '12px 16px',
                 textAlign: 'left'
               }}
             >
               <div style={{ fontSize: '22px', fontWeight: 900, letterSpacing: '0.02em', lineHeight: 1.1 }}>
-                <span style={{ color: '#0F172A' }}>TAX </span>
+                <span style={{ color: 'var(--color-text, #0F172A)' }}>TAX </span>
                 <span style={{ color: '#EA580C' }}>INVOICE</span>
               </div>
-              <div style={{ fontSize: '10px', fontWeight: 700, color: '#94A3B8', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px', marginTop: '2px' }}>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted, #94A3B8)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '10px', marginTop: '2px' }}>
                 ORIGINAL FOR RECIPIENT
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11px', color: '#475569' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11px', color: 'var(--color-text-secondary, #475569)' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '85px 8px 1fr', alignItems: 'center' }}>
-                  <span style={{ color: '#64748B' }}>Invoice No</span>
+                  <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Invoice No</span>
                   <span>:</span>
-                  <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{v.voucher_number || 'DFT-…'}</strong>
+                  <strong style={{ color: 'var(--color-text, #0F172A)', fontFamily: 'var(--font-mono)' }}>{v.voucher_number || 'DFT-…'}</strong>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '85px 8px 1fr', alignItems: 'center' }}>
-                  <span style={{ color: '#64748B' }}>Invoice Date</span>
+                  <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Invoice Date</span>
                   <span>:</span>
                   <span>{formatDateDisplay(v.voucher_date)}</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '85px 8px 1fr', alignItems: 'center' }}>
-                  <span style={{ color: '#64748B' }}>Due Date</span>
+                  <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Due Date</span>
                   <span>:</span>
                   <span>{formatDateDisplay(v.due_date || v.voucher_date)}</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '85px 8px 1fr', alignItems: 'center' }}>
-                  <span style={{ color: '#64748B' }}>Payment Terms</span>
+                  <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Payment Terms</span>
                   <span>:</span>
                   <span>{v.payment_terms || 'Immediate'}</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '85px 8px 1fr', alignItems: 'center' }}>
-                  <span style={{ color: '#64748B' }}>Place of Supply</span>
+                  <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Place of Supply</span>
                   <span>:</span>
                   <span>{v.place_of_supply ? `${v.place_of_supply}` : 'Tamil Nadu (33)'}</span>
                 </div>
@@ -454,16 +454,16 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
           </div>
 
           {/* Customer Details: Bill To & Ship To matching mockup */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', padding: '16px 0', borderBottom: '1px solid #E2E8F0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', padding: '16px 0', borderBottom: '1px solid var(--color-border, #E2E8F0)' }}>
             {/* Bill To */}
             <div>
               <div style={{ fontSize: '11px', fontWeight: 800, color: '#EA580C', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>
                 BILL TO
               </div>
-              <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
+              <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--color-text, #0F172A)' }}>
                 {v.party_name || 'Cash Customer'}
               </div>
-              <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px', lineHeight: 1.4 }}>
+              <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary, #475569)', marginTop: '2px', lineHeight: 1.4 }}>
                 <div>{v.address_line1 || 'TS No 1060, North 4th Street,'}</div>
                 <div>{v.city ? `${v.city}, ` : 'Pudukkottai, '}{v.state || 'Tamil Nadu'}{v.pincode ? ` - ${v.pincode}` : ' - 622001'}, India</div>
               </div>
@@ -471,27 +471,27 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px', marginTop: '8px', fontSize: '11px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   {v.party_phone && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#475569' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--color-text-secondary, #475569)' }}>
                       <Smartphone size={10} color="#EA580C" />
                       <span>{v.party_phone}</span>
                     </div>
                   )}
                   {v.party_email && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#475569' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--color-text-secondary, #475569)' }}>
                       <Mail size={10} color="#EA580C" />
                       <span>{v.party_email}</span>
                     </div>
                   )}
                 </div>
 
-                <div style={{ borderLeft: '1px solid #E2E8F0', paddingLeft: '8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <div style={{ borderLeft: '1px solid var(--color-border, #E2E8F0)', paddingLeft: '8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '40px 6px 1fr' }}>
-                    <span style={{ color: '#64748B' }}>GSTIN</span>
+                    <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>GSTIN</span>
                     <span>:</span>
-                    <strong style={{ color: '#0F172A' }}>{v.party_gstin || 'Unregistered'}</strong>
+                    <strong style={{ color: 'var(--color-text, #0F172A)' }}>{v.party_gstin || 'Unregistered'}</strong>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '40px 6px 1fr' }}>
-                    <span style={{ color: '#64748B' }}>State</span>
+                    <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>State</span>
                     <span>:</span>
                     <span>{v.place_of_supply || 'Tamil Nadu (33)'}</span>
                   </div>
@@ -502,25 +502,25 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
             {/* Ship To (Optional) */}
             <div>
               <div style={{ fontSize: '11px', fontWeight: 800, color: '#EA580C', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '4px' }}>
-                SHIP TO <span style={{ fontWeight: 500, color: '#94A3B8', textTransform: 'none' }}>(Optional)</span>
+                SHIP TO <span style={{ fontWeight: 500, color: 'var(--color-text-muted, #94A3B8)', textTransform: 'none' }}>(Optional)</span>
               </div>
-              <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
+              <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--color-text, #0F172A)' }}>
                 {v.party_name || 'Cash Customer'}
               </div>
-              <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px', lineHeight: 1.4 }}>
+              <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary, #475569)', marginTop: '2px', lineHeight: 1.4 }}>
                 <div>{v.address_line1 || 'TS No 1060, North 4th Street,'}</div>
                 <div>{v.city ? `${v.city}, ` : 'Pudukkottai, '}{v.state || 'Tamil Nadu'}{v.pincode ? ` - ${v.pincode}` : ' - 622001'}, India</div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '8px', fontSize: '11px' }}>
                 {v.party_phone && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#475569' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--color-text-secondary, #475569)' }}>
                     <Smartphone size={10} color="#EA580C" />
                     <span>{v.party_phone}</span>
                   </div>
                 )}
                 {v.party_email && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#475569' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--color-text-secondary, #475569)' }}>
                     <Mail size={10} color="#EA580C" />
                     <span>{v.party_email}</span>
                   </div>
@@ -533,21 +533,21 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
           <div style={{ overflowX: 'auto', margin: '18px 0 20px 0' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
               <thead>
-                <tr style={{ backgroundColor: '#FFF7ED', borderTop: '1px solid #FED7AA', borderBottom: '1px solid #FED7AA' }}>
-                  <th style={{ width: '36px', padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: '#0F172A' }}>#</th>
-                  <th style={{ padding: '10px 10px', textAlign: 'left', fontWeight: 700, color: '#0F172A' }}>
+                <tr style={{ backgroundColor: 'var(--color-surface-secondary, #FFF7ED)', borderTop: '1px solid var(--color-border, #FED7AA)', borderBottom: '1px solid var(--color-border, #FED7AA)' }}>
+                  <th style={{ width: '36px', padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text, #0F172A)' }}>#</th>
+                  <th style={{ padding: '10px 10px', textAlign: 'left', fontWeight: 700, color: 'var(--color-text, #0F172A)' }}>
                     <div>Description</div>
-                    <div style={{ fontSize: '10px', fontWeight: 400, color: '#64748B' }}>(Item with Serial No. or Item Description)</div>
+                    <div style={{ fontSize: '10px', fontWeight: 400, color: 'var(--color-text-secondary, #64748B)' }}>(Item with Serial No. or Item Description)</div>
                   </th>
-                  <th style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: '#0F172A', width: '90px' }}>HSN/SAC</th>
-                  <th style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: '#0F172A', width: '55px' }}>Qty</th>
-                  <th style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: '#0F172A', width: '55px' }}>Unit</th>
-                  <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 700, color: '#0F172A', width: '105px' }}>
+                  <th style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text, #0F172A)', width: '90px' }}>HSN/SAC</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text, #0F172A)', width: '55px' }}>Qty</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text, #0F172A)', width: '55px' }}>Unit</th>
+                  <th style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text, #0F172A)', width: '105px' }}>
                     <div>Rate (₹)</div>
-                    <div style={{ fontSize: '10px', fontWeight: 400, color: '#64748B' }}>(Incl. of Tax)</div>
+                    <div style={{ fontSize: '10px', fontWeight: 400, color: 'var(--color-text-secondary, #64748B)' }}>(Incl. of Tax)</div>
                   </th>
-                  <th style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: '#0F172A', width: '65px' }}>Tax %</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#0F172A', width: '115px' }}>Amount (₹)</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: 'var(--color-text, #0F172A)', width: '65px' }}>Tax %</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text, #0F172A)', width: '115px' }}>Amount (₹)</th>
                 </tr>
               </thead>
               <tbody>
@@ -556,14 +556,14 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
                   const warrantyYrs = l.warranty_months ? Math.round(l.warranty_months / 12) : (l.item_warranty_months ? Math.round(l.item_warranty_months / 12) : 0);
 
                   return (
-                    <tr key={l.line_id || i} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '12px 8px', textAlign: 'center', color: '#64748B', verticalAlign: 'top' }}>{i + 1}</td>
+                    <tr key={l.line_id || i} style={{ borderBottom: '1px solid var(--color-border, #F1F5F9)' }}>
+                      <td style={{ padding: '12px 8px', textAlign: 'center', color: 'var(--color-text-secondary, #64748B)', verticalAlign: 'top' }}>{i + 1}</td>
                       <td style={{ padding: '12px 10px', verticalAlign: 'top' }}>
-                        <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '12.5px' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--color-text, #0F172A)', fontSize: '12.5px' }}>
                           {l.item_name || l.description || 'Stock Item'}
                         </div>
                         {serials.length > 0 && (
-                          <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                          <div style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748B)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
                             S/N: {serials.join(', ')}
                           </div>
                         )}
@@ -588,22 +588,22 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
                           </div>
                         )}
                       </td>
-                      <td style={{ padding: '12px 8px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: '#475569', verticalAlign: 'top' }}>
+                      <td style={{ padding: '12px 8px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: 'var(--color-text-secondary, #475569)', verticalAlign: 'top' }}>
                         {l.hsn_sac || '—'}
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'center', verticalAlign: 'top' }}>
-                        <strong style={{ color: '#0F172A' }}>{l.quantity}</strong>
+                        <strong style={{ color: 'var(--color-text, #0F172A)' }}>{l.quantity}</strong>
                       </td>
-                      <td style={{ padding: '12px 8px', textAlign: 'center', color: '#64748B', fontSize: '11px', verticalAlign: 'top' }}>
+                      <td style={{ padding: '12px 8px', textAlign: 'center', color: 'var(--color-text-secondary, #64748B)', fontSize: '11px', verticalAlign: 'top' }}>
                         {l.unit_symbol || 'Nos'}
                       </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'var(--font-mono)', verticalAlign: 'top' }}>
+                      <td style={{ padding: '12px 10px', textAlign: 'right', fontFamily: 'var(--font-mono)', verticalAlign: 'top', color: 'var(--color-text, #0F172A)' }}>
                         {formatINR(l.rate_paise).replace('₹ ', '')}
                       </td>
-                      <td style={{ padding: '12px 8px', textAlign: 'center', fontSize: '11.5px', color: '#475569', verticalAlign: 'top' }}>
+                      <td style={{ padding: '12px 8px', textAlign: 'center', fontSize: '11.5px', color: 'var(--color-text-secondary, #475569)', verticalAlign: 'top' }}>
                         {l.gst_rate || 0}%
                       </td>
-                      <td style={{ padding: '12px 12px', textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-mono)', color: '#0F172A', verticalAlign: 'top' }}>
+                      <td style={{ padding: '12px 12px', textAlign: 'right', fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--color-text, #0F172A)', verticalAlign: 'top' }}>
                         {formatINR(l.total_amount_paise).replace('₹ ', '')}
                       </td>
                     </tr>
@@ -616,17 +616,17 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
           {/* Bottom Totals & Amount in Words matching mockup */}
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 280px', gap: '24px', alignItems: 'start', marginTop: '16px' }}>
             <div>
-              <div style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', marginBottom: '6px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--color-text, #0F172A)', marginBottom: '6px' }}>
                 Amount in Words
               </div>
               <div
                 style={{
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid #E2E8F0',
+                  backgroundColor: 'var(--color-surface-secondary, #F8FAFC)',
+                  border: '1px solid var(--color-border, #E2E8F0)',
                   borderRadius: '6px',
                   padding: '12px 16px',
                   fontSize: '12px',
-                  color: '#475569',
+                  color: 'var(--color-text-secondary, #475569)',
                   fontWeight: 500
                 }}
               >
@@ -635,32 +635,32 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
             </div>
 
             {/* Calculations Breakdown */}
-            <div style={{ border: '1px solid #E2E8F0', borderRadius: '6px', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#475569' }}>
+            <div style={{ border: '1px solid var(--color-border, #E2E8F0)', borderRadius: '6px', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', borderBottom: '1px solid var(--color-border, #F1F5F9)', fontSize: '12px', color: 'var(--color-text-secondary, #475569)' }}>
                 <span>Sub Total</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{formatINR(v.taxable_amount_paise)}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{formatINR(v.taxable_amount_paise)}</span>
               </div>
 
               {isInterState ? (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#475569' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', borderBottom: '1px solid var(--color-border, #F1F5F9)', fontSize: '12px', color: 'var(--color-text-secondary, #475569)' }}>
                   <span>IGST (18%)</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{formatINR(v.igst_amount_paise)}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{formatINR(v.igst_amount_paise)}</span>
                 </div>
               ) : (
                 <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#475569' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', borderBottom: '1px solid var(--color-border, #F1F5F9)', fontSize: '12px', color: 'var(--color-text-secondary, #475569)' }}>
                     <span>CGST (9%)</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{formatINR(v.cgst_amount_paise)}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{formatINR(v.cgst_amount_paise)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', borderBottom: '1px solid #F1F5F9', fontSize: '12px', color: '#475569' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 14px', borderBottom: '1px solid var(--color-border, #F1F5F9)', fontSize: '12px', color: 'var(--color-text-secondary, #475569)' }}>
                     <span>SGST (9%)</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{formatINR(v.sgst_amount_paise)}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{formatINR(v.sgst_amount_paise)}</span>
                   </div>
                 </>
               )}
 
               {v.round_off_paise !== 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 14px', borderBottom: '1px solid #F1F5F9', fontSize: '11.5px', color: '#64748B' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 14px', borderBottom: '1px solid var(--color-border, #F1F5F9)', fontSize: '11.5px', color: 'var(--color-text-secondary, #64748B)' }}>
                   <span>Round Off</span>
                   <span style={{ fontFamily: 'var(--font-mono)' }}>{formatINR(v.round_off_paise)}</span>
                 </div>
@@ -671,14 +671,14 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
                   display: 'flex',
                   justifyContent: 'space-between',
                   padding: '10px 14px',
-                  backgroundColor: '#FFEDD5',
+                  backgroundColor: 'var(--color-surface-secondary, #FFEDD5)',
                   fontSize: '14px',
                   fontWeight: 800,
                   color: '#EA580C'
                 }}
               >
                 <span>Grand Total</span>
-                <span style={{ fontFamily: 'var(--font-mono)', color: '#0F172A' }}>{formatINR(v.total_amount_paise)}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text, #0F172A)' }}>{formatINR(v.total_amount_paise)}</span>
               </div>
             </div>
         </div>
@@ -688,9 +688,9 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
         {/* Payment Status Card */}
-        <div className="ledger-card" style={{ padding: '16px 18px', borderRadius: '10px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
+        <div className="ledger-card" style={{ padding: '16px 18px', borderRadius: '10px', backgroundColor: 'var(--color-surface, #FFFFFF)', border: '1px solid var(--color-border, #E2E8F0)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>
+            <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-text, #0F172A)' }}>
               Payment Status
             </span>
             <span
@@ -707,11 +707,11 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
             </span>
           </div>
 
-          <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '4px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>
             {settlement.status === 'PAID' ? `Paid on ${formatDateDisplay(v.voucher_date)}` : `Due by ${formatDateDisplay(v.due_date || v.voucher_date)}`}
           </div>
 
-          <div style={{ fontSize: '20px', fontWeight: 900, fontFamily: 'var(--font-mono)', color: '#0F172A', marginTop: '2px' }}>
+          <div style={{ fontSize: '20px', fontWeight: 900, fontFamily: 'var(--font-mono)', color: 'var(--color-text, #0F172A)', marginTop: '2px' }}>
             {formatINR(settlement.paidPaise || settlement.totalPaise)}
           </div>
 
@@ -736,91 +736,91 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
         </div>
 
         {/* Payment Details Card */}
-        <div className="ledger-card" style={{ padding: '16px 18px', borderRadius: '10px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
-          <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', marginBottom: '12px' }}>
+        <div className="ledger-card" style={{ padding: '16px 18px', borderRadius: '10px', backgroundColor: 'var(--color-surface, #FFFFFF)', border: '1px solid var(--color-border, #E2E8F0)' }}>
+          <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-text, #0F172A)', marginBottom: '12px' }}>
             Payment Details
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '11.5px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '95px 6px 1fr' }}>
-              <span style={{ color: '#64748B' }}>Mode</span>
+              <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Mode</span>
               <span>:</span>
-              <strong style={{ color: '#0F172A' }}>{settlement.mode}</strong>
+              <strong style={{ color: 'var(--color-text, #0F172A)' }}>{settlement.mode}</strong>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '95px 6px 1fr' }}>
-              <span style={{ color: '#64748B' }}>Reference No</span>
+              <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Reference No</span>
               <span>:</span>
-              <span style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{v.reference_number || '326789123456'}</span>
+              <span style={{ color: 'var(--color-text, #0F172A)', fontFamily: 'var(--font-mono)' }}>{v.reference_number || '326789123456'}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '95px 6px 1fr' }}>
-              <span style={{ color: '#64748B' }}>Paid Amount</span>
+              <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Paid Amount</span>
               <span>:</span>
-              <strong style={{ color: '#0F172A', fontFamily: 'var(--font-mono)' }}>{formatINR(settlement.paidPaise || settlement.totalPaise)}</strong>
+              <strong style={{ color: 'var(--color-text, #0F172A)', fontFamily: 'var(--font-mono)' }}>{formatINR(settlement.paidPaise || settlement.totalPaise)}</strong>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '95px 6px 1fr' }}>
-              <span style={{ color: '#64748B' }}>Paid Date</span>
+              <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Paid Date</span>
               <span>:</span>
-              <span style={{ color: '#0F172A' }}>{formatDateDisplay(v.voucher_date)}</span>
+              <span style={{ color: 'var(--color-text, #0F172A)' }}>{formatDateDisplay(v.voucher_date)}</span>
             </div>
           </div>
         </div>
 
         {/* Other Information Card */}
-        <div className="ledger-card" style={{ padding: '16px 18px', borderRadius: '10px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
-          <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', marginBottom: '12px' }}>
+        <div className="ledger-card" style={{ padding: '16px 18px', borderRadius: '10px', backgroundColor: 'var(--color-surface, #FFFFFF)', border: '1px solid var(--color-border, #E2E8F0)' }}>
+          <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-text, #0F172A)', marginBottom: '12px' }}>
             Other Information
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '11.5px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '100px 6px 1fr' }}>
-              <span style={{ color: '#64748B' }}>Sales Executive</span>
+              <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Sales Executive</span>
               <span>:</span>
-              <span style={{ color: '#0F172A' }}>{v.created_by || '—'}</span>
+              <span style={{ color: 'var(--color-text, #0F172A)' }}>{v.created_by || '—'}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '100px 6px 1fr' }}>
-              <span style={{ color: '#64748B' }}>Reference No</span>
+              <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Reference No</span>
               <span>:</span>
-              <span style={{ color: '#0F172A' }}>{v.reference_number || '—'}</span>
+              <span style={{ color: 'var(--color-text, #0F172A)' }}>{v.reference_number || '—'}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '100px 6px 1fr' }}>
-              <span style={{ color: '#64748B' }}>Transport Mode</span>
+              <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Transport Mode</span>
               <span>:</span>
-              <span style={{ color: '#0F172A' }}>By Road</span>
+              <span style={{ color: 'var(--color-text, #0F172A)' }}>By Road</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '100px 6px 1fr' }}>
-              <span style={{ color: '#64748B' }}>Vehicle No.</span>
+              <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Vehicle No.</span>
               <span>:</span>
-              <span style={{ color: '#0F172A' }}>—</span>
+              <span style={{ color: 'var(--color-text, #0F172A)' }}>—</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '100px 6px 1fr' }}>
-              <span style={{ color: '#64748B' }}>E-Way Bill No</span>
+              <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>E-Way Bill No</span>
               <span>:</span>
-              <span style={{ color: '#0F172A' }}>—</span>
+              <span style={{ color: 'var(--color-text, #0F172A)' }}>—</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '100px 6px 1fr' }}>
-              <span style={{ color: '#64748B' }}>Delivery Note</span>
+              <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Delivery Note</span>
               <span>:</span>
-              <span style={{ color: '#0F172A' }}>—</span>
+              <span style={{ color: 'var(--color-text, #0F172A)' }}>—</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '100px 6px 1fr' }}>
-              <span style={{ color: '#64748B' }}>Place of Supply</span>
+              <span style={{ color: 'var(--color-text-secondary, #64748B)' }}>Place of Supply</span>
               <span>:</span>
-              <span style={{ color: '#0F172A' }}>{v.place_of_supply || 'Tamil Nadu (33)'}</span>
+              <span style={{ color: 'var(--color-text, #0F172A)' }}>{v.place_of_supply || 'Tamil Nadu (33)'}</span>
             </div>
           </div>
         </div>
 
         {/* Notes Card */}
-        <div className="ledger-card" style={{ padding: '16px 18px', borderRadius: '10px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
-          <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>
+        <div className="ledger-card" style={{ padding: '16px 18px', borderRadius: '10px', backgroundColor: 'var(--color-surface, #FFFFFF)', border: '1px solid var(--color-border, #E2E8F0)' }}>
+          <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-text, #0F172A)', marginBottom: '8px' }}>
             Notes
           </div>
           <div
             style={{
               padding: '10px 14px',
-              backgroundColor: '#FFF7ED',
+              backgroundColor: 'var(--color-surface-secondary, #FFF7ED)',
               borderRadius: '6px',
               border: '1px solid rgba(234,88,12,0.15)',
               fontSize: '12px',
-              color: '#475569',
+              color: 'var(--color-text-secondary, #475569)',
               lineHeight: 1.45
             }}
           >
@@ -829,8 +829,8 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
         </div>
 
         {/* Quick Actions Card */}
-        <div className="ledger-card" style={{ padding: '16px 18px', borderRadius: '10px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0' }}>
-          <div style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A', marginBottom: '12px' }}>
+        <div className="ledger-card" style={{ padding: '16px 18px', borderRadius: '10px', backgroundColor: 'var(--color-surface, #FFFFFF)', border: '1px solid var(--color-border, #E2E8F0)' }}>
+          <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-text, #0F172A)', marginBottom: '12px' }}>
             Quick Actions
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

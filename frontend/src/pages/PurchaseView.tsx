@@ -317,25 +317,25 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
   }, [vouchers]);
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: '1600px', margin: '0 auto', color: '#0F172A', fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)' }}>
+    <div style={{ padding: '24px 32px', maxWidth: '1600px', margin: '0 auto', color: 'var(--color-text, #0F172A)', fontFamily: 'var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif)' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
         <div>
-          <div style={{ fontSize: '13px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+          <div style={{ fontSize: '13px', color: 'var(--color-text-secondary, #64748B)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
             <span>Purchase</span>
             <span>&rsaquo;</span>
-            <span style={{ color: '#0F172A', fontWeight: 600 }}>Overview & Analytics</span>
+            <span style={{ color: 'var(--color-text, #0F172A)', fontWeight: 600 }}>Overview & Analytics</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#FFF7ED', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EA580C', border: '1px solid #FFEDD5' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--color-surface-secondary, #FFF7ED)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#EA580C', border: '1px solid var(--color-border, #FFEDD5)' }}>
               <ShoppingBag size={22} />
             </div>
             <div>
-              <h1 style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+              <h1 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-text, #0F172A)', margin: 0, letterSpacing: '-0.02em' }}>
                 Purchase
               </h1>
-              <p style={{ margin: '2px 0 0', fontSize: '13.5px', color: '#64748B' }}>
+              <p style={{ margin: '2px 0 0', fontSize: '13.5px', color: 'var(--color-text-secondary, #64748B)' }}>
                 Manage your purchases, suppliers and inventory overview.
               </p>
             </div>
@@ -353,9 +353,9 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
               padding: '9px 14px',
               fontSize: '13px',
               fontWeight: 600,
-              color: '#334155',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #CBD5E1',
+              color: 'var(--color-text, #334155)',
+              backgroundColor: 'var(--color-surface, #FFFFFF)',
+              border: '1px solid var(--color-border, #CBD5E1)',
               borderRadius: '8px',
               cursor: 'pointer'
             }}
@@ -375,9 +375,9 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                 padding: '9px 14px',
                 fontSize: '13px',
                 fontWeight: 600,
-                color: '#334155',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #CBD5E1',
+                color: 'var(--color-text, #334155)',
+                backgroundColor: 'var(--color-surface, #FFFFFF)',
+                border: '1px solid var(--color-border, #CBD5E1)',
                 borderRadius: '8px',
                 cursor: 'pointer'
               }}
@@ -619,8 +619,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '24px', marginBottom: '24px' }}>
         {/* Left: Purchase Monthly Value & Volume Trend */}
         <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)',
           borderRadius: '12px',
           padding: '20px',
           boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
@@ -628,11 +628,11 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <BarChart3 size={18} color="#EA580C" />
-              <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text, #0F172A)', margin: 0 }}>
                 Purchase Trend & Volume
               </h3>
             </div>
-            <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>
+            <span style={{ fontSize: '12px', color: 'var(--color-text-secondary, #64748B)', fontWeight: 500 }}>
               Monthly Net Value
             </span>
           </div>
@@ -644,7 +644,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
           ) : (
             <div>
               {/* Bar Chart Visualization */}
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', height: '170px', paddingBottom: '24px', borderBottom: '1px solid #F1F5F9' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', height: '170px', paddingBottom: '24px', borderBottom: '1px solid var(--color-border, #F1F5F9)' }}>
                 {monthlyTrend.map((t: { month: string; purchasePaise: number }, i: number) => {
                   const pct = Math.max(6, Math.round((t.purchasePaise / maxTrendPaise) * 100));
                   return (
@@ -661,7 +661,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                           transition: 'height 0.3s ease'
                         }}
                       />
-                      <span style={{ fontSize: '10.5px', color: '#64748B', marginTop: '6px', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: '10.5px', color: 'var(--color-text-secondary, #64748B)', marginTop: '6px', whiteSpace: 'nowrap' }}>
                         {t.month.split('-')[1] ? `${MONTHS_ABBR[parseInt(t.month.split('-')[1]) - 1]}` : t.month}
                       </span>
                     </div>
@@ -669,7 +669,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                 })}
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '12px', color: '#64748B' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '12px', color: 'var(--color-text-secondary, #64748B)' }}>
                 <span>Highest Month: {formatINR(maxTrendPaise)}</span>
                 <span>Total Aggregated: {formatINR(metrics.totalPurchasesPaise)}</span>
               </div>
@@ -679,8 +679,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
 
         {/* Right: Payment Status & Supplier Share */}
         <div style={{
-          backgroundColor: '#FFFFFF',
-          border: '1px solid #E2E8F0',
+          backgroundColor: 'var(--color-surface, #FFFFFF)',
+          border: '1px solid var(--color-border, #E2E8F0)',
           borderRadius: '12px',
           padding: '20px',
           boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
@@ -690,7 +690,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <PieChart size={18} color="#EA580C" />
-              <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text, #0F172A)', margin: 0 }}>
                 Payment Status Distribution
               </h3>
             </div>
@@ -701,11 +701,11 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '4px' }}>
                 <span style={{ color: '#16A34A', fontWeight: 600 }}>Paid ({metrics.paymentBreakdown.paidCount})</span>
-                <span style={{ color: '#0F172A', fontWeight: 600 }}>
+                <span style={{ color: 'var(--color-text, #0F172A)', fontWeight: 600 }}>
                   {metrics.totalInvoices > 0 ? Math.round((metrics.paymentBreakdown.paidCount / metrics.totalInvoices) * 100) : 0}%
                 </span>
               </div>
-              <div style={{ height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ height: '8px', backgroundColor: 'var(--color-surface-secondary, #F1F5F9)', borderRadius: '4px', overflow: 'hidden' }}>
                 <div style={{
                   height: '100%',
                   width: `${metrics.totalInvoices > 0 ? (metrics.paymentBreakdown.paidCount / metrics.totalInvoices) * 100 : 0}%`,
@@ -719,11 +719,11 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '4px' }}>
                 <span style={{ color: '#0284C7', fontWeight: 600 }}>Partially Paid ({metrics.paymentBreakdown.partialCount})</span>
-                <span style={{ color: '#0F172A', fontWeight: 600 }}>
+                <span style={{ color: 'var(--color-text, #0F172A)', fontWeight: 600 }}>
                   {metrics.totalInvoices > 0 ? Math.round((metrics.paymentBreakdown.partialCount / metrics.totalInvoices) * 100) : 0}%
                 </span>
               </div>
-              <div style={{ height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ height: '8px', backgroundColor: 'var(--color-surface-secondary, #F1F5F9)', borderRadius: '4px', overflow: 'hidden' }}>
                 <div style={{
                   height: '100%',
                   width: `${metrics.totalInvoices > 0 ? (metrics.paymentBreakdown.partialCount / metrics.totalInvoices) * 100 : 0}%`,
@@ -737,11 +737,11 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '4px' }}>
                 <span style={{ color: '#EA580C', fontWeight: 600 }}>Pending / To Pay ({metrics.paymentBreakdown.pendingCount})</span>
-                <span style={{ color: '#0F172A', fontWeight: 600 }}>
+                <span style={{ color: 'var(--color-text, #0F172A)', fontWeight: 600 }}>
                   {metrics.totalInvoices > 0 ? Math.round((metrics.paymentBreakdown.pendingCount / metrics.totalInvoices) * 100) : 0}%
                 </span>
               </div>
-              <div style={{ height: '8px', backgroundColor: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ height: '8px', backgroundColor: 'var(--color-surface-secondary, #F1F5F9)', borderRadius: '4px', overflow: 'hidden' }}>
                 <div style={{
                   height: '100%',
                   width: `${metrics.totalInvoices > 0 ? (metrics.paymentBreakdown.pendingCount / metrics.totalInvoices) * 100 : 0}%`,
@@ -756,8 +756,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
 
       {/* Supplier Insights & Top Suppliers */}
       <div style={{
-        backgroundColor: '#FFFFFF',
-        border: '1px solid #E2E8F0',
+        backgroundColor: 'var(--color-surface, #FFFFFF)',
+        border: '1px solid var(--color-border, #E2E8F0)',
         borderRadius: '12px',
         padding: '20px',
         marginBottom: '24px',
@@ -766,7 +766,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Building2 size={18} color="#EA580C" />
-            <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text, #0F172A)', margin: 0 }}>
               Top Suppliers by Purchase Value
             </h3>
           </div>
@@ -801,22 +801,22 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
               return (
                 <div key={idx} style={{
                   padding: '14px 16px',
-                  backgroundColor: '#F8FAFC',
+                  backgroundColor: 'var(--color-surface-secondary, #F8FAFC)',
                   borderRadius: '8px',
-                  border: '1px solid #E2E8F0',
+                  border: '1px solid var(--color-border, #E2E8F0)',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '6px'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 600, fontSize: '13.5px', color: '#0F172A' }}>{s.name}</span>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#EA580C', backgroundColor: '#FFF7ED', padding: '2px 6px', borderRadius: '4px' }}>
+                    <span style={{ fontWeight: 600, fontSize: '13.5px', color: 'var(--color-text, #0F172A)' }}>{s.name}</span>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#EA580C', backgroundColor: 'var(--color-surface-secondary, #FFF7ED)', padding: '2px 6px', borderRadius: '4px' }}>
                       {pct}%
                     </span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748B' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--color-text-secondary, #64748B)' }}>
                     <span>{s.count} invoice{s.count > 1 ? 's' : ''}</span>
-                    <span style={{ fontWeight: 700, color: '#0F172A' }}>{formatINR(s.amountPaise)}</span>
+                    <span style={{ fontWeight: 700, color: 'var(--color-text, #0F172A)' }}>{formatINR(s.amountPaise)}</span>
                   </div>
                 </div>
               );
@@ -827,8 +827,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
 
       {/* Compact Recent Purchase Activity Feed */}
       <div style={{
-        backgroundColor: '#FFFFFF',
-        border: '1px solid #E2E8F0',
+        backgroundColor: 'var(--color-surface, #FFFFFF)',
+        border: '1px solid var(--color-border, #E2E8F0)',
         borderRadius: '12px',
         overflow: 'hidden',
         marginBottom: '24px',
@@ -836,16 +836,16 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
       }}>
         <div style={{
           padding: '16px 20px',
-          borderBottom: '1px solid #E2E8F0',
+          borderBottom: '1px solid var(--color-border, #E2E8F0)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between'
         }}>
           <div>
-            <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text, #0F172A)', margin: 0 }}>
               Recent Purchase Invoices
             </h3>
-            <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: '#64748B' }}>
+            <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: 'var(--color-text-secondary, #64748B)' }}>
               Latest purchase vouchers recorded in the system.
             </p>
           </div>
@@ -878,7 +878,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
               <thead>
-                <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#475569', fontSize: '12px', fontWeight: 600 }}>
+                <tr style={{ backgroundColor: 'var(--color-surface-secondary, #F8FAFC)', borderBottom: '1px solid var(--color-border, #E2E8F0)', color: 'var(--color-text-secondary, #475569)', fontSize: '12px', fontWeight: 600 }}>
                   <th style={{ padding: '10px 16px' }}>Date</th>
                   <th style={{ padding: '10px 16px' }}>Invoice No.</th>
                   <th style={{ padding: '10px 16px' }}>Supplier</th>
@@ -891,8 +891,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
               </thead>
               <tbody>
                 {metrics.recentVouchers.map((v, idx) => (
-                  <tr key={v.voucher_id || idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA' }}>
-                    <td style={{ padding: '10px 16px', color: '#334155' }}>{formatDateDisplay(v.voucher_date)}</td>
+                  <tr key={v.voucher_id || idx} style={{ borderBottom: '1px solid var(--color-border, #F1F5F9)', backgroundColor: idx % 2 === 0 ? 'var(--color-surface, #FFFFFF)' : 'var(--color-surface-secondary, #FAFAFA)' }}>
+                    <td style={{ padding: '10px 16px', color: 'var(--color-text-secondary, #334155)' }}>{formatDateDisplay(v.voucher_date)}</td>
                     <td style={{ padding: '10px 16px', fontWeight: 600, color: '#EA580C' }}>
                       <button
                         onClick={() => onViewVoucher(v.voucher_id)}
@@ -901,9 +901,9 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                         {v.voucher_number || 'Draft'}
                       </button>
                     </td>
-                    <td style={{ padding: '10px 16px', fontWeight: 600, color: '#0F172A' }}>{v.party_name || '—'}</td>
-                    <td style={{ padding: '10px 16px', color: '#64748B', fontFamily: 'monospace' }}>{v.reference_no || v.supplier_invoice_no || '—'}</td>
-                    <td style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: '#0F172A' }}>
+                    <td style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{v.party_name || '—'}</td>
+                    <td style={{ padding: '10px 16px', color: 'var(--color-text-secondary, #64748B)', fontFamily: 'monospace' }}>{v.reference_no || v.supplier_invoice_no || '—'}</td>
+                    <td style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: 'var(--color-text, #0F172A)' }}>
                       {formatINR(v.total_amount_paise)}
                     </td>
                     <td style={{ padding: '10px 16px', textAlign: 'center' }}>
@@ -913,8 +913,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                         borderRadius: '9999px',
                         fontSize: '11px',
                         fontWeight: 600,
-                        backgroundColor: v.status === 'POSTED' ? '#DCFCE7' : '#F1F5F9',
-                        color: v.status === 'POSTED' ? '#15803D' : '#475569'
+                        backgroundColor: v.status === 'POSTED' ? '#DCFCE7' : 'var(--color-surface-secondary, #F1F5F9)',
+                        color: v.status === 'POSTED' ? '#15803D' : 'var(--color-text-secondary, #475569)'
                       }}>
                         {v.status || 'POSTED'}
                       </span>
@@ -926,7 +926,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
                         borderRadius: '9999px',
                         fontSize: '11px',
                         fontWeight: 600,
-                        backgroundColor: v.payment_status === 'PAID' ? '#DCFCE7' : v.payment_status === 'PARTIALLY_PAID' ? '#E0F2FE' : '#FFEDD5',
+                        backgroundColor: v.payment_status === 'PAID' ? '#DCFCE7' : v.payment_status === 'PARTIALLY_PAID' ? '#E0F2FE' : 'var(--color-surface-secondary, #FFEDD5)',
                         color: v.payment_status === 'PAID' ? '#15803D' : v.payment_status === 'PARTIALLY_PAID' ? '#0369A1' : '#C2410C'
                       }}>
                         {v.payment_status || 'Pending'}
@@ -957,15 +957,15 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
 
       {/* Quick Actions Ribbon at Bottom */}
       <div style={{
-        backgroundColor: '#FFFFFF',
-        border: '1px solid #E2E8F0',
+        backgroundColor: 'var(--color-surface, #FFFFFF)',
+        border: '1px solid var(--color-border, #E2E8F0)',
         borderRadius: '12px',
         padding: '20px',
         boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
           <TrendingUp size={18} color="#EA580C" />
-          <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+          <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text, #0F172A)', margin: 0 }}>
             Quick Actions
           </h3>
         </div>
@@ -976,8 +976,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             onClick={onCreateInvoice}
             style={{
               padding: '12px 14px',
-              backgroundColor: '#FFF7ED',
-              border: '1px solid #FFEDD5',
+              backgroundColor: 'var(--color-surface-secondary, #FFF7ED)',
+              border: '1px solid var(--color-border, #FFEDD5)',
               borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
@@ -989,7 +989,7 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             <Plus size={18} color="#EA580C" />
             <div>
               <div style={{ fontSize: '13px', fontWeight: 600, color: '#EA580C' }}>Create Purchase Invoice</div>
-              <div style={{ fontSize: '11px', color: '#64748B' }}>Record a new supplier bill</div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748B)' }}>Record a new supplier bill</div>
             </div>
           </button>
 
@@ -999,8 +999,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
               onClick={onOpenReturn}
               style={{
                 padding: '12px 14px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
+                backgroundColor: 'var(--color-surface-secondary, #F8FAFC)',
+                border: '1px solid var(--color-border, #E2E8F0)',
                 borderRadius: '8px',
                 display: 'flex',
                 alignItems: 'center',
@@ -1011,8 +1011,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             >
               <RotateCcw size={18} color="#475569" />
               <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A' }}>Record Purchase Return</div>
-                <div style={{ fontSize: '11px', color: '#64748B' }}>Return items against invoice</div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>Record Purchase Return</div>
+                <div style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748B)' }}>Return items against invoice</div>
               </div>
             </button>
           )}
@@ -1023,8 +1023,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
               onClick={onOpenRegister}
               style={{
                 padding: '12px 14px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
+                backgroundColor: 'var(--color-surface-secondary, #F8FAFC)',
+                border: '1px solid var(--color-border, #E2E8F0)',
                 borderRadius: '8px',
                 display: 'flex',
                 alignItems: 'center',
@@ -1035,8 +1035,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             >
               <FileText size={18} color="#475569" />
               <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A' }}>View Purchase Register</div>
-                <div style={{ fontSize: '11px', color: '#64748B' }}>Browse all purchase entries</div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>View Purchase Register</div>
+                <div style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748B)' }}>Browse all purchase entries</div>
               </div>
             </button>
           )}
@@ -1047,8 +1047,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
               onClick={() => onNavigateTab('masters', 'parties')}
               style={{
                 padding: '12px 14px',
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
+                backgroundColor: 'var(--color-surface-secondary, #F8FAFC)',
+                border: '1px solid var(--color-border, #E2E8F0)',
                 borderRadius: '8px',
                 display: 'flex',
                 alignItems: 'center',
@@ -1059,8 +1059,8 @@ export const PurchaseView: React.FC<PurchaseViewProps> = ({
             >
               <Building2 size={18} color="#475569" />
               <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A' }}>Manage Suppliers</div>
-                <div style={{ fontSize: '11px', color: '#64748B' }}>Directory & party balances</div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>Manage Suppliers</div>
+                <div style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748B)' }}>Directory & party balances</div>
               </div>
             </button>
           )}

@@ -434,13 +434,13 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #CBD5E1',
+              backgroundColor: 'var(--color-surface, #FFFFFF)',
+              border: '1px solid var(--color-border, #CBD5E1)',
               borderRadius: '8px',
               padding: '9px 16px',
               fontSize: '13px',
               fontWeight: 600,
-              color: '#334155',
+              color: 'var(--color-text, #334155)',
               cursor: submitting ? 'not-allowed' : 'pointer'
             }}
           >
@@ -465,13 +465,13 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #CBD5E1',
+              backgroundColor: 'var(--color-surface, #FFFFFF)',
+              border: '1px solid var(--color-border, #CBD5E1)',
               borderRadius: '8px',
               padding: '9px 16px',
               fontSize: '13px',
               fontWeight: 600,
-              color: '#334155',
+              color: 'var(--color-text, #334155)',
               cursor: 'pointer'
             }}
           >
@@ -556,10 +556,11 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
                 width: '100%',
                 padding: '9px 12px',
                 borderRadius: '8px',
-                border: '1px solid #CBD5E1',
+                border: '1px solid var(--color-border, #CBD5E1)',
                 fontSize: '13px',
                 outline: 'none',
-                backgroundColor: '#FFFFFF',
+                backgroundColor: 'var(--color-surface, #FFFFFF)',
+                color: 'var(--color-text, #0F172A)',
                 marginBottom: '14px'
               }}
             >
@@ -574,13 +575,13 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
 
           {/* Selected Customer Info Box */}
           {selectedCustomer ? (
-            <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px' }}>
+            <div style={{ borderTop: '1px solid var(--color-border, #F1F5F9)', paddingTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '12px' }}>
               <div>
-                <div style={{ fontWeight: 700, color: '#0F172A', fontSize: '13px' }}>
+                <div style={{ fontWeight: 700, color: 'var(--color-text, #0F172A)', fontSize: '13px' }}>
                   {selectedCustomer.party_name}
                 </div>
-                <div style={{ color: '#64748B', marginTop: '2px' }}>{(selectedCustomer as any).party_code || 'CUS-008'}</div>
-                <div style={{ color: '#475569', marginTop: '4px', lineHeight: 1.4 }}>
+                <div style={{ color: 'var(--color-text-secondary, #64748B)', marginTop: '2px' }}>{(selectedCustomer as any).party_code || 'CUS-008'}</div>
+                <div style={{ color: 'var(--color-text-secondary, #475569)', marginTop: '4px', lineHeight: 1.4 }}>
                   {selectedCustomer.address_line1 || selectedCustomer.address_line2 || '34, MG Road, Ernakulam,'}
                   <br />
                   {selectedCustomer.city || 'Kerala - 682016'}
@@ -588,15 +589,15 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
                   India
                 </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', color: '#475569' }}>
-                <div><span style={{ color: '#64748B', fontWeight: 500 }}>GSTIN:</span> <span style={{ fontWeight: 600 }}>{selectedCustomer.gstin || '32ABCDE1234F1Z5'}</span></div>
-                <div><span style={{ color: '#64748B', fontWeight: 500 }}>Phone:</span> {selectedCustomer.phone || '+91 98470 12345'}</div>
-                <div style={{ wordBreak: 'break-all' }}><span style={{ color: '#64748B', fontWeight: 500 }}>Email:</span> {selectedCustomer.email || 'accounts@party.in'}</div>
-                <div><span style={{ color: '#64748B', fontWeight: 500 }}>State:</span> {selectedCustomer.state || 'Kerala'} ({selectedCustomer.state_code || '32'})</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', color: 'var(--color-text-secondary, #475569)' }}>
+                <div><span style={{ color: 'var(--color-text-secondary, #64748B)', fontWeight: 500 }}>GSTIN:</span> <span style={{ fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{selectedCustomer.gstin || '32ABCDE1234F1Z5'}</span></div>
+                <div><span style={{ color: 'var(--color-text-secondary, #64748B)', fontWeight: 500 }}>Phone:</span> {selectedCustomer.phone || '+91 98470 12345'}</div>
+                <div style={{ wordBreak: 'break-all' }}><span style={{ color: 'var(--color-text-secondary, #64748B)', fontWeight: 500 }}>Email:</span> {selectedCustomer.email || 'accounts@party.in'}</div>
+                <div><span style={{ color: 'var(--color-text-secondary, #64748B)', fontWeight: 500 }}>State:</span> {selectedCustomer.state || 'Kerala'} ({selectedCustomer.state_code || '32'})</div>
               </div>
             </div>
           ) : (
-            <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '14px', color: '#94A3B8', fontSize: '12.5px', textAlign: 'center' }}>
+            <div style={{ borderTop: '1px solid var(--color-border, #F1F5F9)', paddingTop: '14px', color: 'var(--color-text-secondary, #94A3B8)', fontSize: '12.5px', textAlign: 'center' }}>
               No customer selected. Choose a customer above to view their details and outstanding bills.
             </div>
           )}
@@ -624,35 +625,35 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>
                 Receipt No. *
               </label>
-              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #CBD5E1', borderRadius: '8px', padding: '0 8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--color-border, #CBD5E1)', borderRadius: '8px', padding: '0 8px', backgroundColor: 'var(--color-surface, #FFFFFF)' }}>
                 <input
                   type="text"
                   value={receiptNumber}
                   onChange={(e) => setReceiptNumber(e.target.value)}
-                  style={{ width: '100%', padding: '8px 0', border: 'none', outline: 'none', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-mono)' }}
+                  style={{ width: '100%', padding: '8px 0', border: 'none', outline: 'none', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-mono)', backgroundColor: 'transparent', color: 'var(--color-text, #0F172A)' }}
                 />
                 <Settings size={14} color="#94A3B8" />
               </div>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>
                 Receipt Date *
               </label>
               <input
                 type="date"
                 value={receiptDate}
                 onChange={(e) => setReceiptDate(e.target.value)}
-                style={{ width: '100%', padding: '8px 10px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '12.5px', outline: 'none' }}
+                style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border, #CBD5E1)', borderRadius: '8px', fontSize: '12.5px', outline: 'none', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)' }}
               />
             </div>
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>
               Reference No. (Optional)
             </label>
             <input
@@ -660,12 +661,12 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
               value={referenceNumber}
               onChange={(e) => setReferenceNumber(e.target.value)}
               placeholder="e.g. UTR No. / Cheque No."
-              style={{ width: '100%', padding: '8px 10px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '13px', outline: 'none' }}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border, #CBD5E1)', borderRadius: '8px', fontSize: '13px', outline: 'none', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)' }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>
               Receipt Remark (Optional)
             </label>
             <input
@@ -673,7 +674,7 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
               value={receiptRemark}
               onChange={(e) => setReceiptRemark(e.target.value)}
               placeholder="Received payment towards outstanding invoices."
-              style={{ width: '100%', padding: '8px 10px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '13px', outline: 'none' }}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border, #CBD5E1)', borderRadius: '8px', fontSize: '13px', outline: 'none', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)' }}
             />
           </div>
         </div>
@@ -699,13 +700,13 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>
               Received Into *
             </label>
             <select
               value={receivedIntoLedgerId}
               onChange={(e) => setReceivedIntoLedgerId(e.target.value)}
-              style={{ width: '100%', padding: '8px 10px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '13px', outline: 'none' }}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border, #CBD5E1)', borderRadius: '8px', fontSize: '13px', outline: 'none', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)' }}
             >
               <option value="">Select bank or cash ledger...</option>
               {ledgers
@@ -717,13 +718,13 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>
               Payment Mode *
             </label>
             <select
               value={paymentMode}
               onChange={(e) => setPaymentMode(e.target.value)}
-              style={{ width: '100%', padding: '8px 10px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '13px', outline: 'none' }}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border, #CBD5E1)', borderRadius: '8px', fontSize: '13px', outline: 'none', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)' }}
             >
               <option value="Bank Transfer">Bank Transfer</option>
               <option value="UPI">UPI</option>
@@ -737,7 +738,7 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '10px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>
                 Reference No. (Optional)
               </label>
               <input
@@ -745,18 +746,18 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
                 value={modeReferenceNumber}
                 onChange={(e) => setModeReferenceNumber(e.target.value)}
                 placeholder="UTR987654321"
-                style={{ width: '100%', padding: '8px 10px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '13px', outline: 'none' }}
+                style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border, #CBD5E1)', borderRadius: '8px', fontSize: '13px', outline: 'none', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)' }}
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>
                 Reference Date (Optional)
               </label>
               <input
                 type="date"
                 value={modeReferenceDate}
                 onChange={(e) => setModeReferenceDate(e.target.value)}
-                style={{ width: '100%', padding: '8px 10px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '12.5px', outline: 'none' }}
+                style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border, #CBD5E1)', borderRadius: '8px', fontSize: '12.5px', outline: 'none', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)' }}
               />
             </div>
           </div>
@@ -794,11 +795,12 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
                 placeholder="Search invoice no. or description..."
                 value={invoiceSearch}
                 onChange={(e) => setInvoiceSearch(e.target.value)}
-                style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12.5px', outline: 'none', width: '200px' }}
+                style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--color-border, #CBD5E1)', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)', fontSize: '12.5px', outline: 'none', width: '200px' }}
               />
               <button
+                type="button"
                 onClick={() => selectedCustomerId && loadCustomerOutstanding(selectedCustomerId)}
-                style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', background: '#FFFFFF', fontSize: '12px', fontWeight: 600, color: '#334155', cursor: 'pointer' }}
+                style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--color-border, #CBD5E1)', background: 'var(--color-surface, #FFFFFF)', fontSize: '12px', fontWeight: 600, color: 'var(--color-text, #334155)', cursor: 'pointer' }}
               >
                 Load Outstanding
               </button>
@@ -808,7 +810,7 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #E2E8F0', color: '#64748B', textAlign: 'left', backgroundColor: '#F8FAFC' }}>
+                <tr style={{ borderBottom: '1px solid var(--color-border, #E2E8F0)', color: 'var(--color-text-secondary, #64748B)', textAlign: 'left', backgroundColor: 'var(--color-surface-secondary, #F8FAFC)' }}>
                   <th style={{ padding: '10px 12px', width: '36px' }}>
                     <input
                       type="checkbox"
@@ -843,7 +845,7 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
               <tbody>
                 {displayedInvoices.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: '#94A3B8' }}>
+                    <td colSpan={6} style={{ padding: '30px', textAlign: 'center', color: 'var(--color-text-secondary, #94A3B8)' }}>
                       {selectedCustomerId
                         ? 'No unpaid invoices found for this customer. Any amount will be recorded On Account.'
                         : 'Select a customer to view eligible outstanding invoices.'}
@@ -856,8 +858,8 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
                       <tr
                         key={inv.voucherId}
                         style={{
-                          borderBottom: '1px solid #F1F5F9',
-                          backgroundColor: isChecked ? '#FFF7ED' : 'transparent',
+                          borderBottom: '1px solid var(--color-border, #F1F5F9)',
+                          backgroundColor: isChecked ? 'var(--color-surface-secondary, #FFF7ED)' : 'transparent',
                           transition: 'background-color 0.15s'
                         }}
                       >
@@ -869,16 +871,16 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
                             style={{ cursor: 'pointer' }}
                           />
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#334155' }}>
+                        <td style={{ padding: '10px 12px', color: 'var(--color-text-secondary, #334155)' }}>
                           {inv.voucherDate}
                         </td>
                         <td style={{ padding: '10px 12px', fontWeight: 600, color: '#F97316', fontFamily: 'var(--font-mono)' }}>
                           {inv.voucherNumber}
                         </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--color-text, #0F172A)' }}>
                           {formatINR(inv.totalAmountPaise)}
                         </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)', color: '#0F172A' }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--color-text, #0F172A)' }}>
                           {formatINR(inv.outstandingPaise)}
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'right' }}>
@@ -894,7 +896,9 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
                               textAlign: 'right',
                               padding: '5px 8px',
                               borderRadius: '6px',
-                              border: '1px solid #CBD5E1',
+                              border: '1px solid var(--color-border, #CBD5E1)',
+                              backgroundColor: 'var(--color-surface, #FFFFFF)',
+                              color: 'var(--color-text, #0F172A)',
                               fontFamily: 'var(--font-mono)',
                               fontSize: '13px',
                               fontWeight: 600,
@@ -932,7 +936,7 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #475569)', marginBottom: '4px' }}>
               Total Received *
             </label>
             <input
@@ -944,7 +948,9 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
                 width: '100%',
                 padding: '10px 12px',
                 borderRadius: '8px',
-                border: '1px solid #CBD5E1',
+                border: '1px solid var(--color-border, #CBD5E1)',
+                backgroundColor: 'var(--color-surface, #FFFFFF)',
+                color: 'var(--color-text, #0F172A)',
                 fontSize: '16px',
                 fontWeight: 700,
                 fontFamily: 'var(--font-mono)',
@@ -953,14 +959,14 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
             />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#475569' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--color-text-secondary, #475569)' }}>
             <span>Allocated Amount</span>
-            <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{formatINR(totalAllocatedPaise)}</span>
+            <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--color-text, #0F172A)' }}>{formatINR(totalAllocatedPaise)}</span>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#475569' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--color-text-secondary, #475569)' }}>
             <span>Unallocated Amount</span>
-            <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', color: unallocatedPaise > 0 ? '#2563EB' : '#475569' }}>
+            <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', color: unallocatedPaise > 0 ? '#2563EB' : 'var(--color-text-secondary, #475569)' }}>
               {formatINR(unallocatedPaise)}
             </span>
           </div>
@@ -968,8 +974,8 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
           {/* Highlight Box */}
           <div
             style={{
-              backgroundColor: '#FFF7ED',
-              border: '1px solid #FFEDD5',
+              backgroundColor: 'var(--color-surface-secondary, #FFF7ED)',
+              border: '1px solid var(--color-border, #FFEDD5)',
               borderRadius: '8px',
               padding: '14px 16px',
               display: 'flex',
@@ -988,8 +994,8 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
           {/* Accounting Entry Preview Box */}
           <div
             style={{
-              backgroundColor: '#F0F9FF',
-              border: '1px solid #BAE6FD',
+              backgroundColor: 'var(--color-surface-secondary, #F0F9FF)',
+              border: '1px solid var(--color-border, #BAE6FD)',
               borderRadius: '8px',
               padding: '12px 14px',
               fontSize: '12px',
@@ -1002,11 +1008,11 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
               <Info size={14} />
               Accounting Entry (on Save &amp; Post)
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0C4A6E' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text, #0C4A6E)' }}>
               <span>Dr Bank ({selectedReceivedIntoLedger?.ledger_name || 'Bank'})</span>
               <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{formatINR(totalReceivedPaise)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#0C4A6E' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text, #0C4A6E)' }}>
               <span>Cr {selectedCustomer?.party_name || 'Customer'}</span>
               <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{formatINR(totalReceivedPaise)}</span>
             </div>
@@ -1039,7 +1045,7 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
           <select
             value={termsTemplate}
             onChange={(e) => setTermsTemplate(e.target.value)}
-            style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12.5px', outline: 'none' }}
+            style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--color-border, #CBD5E1)', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)', fontSize: '12.5px', outline: 'none' }}
           >
             <option value="Standard Receipt Terms">Standard Receipt Terms</option>
             <option value="Custom">Custom Terms</option>
@@ -1049,7 +1055,7 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
             rows={5}
             value={termsText}
             onChange={(e) => setTermsText(e.target.value)}
-            style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12px', lineHeight: 1.5, outline: 'none' }}
+            style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border, #CBD5E1)', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)', fontSize: '12px', lineHeight: 1.5, outline: 'none' }}
           />
         </div>
 
@@ -1078,7 +1084,7 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
             value={internalNotes}
             onChange={(e) => setInternalNotes(e.target.value)}
             placeholder="Enter internal notes... (These will NOT appear on customer-facing printed receipts)"
-            style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', lineHeight: 1.5, outline: 'none' }}
+            style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border, #CBD5E1)', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)', fontSize: '12.5px', lineHeight: 1.5, outline: 'none' }}
           />
         </div>
 
@@ -1103,7 +1109,7 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #475569)', marginBottom: '4px' }}>
               Narration (Optional)
             </label>
             <textarea
@@ -1111,7 +1117,7 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
               value={narration}
               onChange={(e) => setNarration(e.target.value)}
               placeholder="e.g. Payment received through bank transfer."
-              style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '12.5px', lineHeight: 1.5, outline: 'none' }}
+              style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--color-border, #CBD5E1)', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)', fontSize: '12.5px', lineHeight: 1.5, outline: 'none' }}
             />
           </div>
         </div>
@@ -1132,65 +1138,69 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
         >
           <div
             style={{
-              backgroundColor: '#FFFFFF',
+              backgroundColor: 'var(--color-surface, #FFFFFF)',
+              color: 'var(--color-text, #0F172A)',
               borderRadius: '12px',
               padding: '24px',
               width: '100%',
               maxWidth: '480px',
-              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+              border: '1px solid var(--color-border, #E2E8F0)'
             }}
           >
-            <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 700 }}>Add New Customer</h3>
+            <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 700, color: 'var(--color-text, #0F172A)' }}>Add New Customer</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Customer Name *</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>Customer Name *</label>
                 <input
                   type="text"
                   value={newCustName}
                   onChange={(e) => setNewCustName(e.target.value)}
                   placeholder="e.g. KB Enterprises"
-                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '13px' }}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border, #CBD5E1)', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)', borderRadius: '8px', fontSize: '13px' }}
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>GSTIN</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>GSTIN</label>
                 <input
                   type="text"
                   value={newCustGstin}
                   onChange={(e) => setNewCustGstin(e.target.value)}
                   placeholder="e.g. 32ABCDE1234F1Z5"
-                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '13px' }}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border, #CBD5E1)', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)', borderRadius: '8px', fontSize: '13px' }}
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Phone</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>Phone</label>
                 <input
                   type="text"
                   value={newCustPhone}
                   onChange={(e) => setNewCustPhone(e.target.value)}
                   placeholder="+91 98470 12345"
-                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '13px' }}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border, #CBD5E1)', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)', borderRadius: '8px', fontSize: '13px' }}
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Address</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-secondary, #64748B)', marginBottom: '4px' }}>Address</label>
                 <textarea
                   rows={2}
                   value={newCustAddress}
                   onChange={(e) => setNewCustAddress(e.target.value)}
                   placeholder="Street, City, Pincode"
-                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #CBD5E1', borderRadius: '8px', fontSize: '13px' }}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--color-border, #CBD5E1)', backgroundColor: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #0F172A)', borderRadius: '8px', fontSize: '13px' }}
                 />
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
               <button
+                type="button"
                 onClick={() => setShowNewCustomerModal(false)}
-                style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #CBD5E1', background: '#FFFFFF', fontSize: '13px', cursor: 'pointer' }}
+                style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--color-border, #CBD5E1)', background: 'var(--color-surface, #FFFFFF)', color: 'var(--color-text, #334155)', fontSize: '13px', cursor: 'pointer' }}
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleCreateCustomer}
                 disabled={savingCustomer || !newCustName.trim()}
                 style={{

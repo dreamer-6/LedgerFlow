@@ -41,6 +41,11 @@ import { ReceiptRegisterView } from './pages/ReceiptRegisterView';
 import { RecordReceiptView } from './pages/RecordReceiptView';
 import { ReceiptDetailsView } from './pages/ReceiptDetailsView';
 import { ReceiptPrintModal } from './components/receipt/ReceiptPrintModal';
+import { PaymentDashboardView } from './pages/PaymentDashboardView';
+import { PaymentRegisterView } from './pages/PaymentRegisterView';
+import { RecordPaymentView } from './pages/RecordPaymentView';
+import { PaymentDetailsView } from './pages/PaymentDetailsView';
+import { PaymentPrintModal } from './components/payment/PaymentPrintModal';
 import { PaymentsView } from './pages/PaymentsView';
 import { PaymentCreationView } from './pages/PaymentCreationView';
 import { JournalView } from './pages/JournalView';
@@ -134,7 +139,12 @@ export const App: React.FC = () => {
   const [activePrintReceiptId, setActivePrintReceiptId] = useState<string | null>(null);
   const [receiptPreviewData, setReceiptPreviewData] = useState<any | null>(null);
   const [receiptRegisterFilter, setReceiptRegisterFilter] = useState<{ allocation?: string; status?: string } | undefined>(undefined);
-  const [paymentViewMode, setPaymentViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [paymentViewMode, setPaymentViewMode] = useState<'dashboard' | 'create' | 'register' | 'view'>('dashboard');
+  const [paymentOrigin, setPaymentOrigin] = useState<'dashboard' | 'register'>('dashboard');
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
+  const [activePrintPaymentId, setActivePrintPaymentId] = useState<string | null>(null);
+  const [paymentRegisterFilter, setPaymentRegisterFilter] = useState<any>(undefined);
+  const [paymentPreviewData, setPaymentPreviewData] = useState<any | null>(null);
   const [journalViewMode, setJournalViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [serviceBillViewMode, setServiceBillViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [quotationViewMode, setQuotationViewMode] = useState<'dashboard' | 'create' | 'register' | 'view'>('dashboard');
@@ -1266,29 +1276,94 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* 1.4 Payments Module (UI-008) — Payments Dashboard & New Payment */}
+          {/* 1.4 Payments Module (UI-043) — Payment Dashboard, Register, Record Payment & Details */}
           {activeTab === 'payments' && (
             <div key="payments" className="view-container-animated">
-              {paymentViewMode === 'dashboard' ? (
-                <PaymentsView
+              {paymentViewMode === 'dashboard' && (
+                <PaymentDashboardView
                   company={company}
                   activeFy={activeFy}
-                  onCreatePayment={() => setPaymentViewMode('create')}
-                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
-                  onNavigateTab={(tab, sub) => {
-                    setActiveTab(tab);
-                    if (sub) setReportSubTab(sub);
+                  onRecordPayment={() => {
+                    setPaymentOrigin('dashboard');
+                    setPaymentViewMode('create');
+                  }}
+                  onViewRegister={(filter) => {
+                    setPaymentRegisterFilter(filter);
+                    setPaymentOrigin('dashboard');
+                    setPaymentViewMode('register');
+                  }}
+                  onSelectPayment={(id) => {
+                    setSelectedPaymentId(id);
+                    setPaymentOrigin('dashboard');
+                    setPaymentViewMode('view');
                   }}
                 />
-              ) : (
-                <PaymentCreationView
+              )}
+
+              {paymentViewMode === 'register' && (
+                <PaymentRegisterView
+                  company={company}
+                  activeFy={activeFy}
+                  initialFilter={paymentRegisterFilter}
+                  onRecordPayment={() => {
+                    setPaymentOrigin('register');
+                    setPaymentViewMode('create');
+                  }}
+                  onSelectPayment={(id) => {
+                    setSelectedPaymentId(id);
+                    setPaymentOrigin('register');
+                    setPaymentViewMode('view');
+                  }}
+                  onPrintPayment={(id) => {
+                    setActivePrintPaymentId(id);
+                  }}
+                />
+              )}
+
+              {paymentViewMode === 'create' && (
+                <RecordPaymentView
                   company={company}
                   activeFy={activeFy}
                   currentDate={currentDate}
-                  onBack={() => setPaymentViewMode('dashboard')}
-                  onPostSuccess={(voucherId) => {
-                    setActivePrintVoucherId(voucherId);
-                    setPaymentViewMode('dashboard');
+                  preselectedPartyId={(window as any)._preselectedPaymentPartyId || null}
+                  onBack={() => {
+                    setPaymentViewMode(paymentOrigin);
+                  }}
+                  onSaveSuccess={(voucherId, isPosted) => {
+                    if (isPosted) {
+                      setActivePrintPaymentId(voucherId);
+                    }
+                    setPaymentViewMode(paymentOrigin);
+                  }}
+                  onPreview={(previewPayload) => {
+                    setPaymentPreviewData(previewPayload);
+                  }}
+                  onPrint={(previewPayload) => {
+                    setPaymentPreviewData(previewPayload);
+                    setActivePrintPaymentId('preview');
+                  }}
+                />
+              )}
+
+              {paymentViewMode === 'view' && selectedPaymentId && (
+                <PaymentDetailsView
+                  voucherId={selectedPaymentId}
+                  company={company}
+                  activeFy={activeFy}
+                  onBack={() => {
+                    setPaymentViewMode(paymentOrigin);
+                  }}
+                  onPrint={(id) => {
+                    setActivePrintPaymentId(id);
+                  }}
+                  onDuplicate={(vch) => {
+                    (window as any)._preselectedPaymentPartyId = vch.party_id;
+                    setPaymentOrigin('register');
+                    setPaymentViewMode('create');
+                  }}
+                  onNavigateInvoice={(invId) => {
+                    setActiveTab('purchase');
+                    if (setPurchaseViewMode) setPurchaseViewMode('register');
                   }}
                 />
               )}
@@ -1968,6 +2043,19 @@ export const App: React.FC = () => {
           onClose={() => {
             setActivePrintReceiptId(null);
             setReceiptPreviewData(null);
+          }}
+        />
+      )}
+
+      {/* Payment Print Modal (UI-043) */}
+      {(activePrintPaymentId || paymentPreviewData) && (
+        <PaymentPrintModal
+          voucherId={activePrintPaymentId && activePrintPaymentId !== 'preview' ? activePrintPaymentId : undefined}
+          previewData={activePrintPaymentId === 'preview' ? paymentPreviewData : undefined}
+          company={company}
+          onClose={() => {
+            setActivePrintPaymentId(null);
+            setPaymentPreviewData(null);
           }}
         />
       )}
