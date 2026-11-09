@@ -1425,73 +1425,19 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                                 View Details / Print
                               </button>
 
-                              {isDraft && (
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      setActionMenuId(null);
-                                      setMenuCoords(null);
-                                      onEditInvoice(v.voucher_id);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      padding: '8px 14px',
-                                      fontSize: '12.5px',
-                                      color: 'var(--color-text, #334155)',
-                                      background: 'none',
-                                      border: 'none',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '8px',
-                                      cursor: 'pointer'
-                                    }}
-                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-secondary, #F8FAFC)')}
-                                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                  >
-                                    <Edit2 size={14} color="#EA580C" />
-                                    Edit Draft
-                                  </button>
-
-                                  <button
-                                    onClick={() => {
-                                      setActionMenuId(null);
-                                      setMenuCoords(null);
-                                      handlePostDraft(v.voucher_id);
-                                    }}
-                                    style={{
-                                      width: '100%',
-                                      padding: '8px 14px',
-                                      fontSize: '12.5px',
-                                      color: '#16A34A',
-                                      background: 'none',
-                                      border: 'none',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '8px',
-                                      cursor: 'pointer',
-                                      fontWeight: 600
-                                    }}
-                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-secondary, #F8FAFC)')}
-                                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                  >
-                                    <Check size={14} color="#16A34A" />
-                                    Post Draft
-                                  </button>
-                                </>
-                              )}
-
+                              {/* Edit Invoice (POSTED or DRAFT) */}
                               {!isCancelled && (
                                 <button
                                   onClick={() => {
                                     setActionMenuId(null);
                                     setMenuCoords(null);
-                                    setDeleteModalVoucher(v);
+                                    onEditInvoice(v.voucher_id);
                                   }}
                                   style={{
                                     width: '100%',
                                     padding: '8px 14px',
                                     fontSize: '12.5px',
-                                    color: '#DC2626',
+                                    color: 'var(--color-text, #334155)',
                                     background: 'none',
                                     border: 'none',
                                     display: 'flex',
@@ -1499,13 +1445,95 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                                     gap: '8px',
                                     cursor: 'pointer'
                                   }}
-                                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-secondary, #FEF2F2)')}
+                                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-secondary, #F8FAFC)')}
                                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                                 >
-                                  <Trash2 size={14} color="#DC2626" />
-                                  Cancel / Delete
+                                  <Edit2 size={14} color="#EA580C" />
+                                  {isDraft ? 'Edit Draft' : 'Edit Invoice'}
                                 </button>
                               )}
+
+                              {/* Restore & Edit for Cancelled Vouchers */}
+                              {isCancelled && (
+                                <button
+                                  onClick={() => {
+                                    setActionMenuId(null);
+                                    setMenuCoords(null);
+                                    onEditInvoice(v.voucher_id);
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 14px',
+                                    fontSize: '12.5px',
+                                    color: '#EA580C',
+                                    background: 'none',
+                                    border: 'none',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    cursor: 'pointer',
+                                    fontWeight: 500
+                                  }}
+                                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-secondary, #FFF7ED)')}
+                                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                >
+                                  <RotateCcw size={14} color="#EA580C" />
+                                  Restore & Edit
+                                </button>
+                              )}
+
+                              {isDraft && (
+                                <button
+                                  onClick={() => {
+                                    setActionMenuId(null);
+                                    setMenuCoords(null);
+                                    handlePostDraft(v.voucher_id);
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 14px',
+                                    fontSize: '12.5px',
+                                    color: '#16A34A',
+                                    background: 'none',
+                                    border: 'none',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    cursor: 'pointer',
+                                    fontWeight: 600
+                                  }}
+                                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-secondary, #F8FAFC)')}
+                                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                >
+                                  <Check size={14} color="#16A34A" />
+                                  Post Draft
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => {
+                                  setActionMenuId(null);
+                                  setMenuCoords(null);
+                                  setDeleteModalVoucher(v);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 14px',
+                                  fontSize: '12.5px',
+                                  color: '#DC2626',
+                                  background: 'none',
+                                  border: 'none',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  cursor: 'pointer'
+                                }}
+                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-surface-secondary, #FEF2F2)')}
+                                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                              >
+                                <Trash2 size={14} color="#DC2626" />
+                                {isCancelled ? 'Delete Permanently' : 'Cancel / Delete'}
+                              </button>
                             </div>,
                             document.body
                           )}

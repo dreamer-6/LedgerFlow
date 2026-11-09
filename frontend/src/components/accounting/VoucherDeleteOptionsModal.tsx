@@ -309,84 +309,45 @@ export const VoucherDeleteOptionsModal: React.FC<VoucherDeleteModalProps> = ({
             </button>
           </div>
 
-          {/* OPTION 2: Permanent Delete (Purge) */}
+          {/* OPTION 2: Permanent Delete */}
           <div
             style={{
-              border: isPosted ? '1.5px dashed var(--border-subtle, #CBD5E1)' : '1.5px solid #EF4444',
+              border: '1.5px solid #EF4444',
               borderRadius: '10px',
               padding: '18px',
               display: 'flex',
               flexDirection: 'column',
-              backgroundColor: isPosted ? 'var(--bg-subtle, #F8FAFC)' : 'rgba(239, 68, 68, 0.03)',
-              opacity: isPosted ? 0.75 : 1
+              backgroundColor: 'rgba(239, 68, 68, 0.03)'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-              <Trash2 size={18} color={isPosted ? '#94A3B8' : '#EF4444'} />
-              <h3 style={{ margin: 0, fontSize: '14.5px', fontWeight: 700, color: isPosted ? 'var(--text-muted, #64748B)' : '#EF4444' }}>
+              <Trash2 size={18} color="#EF4444" />
+              <h3 style={{ margin: 0, fontSize: '14.5px', fontWeight: 700, color: '#EF4444' }}>
                 2. Permanent Delete
               </h3>
             </div>
 
             {isPosted ? (
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'space-between' }}>
-                <div
-                  style={{
-                    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                    border: '1px solid rgba(239, 68, 68, 0.2)',
-                    borderRadius: '6px',
-                    padding: '10px',
-                    fontSize: '11.5px',
-                    color: '#DC2626',
-                    lineHeight: 1.45,
-                    marginBottom: '14px'
-                  }}
-                >
-                  <strong>⚠️ Strictly Disabled for Posted Invoices:</strong> Active posted vouchers cannot be permanently erased under double-entry accounting and audit trail integrity laws. Doing so would leave orphaned stock movements and imbalance journals. Use <strong>Safe Cancel</strong> on the left.
-                </div>
-
-                <button
-                  disabled
-                  style={{
-                    width: '100%',
-                    padding: '9px 14px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-subtle, #CBD5E1)',
-                    backgroundColor: 'transparent',
-                    color: 'var(--text-muted, #94A3B8)',
-                    cursor: 'not-allowed',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <Lock size={13} /> Permanent Delete Ineligible
-                </button>
-              </div>
-            ) : isCancelled ? (
               <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted, #64748B)', lineHeight: 1.45, margin: '0 0 12px 0' }}>
-                  Permanently removes this cancelled voucher from all database tables. An unalterable tombstone is logged in <strong>audit_logs</strong>. The voucher number <strong>{voucher.voucher_number}</strong> remains reserved and will never be reused.
+                  Permanently deletes this invoice from the database, reverses and cleans all double-entry ledger entries and stock movements, and completely frees voucher number <strong style={{ color: 'var(--color-text, #0F172A)' }}>{voucher.voucher_number}</strong> so it can be reused immediately.
                 </p>
 
                 {!isAuthorizedForPurge && (
                   <div style={{ fontSize: '11.5px', color: '#DC2626', marginBottom: '10px' }}>
-                    Requires OWNER or ADMIN permission to execute permanent purge.
+                    Requires OWNER or ADMIN permission to execute permanent deletion.
                   </div>
                 )}
 
                 <div style={{ marginBottom: '10px' }}>
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted, #64748B)', marginBottom: '4px' }}>
-                    Audit Deletion Reason (Mandatory):
+                    Audit Deletion Reason (Optional):
                   </label>
                   <input
                     type="text"
                     value={permanentReason}
                     onChange={(e) => setPermanentReason(e.target.value)}
-                    placeholder="e.g. Audit review purge of cancelled entry"
+                    placeholder="e.g. Created with wrong date / deleted to recreate"
                     disabled={!isAuthorizedForPurge || isSubmitting}
                     style={{
                       width: '100%',
@@ -408,7 +369,7 @@ export const VoucherDeleteOptionsModal: React.FC<VoucherDeleteModalProps> = ({
                     onChange={(e) => setConfirmedHardDelete(e.target.checked)}
                     disabled={!isAuthorizedForPurge || isSubmitting}
                   />
-                  <span>I confirm permanent purge with audit tombstone</span>
+                  <span>I confirm permanent deletion of this invoice and all associated entries</span>
                 </label>
 
                 <button
@@ -431,7 +392,75 @@ export const VoucherDeleteOptionsModal: React.FC<VoucherDeleteModalProps> = ({
                     gap: '6px'
                   }}
                 >
-                  <Trash2 size={14} /> Permanently Purge Voucher
+                  <Trash2 size={14} /> Permanently Delete Invoice
+                </button>
+              </div>
+            ) : isCancelled ? (
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted, #64748B)', lineHeight: 1.45, margin: '0 0 12px 0' }}>
+                  Permanently removes this cancelled voucher from all database tables. The voucher number <strong style={{ color: 'var(--color-text, #0F172A)' }}>{voucher.voucher_number}</strong> is completely freed so it can be reused immediately.
+                </p>
+
+                {!isAuthorizedForPurge && (
+                  <div style={{ fontSize: '11.5px', color: '#DC2626', marginBottom: '10px' }}>
+                    Requires OWNER or ADMIN permission to execute permanent deletion.
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '10px' }}>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted, #64748B)', marginBottom: '4px' }}>
+                    Audit Deletion Reason (Optional):
+                  </label>
+                  <input
+                    type="text"
+                    value={permanentReason}
+                    onChange={(e) => setPermanentReason(e.target.value)}
+                    placeholder="e.g. Audit cleanup / delete cancelled voucher"
+                    disabled={!isAuthorizedForPurge || isSubmitting}
+                    style={{
+                      width: '100%',
+                      padding: '7px 10px',
+                      fontSize: '12px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-subtle, #CBD5E1)',
+                      backgroundColor: 'var(--input-bg, var(--color-surface, #FFFFFF))',
+                      color: 'var(--color-text, #0F172A)',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: 'var(--text-secondary, #475569)', marginBottom: '14px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={confirmedHardDelete}
+                    onChange={(e) => setConfirmedHardDelete(e.target.checked)}
+                    disabled={!isAuthorizedForPurge || isSubmitting}
+                  />
+                  <span>I confirm permanent deletion of this cancelled voucher</span>
+                </label>
+
+                <button
+                  onClick={handlePermanentAction}
+                  disabled={!isAuthorizedForPurge || !confirmedHardDelete || isSubmitting}
+                  style={{
+                    width: '100%',
+                    padding: '9px 14px',
+                    fontSize: '12.5px',
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: '#DC2626',
+                    color: '#FFFFFF',
+                    cursor: (!isAuthorizedForPurge || !confirmedHardDelete || isSubmitting) ? 'not-allowed' : 'pointer',
+                    opacity: (!isAuthorizedForPurge || !confirmedHardDelete || isSubmitting) ? 0.6 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Trash2 size={14} /> Permanently Delete Voucher
                 </button>
               </div>
             ) : (

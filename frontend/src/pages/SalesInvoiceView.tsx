@@ -220,15 +220,18 @@ interface ComboboxItem {
 
 const Combobox: React.FC<{
   value: string;
+  displayValue?: string;
   items: ComboboxItem[];
   placeholder?: string;
   onSelect: (id: string) => void;
   onClear?: () => void;
+  onTextChange?: (text: string) => void;
   onAddNew?: () => void;
   addNewLabel?: string;
   style?: React.CSSProperties;
   inputId?: string;
-}> = ({ value, items, placeholder = 'Search…', onSelect, onClear, onAddNew, addNewLabel, style, inputId }) => {
+  autoFocus?: boolean;
+}> = ({ value, displayValue, items, placeholder = 'Search…', onSelect, onClear, onTextChange, onAddNew, addNewLabel, style, inputId, autoFocus }) => {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [highlightIdx, setHighlightIdx] = useState<number>(-1);
@@ -237,6 +240,7 @@ const Combobox: React.FC<{
   const [coords, setCoords] = useState<{ top: number; left: number; width: number; openUp: boolean } | null>(null);
 
   const selected = items.find(i => i.id === value);
+  const effectiveLabel = selected ? selected.label : (displayValue || '');
 
   // Position calculation for Portal dropdown
   useEffect(() => {
@@ -340,31 +344,39 @@ const Combobox: React.FC<{
         <input
           id={inputId}
           type="text"
+          autoFocus={autoFocus}
           className="lf-input"
-          placeholder={selected ? selected.label : placeholder}
-          value={open ? q : (selected ? selected.label : '')}
+          placeholder={effectiveLabel || placeholder}
+          value={open ? q : effectiveLabel}
           onChange={e => {
             setQ(e.target.value);
+            if (onTextChange) {
+              onTextChange(e.target.value);
+            }
             if (!open) setOpen(true);
           }}
-          onFocus={() => {
+          onFocus={e => {
             setOpen(true);
-            setQ('');
+            setQ(effectiveLabel);
+            try {
+              e.target.select();
+            } catch {}
           }}
           onKeyDown={handleKeyDown}
           style={{
             width: '100%',
             paddingRight: '32px',
             fontSize: '12.5px',
-            fontWeight: selected && !open ? 600 : 400
+            fontWeight: effectiveLabel && !open ? 600 : 400
           }}
         />
-        {selected && !open ? (
+        {(selected || displayValue) && !open ? (
           <button
             type="button"
             onClick={e => {
               e.stopPropagation();
               onClear?.();
+              setQ('');
             }}
             style={{
               position: 'absolute',
@@ -493,6 +505,19 @@ export interface SalesInvoiceViewProps {
   onPostSuccess: (voucherId: string) => void;
 }
 
+const resolveDefaultSalesTerms = (comp?: Company | null) => {
+  if (comp?.terms_and_conditions && comp.terms_and_conditions.trim()) {
+    let t = comp.terms_and_conditions.trim();
+    if (comp?.city && comp.city.toLowerCase() !== 'coimbatore' && /coimbatore jurisdiction/i.test(t)) {
+      t = t.replace(/coimbatore jurisdiction/gi, `${comp.city} jurisdiction`);
+    }
+    return t;
+  }
+  const city = comp?.city?.trim();
+  const jurisdiction = city ? `${city} jurisdiction.` : 'local jurisdiction.';
+  return `1. Goods once sold will not be taken back.\n2. Warranty as per manufacturer terms.\n3. Payment to be made within the credit period.\n4. Subject to ${jurisdiction}`;
+};
+
 export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
   company,
   activeFy,
@@ -524,9 +549,27 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
   const [referenceNo, setReferenceNo] = useState('');
   const [salesExecutive, setSalesExecutive] = useState('');
   const [narration, setNarration] = useState('');
-  const [termsAndCond, setTermsAndCond] = useState(
-    '1. Goods once sold will not be taken back.\n2. Warranty as per manufacturer terms.\n3. Payment to be made within the credit period.\n4. Subject to Coimbatore jurisdiction.'
-  );
+  const [termsAndCond, setTermsAndCond] = useState(() => resolveDefaultSalesTerms(company));
+
+  // Sync terms & conditions from company settings when creating a new invoice
+  useEffect(() => {
+    if (!editVoucherId && !initialQuotation && company) {
+      setTermsAndCond(resolveDefaultSalesTerms(company));
+    }
+  }, [company, editVoucherId, initialQuotation]);
+
+  // Auto-focus Customer / Party search box on initial load for rapid billing
+  useEffect(() => {
+    if (!editVoucherId && !initialQuotation) {
+      const timer = setTimeout(() => {
+        const custEl = document.getElementById('sales-customer-input');
+        if (custEl) {
+          (custEl as HTMLInputElement).focus();
+        }
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+  }, [editVoucherId, initialQuotation]);
   const [notes, setNotes] = useState('Thank you for your business!');
   const [taxMode, setTaxMode] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('INCLUSIVE');
 
@@ -617,6 +660,80 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     setTimeout(() => setToast(null), 4000);
   };
 
+  /* ── Helper: Resolve line item against Stock Item Master (UI-010 Conversion) ── */
+  const resolveLineFromStockItems = (
+    rawLine: any,
+    currentStockItems: any[],
+    defaultGodownId: string,
+    currentTaxMode: 'EXCLUSIVE' | 'INCLUSIVE' = taxMode
+  ): LineItem => {
+    const rawItemId = rawLine.itemId || rawLine.item_id || '';
+    const rawDesc = rawLine.description || rawLine.itemName || rawLine.item_name || '';
+
+    let matched = currentStockItems.find((s: any) => s.item_id === rawItemId);
+    if (!matched && rawDesc && rawDesc.trim()) {
+      const descTrimmed = rawDesc.trim().toLowerCase();
+      matched = currentStockItems.find((s: any) =>
+        (s.item_name && s.item_name.trim().toLowerCase() === descTrimmed) ||
+        (s.sku && s.sku.trim().toLowerCase() === descTrimmed) ||
+        (s.item_code && s.item_code.trim().toLowerCase() === descTrimmed)
+      );
+    }
+
+    if (matched) {
+      const hasSerial = Boolean(
+        matched.has_serial_no ||
+        (matched.serial_numbers && matched.serial_numbers.trim()) ||
+        matched.hasSerialNo
+      );
+      const targetGodown = rawLine.godownId || defaultGodownId;
+      const sellRate = matched.selling_rate_paise ? matched.selling_rate_paise / 100 : (Number(matched.selling_rate) || 0);
+      const rateVal = rawLine.rate !== undefined && rawLine.rate !== '' && Number(rawLine.rate) > 0
+        ? rawLine.rate
+        : (currentTaxMode === 'INCLUSIVE' ? sellRate * (1 + (matched.gst_rate ?? 18) / 100) : sellRate);
+
+      return {
+        itemId: matched.item_id,
+        description: matched.item_name,
+        subtext: rawLine.subtext || (matched.sku ? `SKU: ${matched.sku}` : matched.hsn_sac ? `HSN: ${matched.hsn_sac}` : ''),
+        hsnSac: rawLine.hsnSac || rawLine.hsn_sac || matched.hsn_sac || '',
+        quantity: rawLine.quantity || 1,
+        unit: rawLine.unit || rawLine.unit_symbol || matched.unit_symbol || 'NOS',
+        rate: rateVal,
+        discountPercent: rawLine.discountPercent || rawLine.discount_percent || 0,
+        gstRate: rawLine.gstRate !== undefined ? rawLine.gstRate : (matched.gst_rate ?? 18),
+        godownId: targetGodown,
+        sku: matched.sku || '',
+        warrantyMonths: rawLine.warrantyMonths !== undefined && Number(rawLine.warrantyMonths) > 0
+          ? Number(rawLine.warrantyMonths)
+          : (matched.warranty_months || 0),
+        warrantyDescription: rawLine.warrantyDescription || (matched.warranty_months ? (matched.warranty_months >= 12 && matched.warranty_months % 12 === 0 ? `${matched.warranty_months / 12} Year${matched.warranty_months / 12 > 1 ? 's' : ''} Warranty` : `${matched.warranty_months}m Warranty`) : ''),
+        hasSerialNo: hasSerial,
+        serialNumber: rawLine.serialNumber || '',
+        isService: Boolean(rawLine.isService || matched.item_type === 'Service')
+      };
+    }
+
+    return {
+      itemId: rawItemId,
+      description: rawDesc,
+      subtext: rawLine.subtext || '',
+      hsnSac: rawLine.hsnSac || rawLine.hsn_sac || '',
+      quantity: rawLine.quantity || 1,
+      unit: rawLine.unit || rawLine.unit_symbol || 'NOS',
+      rate: rawLine.rate || 0,
+      discountPercent: rawLine.discountPercent || rawLine.discount_percent || 0,
+      gstRate: rawLine.gstRate !== undefined ? rawLine.gstRate : 18,
+      godownId: rawLine.godownId || defaultGodownId,
+      serialNumber: rawLine.serialNumber || '',
+      isService: Boolean(rawLine.isService),
+      sku: rawLine.sku || '',
+      warrantyMonths: rawLine.warrantyMonths || 0,
+      warrantyDescription: rawLine.warrantyDescription || '',
+      hasSerialNo: Boolean(rawLine.hasSerialNo)
+    };
+  };
+
   /* ── Load Masters ── */
   useEffect(() => {
     const load = async () => {
@@ -636,9 +753,12 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
         setLedgers(ld || []);
 
         const defaultGdId = gd?.[0]?.godown_id || '';
-        setLines(prev => prev.map(l => ({ ...l, godownId: l.godownId || defaultGdId })));
+        // If lines already exist (e.g. from converted quotation), resolve against freshly loaded items
+        setLines(prev =>
+          prev.map((l) => resolveLineFromStockItems(l, items || [], defaultGdId))
+        );
 
-        // Default to first customer if none selected
+        // Default to first customer if none selected and not converting a quotation
         const customers = (pty || []).filter((p: any) => p.party_type === 'CUSTOMER' || p.party_type === 'BOTH');
         if (customers.length > 0 && !partyId) {
           setPartyId(customers[0].party_id);
@@ -682,7 +802,16 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
         setPaymentTerms(voucher.payment_terms ? voucher.payment_terms.replace(/\D/g, '') : '30');
         setReferenceNo(voucher.reference_number || '');
         setNarration(voucher.narration || '');
-        setTermsAndCond(voucher.terms_conditions || voucher.terms_and_conditions || termsAndCond);
+        const loadedTerms = voucher.terms_conditions || voucher.terms_and_conditions;
+        if (loadedTerms && !loadedTerms.startsWith('{"_draftMeta"')) {
+          let t = loadedTerms;
+          if (company?.city && company.city.toLowerCase() !== 'coimbatore' && /coimbatore jurisdiction/i.test(t)) {
+            t = t.replace(/coimbatore jurisdiction/gi, `${company.city} jurisdiction`);
+          }
+          setTermsAndCond(t);
+        } else {
+          setTermsAndCond(resolveDefaultSalesTerms(company));
+        }
 
         if (vLines && vLines.length > 0) {
           const itemLines = vLines.filter((l: any) => l.item_id);
@@ -740,6 +869,11 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     if (initialQuotation) {
       if (initialQuotation.customerId) {
         setPartyId(initialQuotation.customerId);
+        const p = parties.find(x => x.party_id === initialQuotation.customerId);
+        if (p?.state_code) setPlaceOfSupply(p.state_code);
+      }
+      if (initialQuotation.placeOfSupply) {
+        setPlaceOfSupply(initialQuotation.placeOfSupply);
       }
       if (initialQuotation.quotationNumber) {
         setReferenceNo(initialQuotation.quotationNumber);
@@ -752,23 +886,16 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
         setTaxMode(initialQuotation.taxMode);
       }
       if (initialQuotation.items && initialQuotation.items.length > 0) {
-        setLines(initialQuotation.items.map((it: any) => ({
-          itemId: it.itemId || '',
-          description: it.description || '',
-          subtext: it.subtext || '',
-          hsnSac: it.hsnSac || '',
-          quantity: it.quantity || 1,
-          unit: it.unit || 'NOS',
-          rate: it.rate || 0,
-          discountPercent: it.discountPercent || 0,
-          gstRate: it.gstRate || 18,
-          godownId: '',
-          serialNumber: '',
-          isService: it.isService || false
-        })));
+        const defaultGdId = godowns?.[0]?.godown_id || '';
+        const mappedLines = initialQuotation.items.map((it: any) =>
+          resolveLineFromStockItems(it, stockItems, defaultGdId, initialQuotation.taxMode || taxMode)
+        );
+
+        // Add a trailing blank row for rapid entry
+        setLines([...mappedLines, { ...emptyLine(), godownId: defaultGdId }]);
       }
     }
-  }, [initialQuotation]);
+  }, [initialQuotation, stockItems.length, godowns.length, parties.length]);
 
   /* ── Update payment terms & due date ── */
   const handlePaymentTermsChange = (days: string) => {
@@ -784,6 +911,12 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     setPartyId(id);
     const p = parties.find(x => x.party_id === id);
     if (p?.state_code) setPlaceOfSupply(p.state_code);
+    setTimeout(() => {
+      const firstItemEl = document.getElementById('sales-item-0');
+      if (firstItemEl) {
+        (firstItemEl as HTMLInputElement).focus();
+      }
+    }, 60);
   };
 
   /* ── Line item actions ── */
@@ -888,7 +1021,10 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     } else {
       setTimeout(() => {
         const qtyInput = document.getElementById(`sales-qty-${lineIndex}`);
-        if (qtyInput) (qtyInput as HTMLInputElement).focus();
+        if (qtyInput) {
+          (qtyInput as HTMLInputElement).focus();
+          (qtyInput as HTMLInputElement).select();
+        }
       }, 50);
     }
   };
@@ -903,16 +1039,23 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
 
   const addRow = (isService = false) => {
     const defaultGodown = godowns[0]?.godown_id || '';
-    setLines(prev => [
-      ...prev,
-      {
-        ...emptyLine(),
-        godownId: defaultGodown,
-        isService,
-        description: isService ? 'Service Item' : '',
-        unit: isService ? 'HRS' : 'NOS'
-      }
-    ]);
+    setLines(prev => {
+      const targetIdx = prev.length;
+      setTimeout(() => {
+        const nextItem = document.getElementById(`sales-item-${targetIdx}`);
+        if (nextItem) (nextItem as HTMLInputElement).focus();
+      }, 60);
+      return [
+        ...prev,
+        {
+          ...emptyLine(),
+          godownId: defaultGodown,
+          isService,
+          description: isService ? 'Service Item' : '',
+          unit: isService ? 'HRS' : 'NOS'
+        }
+      ];
+    });
   };
 
   const removeRow = (index: number) => {
@@ -1029,6 +1172,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
 
     return {
       voucherType: 'SALES',
+      allowNegativeStock: true,
       voucherDate,
       voucherNumber: status === 'DRAFT' ? undefined : (voucherNumber || undefined),
       partyId: partyId || undefined,
@@ -1461,6 +1605,8 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                 </div>
 
                 <Combobox
+                  inputId="sales-customer-input"
+                  autoFocus={!editVoucherId && !initialQuotation && !partyId}
                   value={partyId}
                   items={partyItems}
                   placeholder="Search customer name, GSTIN, city…"
@@ -1733,10 +1879,24 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                             <Combobox
                               inputId={`sales-item-${idx}`}
                               value={line.itemId}
+                              displayValue={line.description}
                               items={itemComboItems}
                               placeholder="Search item or type to add new…"
                               onSelect={id => selectItem(idx, id)}
-                              onClear={() => updateLine(idx, 'itemId', '')}
+                              onClear={() => {
+                                updateLine(idx, 'itemId', '');
+                                updateLine(idx, 'description', '');
+                                updateLine(idx, 'subtext', '');
+                              }}
+                              onTextChange={txt => {
+                                updateLine(idx, 'description', txt);
+                                const matched = stockItems.find(
+                                  s => s.item_name && s.item_name.trim().toLowerCase() === txt.trim().toLowerCase()
+                                );
+                                if (matched && matched.item_id !== line.itemId) {
+                                  selectItem(idx, matched.item_id);
+                                }
+                              }}
                               onAddNew={() => {
                                 setActiveItemRowIdx(idx);
                                 setShowQuickItemModal(true);
@@ -1823,8 +1983,8 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                             </div>
                           )}
 
-                          {/* Unit-level Serial Selection Trigger (Phase 1) */}
-                          {line.hasSerialNo && (
+                          {/* Unit-level Serial Selection Trigger (Phase 1 & UI-048) */}
+                          {(line.hasSerialNo || Boolean(line.serialNumber)) ? (
                             <div style={{ marginTop: '4px', paddingLeft: '4px' }}>
                               {(() => {
                                 const count = line.serialNumber ? line.serialNumber.split(',').filter(Boolean).length : 0;
@@ -1859,7 +2019,36 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                                 );
                               })()}
                             </div>
-                          )}
+                          ) : (line.itemId && !line.isService ? (
+                            <div style={{ marginTop: '4px', paddingLeft: '4px' }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateLine(idx, 'hasSerialNo', true);
+                                  setActiveSerialRowIdx(idx);
+                                  setShowSerialModal(true);
+                                }}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '10.5px',
+                                  fontWeight: 500,
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  color: 'var(--text-muted, #64748B)',
+                                  backgroundColor: 'transparent',
+                                  border: '1px dashed var(--border-subtle, #CBD5E1)',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title="Click to track/enter unit serial numbers for this item"
+                              >
+                                <Barcode size={11} />
+                                + Add Serial No.
+                              </button>
+                            </div>
+                          ) : null)}
 
                           {line.itemId && (
                             <div style={{ marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', paddingLeft: '4px' }}>
@@ -1926,12 +2115,16 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                             value={line.quantity}
                             min="1"
                             step="1"
+                            onFocus={e => e.target.select()}
                             onChange={e => updateLine(idx, 'quantity', e.target.value)}
                             onKeyDown={e => {
                               if (e.key === 'Enter') {
                                 e.preventDefault();
-                                const rateEl = document.getElementById(`sales-rate-${idx}`);
-                                if (rateEl) (rateEl as HTMLInputElement).focus();
+                                const rateEl = document.getElementById(`sales-rate-${idx}`) as HTMLInputElement | null;
+                                if (rateEl) {
+                                  rateEl.focus();
+                                  rateEl.select();
+                                }
                               }
                             }}
                             style={{ width: '64px', textAlign: 'center', fontFamily: 'var(--font-mono)' }}
@@ -1945,6 +2138,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                             value={line.rate}
                             min="0"
                             step="0.01"
+                            onFocus={e => e.target.select()}
                             onChange={e => updateLine(idx, 'rate', e.target.value)}
                             onKeyDown={e => {
                               if (e.key === 'Enter') {
@@ -2618,6 +2812,10 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
           setPartyId(newParty.party_id);
           if (newParty.state_code) setPlaceOfSupply(newParty.state_code);
           showToast(`Customer '${newParty.party_name}' created and selected!`);
+          setTimeout(() => {
+            const firstItemEl = document.getElementById('sales-item-0');
+            if (firstItemEl) (firstItemEl as HTMLInputElement).focus();
+          }, 60);
         }}
       />
 
@@ -2659,8 +2857,24 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
           onConfirm={(serials) => {
             updateLine(activeSerialRowIdx, 'serialNumber', serials.join(', '));
             setShowSerialModal(false);
+            setTimeout(() => {
+              const qtyEl = document.getElementById(`sales-qty-${activeSerialRowIdx}`) as HTMLInputElement | null;
+              if (qtyEl) {
+                qtyEl.focus();
+                qtyEl.select();
+              }
+            }, 60);
           }}
-          onClose={() => setShowSerialModal(false)}
+          onClose={() => {
+            setShowSerialModal(false);
+            setTimeout(() => {
+              const qtyEl = document.getElementById(`sales-qty-${activeSerialRowIdx}`) as HTMLInputElement | null;
+              if (qtyEl) {
+                qtyEl.focus();
+                qtyEl.select();
+              }
+            }, 60);
+          }}
         />
       )}
     </div>

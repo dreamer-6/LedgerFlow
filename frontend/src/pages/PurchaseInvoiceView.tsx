@@ -164,6 +164,12 @@ export interface PurchaseInvoiceViewProps {
   onPostSuccess: (voucherId: string) => void;
 }
 
+const resolveDefaultPurchaseTerms = (comp?: Company | null) => {
+  const city = comp?.city?.trim();
+  const jurisdiction = city ? `${city} jurisdiction.` : 'local jurisdiction.';
+  return `1. Goods received in good condition will not be taken back.\n2. Warranty as per manufacturer terms.\n3. Payment to be made within the credit period.\n4. Subject to ${jurisdiction}`;
+};
+
 export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
   company,
   activeFy,
@@ -197,6 +203,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
   const [activeSerialModalLineId, setActiveSerialModalLineId] = useState<string | null>(null);
 
   // Invoice Details
+  const [editVoucherStatus, setEditVoucherStatus] = useState<string | null>(null);
   const [voucherNumber, setVoucherNumber] = useState('');
   const [voucherDate, setVoucherDate] = useState(() => {
     return currentDate || new Date().toISOString().split('T')[0];
@@ -310,9 +317,13 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
   };
 
   // Notes & Terms
-  const [termsAndCond, setTermsAndCond] = useState(
-    '1. Goods received in good condition will not be taken back.\n2. Warranty as per manufacturer terms.\n3. Payment to be made within the credit period.\n4. Subject to local jurisdiction.'
-  );
+  const [termsAndCond, setTermsAndCond] = useState(() => resolveDefaultPurchaseTerms(company));
+
+  useEffect(() => {
+    if (!editVoucherId && company) {
+      setTermsAndCond(resolveDefaultPurchaseTerms(company));
+    }
+  }, [company, editVoucherId]);
   const [notes, setNotes] = useState('');
   const [narration, setNarration] = useState('');
 
@@ -396,12 +407,26 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
     }
   }, [company, activeFy, editVoucherId]);
 
+  // Auto-focus Supplier / Party search box on initial load for rapid billing
+  useEffect(() => {
+    if (!editVoucherId) {
+      const timer = setTimeout(() => {
+        const supEl = document.getElementById('purchase-supplier-input');
+        if (supEl) {
+          (supEl as HTMLInputElement).focus();
+        }
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+  }, [editVoucherId]);
+
   // Load existing voucher when editVoucherId is provided
   useEffect(() => {
     if (!editVoucherId) return;
     api.getVoucherById(editVoucherId)
       .then(({ voucher, lines: vLines }) => {
         if (!voucher) return;
+        setEditVoucherStatus(voucher.status);
         if (voucher.party_id) setPartyId(voucher.party_id);
         if (voucher.voucher_number) setVoucherNumber(voucher.voucher_number);
         if (voucher.voucher_date) setVoucherDate(voucher.voucher_date.split('T')[0]);
@@ -476,22 +501,29 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
 
   // Handle adding rows
   const handleAddRow = () => {
-    setLines(prev => [
-      ...prev,
-      {
-        id: 'ln_' + Date.now() + Math.random().toString(36).substring(2, 6),
-        itemId: '',
-        name: '',
-        description: '',
-        hsnCode: '',
-        quantity: 1,
-        unit: 'NOS',
-        rate: '',
-        discountPercent: 0,
-        gstRate: 18,
-        serialNumber: ''
-      }
-    ]);
+    setLines(prev => {
+      const nextIdx = prev.length;
+      setTimeout(() => {
+        const itemSelect = document.querySelector(`[data-purchase-row="${nextIdx}"][data-purchase-field="item"]`) as HTMLElement;
+        itemSelect?.focus();
+      }, 60);
+      return [
+        ...prev,
+        {
+          id: 'ln_' + Date.now() + Math.random().toString(36).substring(2, 6),
+          itemId: '',
+          name: '',
+          description: '',
+          hsnCode: '',
+          quantity: 1,
+          unit: 'NOS',
+          rate: '',
+          discountPercent: 0,
+          gstRate: 18,
+          serialNumber: ''
+        }
+      ];
+    });
   };
 
   const handleDeleteRow = (id: string) => {
@@ -972,10 +1004,13 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
     try {
       let finalVchId = editVoucherId;
       if (editVoucherId) {
-        await api.updateVoucher(editVoucherId, payload);
-        await api.postDraftVoucher(editVoucherId);
-        showToast(`Purchase Invoice ${voucherNumber || ''} posted successfully!`);
-        onPostSuccess(editVoucherId);
+        const res = await api.updateVoucher(editVoucherId, payload);
+        if (editVoucherStatus === 'DRAFT') {
+          await api.postDraftVoucher(res?.voucherId || editVoucherId);
+        }
+        finalVchId = res?.voucherId || editVoucherId;
+        showToast(`Purchase Invoice ${voucherNumber || ''} updated successfully!`);
+        onPostSuccess(finalVchId!);
       } else {
         const res = await api.postVoucher(payload);
         if (res.settlementVoucherNumber) {
@@ -1127,7 +1162,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
               boxShadow: '0 2px 8px rgba(249,115,22,0.25)'
             }}
           >
-            <Send size={14} /> {isSaving ? 'Posting…' : 'Save & Post'}
+            <Send size={14} /> {isSaving ? 'Posting…' : (editVoucherId ? 'Update Invoice' : 'Save & Post')}
           </button>
         </div>
       </div>
@@ -1220,6 +1255,8 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
               >
                 <Search size={14} color="var(--text-muted)" style={{ marginRight: '8px' }} />
                 <input
+                  id="purchase-supplier-input"
+                  autoFocus={!editVoucherId && !partyId}
                   type="text"
                   placeholder="Select or search supplier by name, GSTIN, phone…"
                   value={
@@ -1231,7 +1268,36 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
                     setSupplierSearch(e.target.value);
                     setIsSupplierDropdownOpen(true);
                   }}
-                  onFocus={() => setIsSupplierDropdownOpen(true)}
+                  onFocus={e => {
+                    setIsSupplierDropdownOpen(true);
+                    try {
+                      e.target.select();
+                    } catch {}
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      const filtered = suppliers.filter(s => {
+                        if (!supplierSearch.trim()) return true;
+                        const q = supplierSearch.toLowerCase();
+                        return (
+                          s.party_name.toLowerCase().includes(q) ||
+                          (s.gstin || '').toLowerCase().includes(q) ||
+                          (s.phone || '').includes(q)
+                        );
+                      });
+                      if (filtered.length > 0) {
+                        e.preventDefault();
+                        const picked = filtered[0];
+                        setPartyId(picked.party_id);
+                        setSupplierSearch('');
+                        setIsSupplierDropdownOpen(false);
+                        setTimeout(() => {
+                          const firstItem = document.querySelector('[data-purchase-row="0"][data-purchase-field="item"]') as HTMLElement | null;
+                          firstItem?.focus();
+                        }, 60);
+                      }
+                    }
+                  }}
                   style={{
                     width: '100%',
                     border: 'none',
@@ -1290,6 +1356,10 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
                           setPartyId(s.party_id);
                           setSupplierSearch('');
                           setIsSupplierDropdownOpen(false);
+                          setTimeout(() => {
+                            const firstItem = document.querySelector('[data-purchase-row="0"][data-purchase-field="item"]') as HTMLElement | null;
+                            firstItem?.focus();
+                          }, 60);
                         }}
                         style={{
                           padding: '10px 14px',
@@ -1823,13 +1893,18 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
                             type="number"
                             min="1"
                             value={line.quantity}
+                            onFocus={e => e.target.select()}
                             onChange={e => handleLineChange(line.id, 'quantity', e.target.value)}
                             data-purchase-row={index}
                             data-purchase-field="qty"
                             onKeyDown={e => {
                               if (e.key === 'Enter') {
                                 e.preventDefault();
-                                (document.querySelector(`[data-purchase-row="${index}"][data-purchase-field="rate"]`) as HTMLElement)?.focus();
+                                const rateInput = document.querySelector(`[data-purchase-row="${index}"][data-purchase-field="rate"]`) as HTMLInputElement | null;
+                                if (rateInput) {
+                                  rateInput.focus();
+                                  rateInput.select();
+                                }
                               }
                             }}
                             style={{
@@ -1848,6 +1923,7 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
                             type="number"
                             step="0.01"
                             value={line.rate}
+                            onFocus={e => e.target.select()}
                             onChange={e => handleLineChange(line.id, 'rate', e.target.value)}
                             placeholder="0.00"
                             data-purchase-row={index}
@@ -2712,6 +2788,10 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
           setPartyId(newSup.party_id);
           if (newSup.state_code) setPlaceOfSupply(newSup.state_code);
           showToast(`Supplier '${newSup.party_name}' added successfully!`);
+          setTimeout(() => {
+            const firstItem = document.querySelector('[data-purchase-row="0"][data-purchase-field="item"]') as HTMLElement | null;
+            firstItem?.focus();
+          }, 60);
         }}
       />
 
@@ -2782,8 +2862,24 @@ export const PurchaseInvoiceView: React.FC<PurchaseInvoiceViewProps> = ({
           onConfirm={(serials) => {
             handleLineChange(lines[activeSerialRowIdx].id, 'serialNumber', serials.join(', '));
             setShowSerialModal(false);
+            setTimeout(() => {
+              const qtyEl = document.querySelector(`[data-purchase-row="${activeSerialRowIdx}"][data-purchase-field="qty"]`) as HTMLInputElement | null;
+              if (qtyEl) {
+                qtyEl.focus();
+                qtyEl.select();
+              }
+            }, 60);
           }}
-          onClose={() => setShowSerialModal(false)}
+          onClose={() => {
+            setShowSerialModal(false);
+            setTimeout(() => {
+              const qtyEl = document.querySelector(`[data-purchase-row="${activeSerialRowIdx}"][data-purchase-field="qty"]`) as HTMLInputElement | null;
+              if (qtyEl) {
+                qtyEl.focus();
+                qtyEl.select();
+              }
+            }, 60);
+          }}
         />
       )}
     </div>

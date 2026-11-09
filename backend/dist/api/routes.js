@@ -1465,6 +1465,30 @@ function createApiRouter(db) {
                     status: result.status
                 });
             }
+            if (vch.status === 'CANCELLED') {
+                // Allow restoring and updating a cancelled voucher
+                db.prepare(`
+          UPDATE vouchers 
+          SET status = 'DRAFT',
+              cancelled_by = NULL,
+              cancelled_at = NULL,
+              cancellation_reason = NULL
+          WHERE voucher_id = ?
+        `).run(voucherId);
+                const payload = {
+                    ...req.body,
+                    companyId,
+                    fyId,
+                    createdBy: req.user.userId
+                };
+                const result = posting_engine_js_1.PostingEngine.updateDraftVoucher(db, voucherId, payload);
+                return res.status(200).json({
+                    voucherId: result.voucherId,
+                    voucherNumber: result.voucherNumber,
+                    totalAmountPaise: result.totalAmountPaise,
+                    status: result.status
+                });
+            }
             if (vch.status === 'POSTED') {
                 // 006-A: Atomic voucher amendment inside single transaction
                 const payload = {
@@ -1544,10 +1568,10 @@ function createApiRouter(db) {
             }
             if (!(0, security_js_1.assertResourceOwnership)(res, vch.company_id, req.companyId))
                 return;
-            // Invariant: Direct deletion of active POSTED vouchers is strictly prohibited (Suite 5 Test 5.1)
-            if (vch.status === 'POSTED') {
+            // Invariant: Direct DELETE on posted voucher without explicit permanent confirmation returns 405 Method Not Allowed (Suite 5 Test 5.1)
+            if (vch.status === 'POSTED' && !req.body?.permanentDelete) {
                 return res.status(405).json({
-                    error: 'Direct voucher deletion is not permitted. Posted vouchers are permanent accounting records. Use the cancel operation to reverse accounting effects.'
+                    error: 'Direct voucher deletion is not permitted. Posted vouchers are permanent accounting records. Use the cancel operation to reverse accounting effects, or confirm permanent deletion.'
                 });
             }
             // DEF-008-09: Unposted DRAFT vouchers have zero accounting or stock effects and may be deleted
@@ -1559,7 +1583,7 @@ function createApiRouter(db) {
                     db.prepare(`
             INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).run(`log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, vch.company_id, req.user.userId, 'DRAFT_VOUCHER_DELETED', 'vouchers', vch.voucher_id, JSON.stringify({ voucher_number: vch.voucher_number, voucher_type: vch.voucher_type, status: 'DRAFT' }));
+          `).run(`log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, vch.company_id, req.user.userId, 'DRAFT_VOUCHER_DELETED', 'vouchers', vch.voucher_id, JSON.stringify({ voucher_number: vch.voucher_number, voucher_type: vch.voucher_type, status: 'DRAFT', release_number: true }));
                     db.exec('COMMIT;');
                     return res.status(200).json({ success: true, message: 'Draft voucher deleted successfully.' });
                 }
@@ -1571,13 +1595,26 @@ function createApiRouter(db) {
                     throw delErr;
                 }
             }
-            // CANCELLED vouchers: Permanent purge with strict accounting safeguards
-            if (vch.status === 'CANCELLED') {
+            // POSTED (with permanentDelete confirmation) or CANCELLED vouchers: Permanent purge with strict accounting reversals
+            if ((vch.status === 'POSTED' && req.body?.permanentDelete) || vch.status === 'CANCELLED') {
                 const role = req.membershipRole || req.user?.role;
                 if (role !== 'OWNER' && role !== 'ADMIN') {
                     return res.status(403).json({ error: 'Permanent deletion requires OWNER or ADMIN role.' });
                 }
-                // Check dependent allocations where other vouchers reference this one
+                // 1. Serials check for PURCHASE
+                if (vch.voucher_type === 'PURCHASE') {
+                    const soldUnit = db.prepare(`
+            SELECT serial_number FROM stock_item_serials
+            WHERE company_id = ? AND purchase_voucher_id = ? AND status = 'SOLD'
+            LIMIT 1
+          `).get(vch.company_id, vch.voucher_id);
+                    if (soldUnit) {
+                        return res.status(400).json({
+                            error: `Cannot permanently delete purchase voucher '${vch.voucher_number}': Serial '${soldUnit.serial_number}' has already been sold to a customer. Reverse or delete the sales invoice first.`
+                        });
+                    }
+                }
+                // 2. Check dependent allocations where other vouchers reference this one
                 const depAllocs = db.prepare(`
           SELECT ba.allocation_id, ba.voucher_id, ba.amount_paise,
                  v.voucher_number, v.voucher_type, v.status as voucher_status, v.company_id as voucher_company_id
@@ -1587,16 +1624,52 @@ function createApiRouter(db) {
         `).all(vch.voucher_id, vch.voucher_id);
                 // Active allocations are those where the referencing voucher is active (POSTED) and in same company
                 const activeDepAllocs = depAllocs.filter(a => a.voucher_company_id === vch.company_id && a.voucher_status === 'POSTED');
-                if (activeDepAllocs.length > 0) {
-                    const details = activeDepAllocs.map(a => `${a.voucher_type || 'Voucher'} ${a.voucher_number || a.voucher_id} (₹${((a.amount_paise || 0) / 100).toFixed(2)})`).join(', ');
+                // Find linked immediate settlement vouchers (e.g. PAY-2627-006 created for PUR-2627-006)
+                const linkedSettlements = db.prepare(`
+          SELECT voucher_id FROM vouchers
+          WHERE company_id = ? AND voucher_id != ? AND (reference_number = ? OR narration LIKE ?)
+        `).all(vch.company_id, vch.voucher_id, vch.voucher_number, `%${vch.voucher_number}%`);
+                const linkedSettlementIds = new Set(linkedSettlements.map(ls => ls.voucher_id));
+                const externalActiveAllocs = activeDepAllocs.filter(a => !linkedSettlementIds.has(a.voucher_id));
+                if (externalActiveAllocs.length > 0) {
+                    const details = externalActiveAllocs.map(a => `${a.voucher_type || 'Voucher'} ${a.voucher_number || a.voucher_id} (₹${((a.amount_paise || 0) / 100).toFixed(2)})`).join(', ');
                     return res.status(400).json({
-                        error: `Cannot permanently delete cancelled voucher: Active payment allocation(s) [${details}] still reference this document. Cancel or de-allocate those vouchers first, or use 'Hide from Normal Lists' instead.`
+                        error: `Cannot permanently delete voucher: Active payment allocation(s) [${details}] still reference this document. Cancel or delete those vouchers first.`
                     });
                 }
-                const reason = req.body?.reason || 'Permanent deletion of cancelled voucher by authorized administrator';
+                const reason = req.body?.reason || req.body?.cancelReason || 'Permanent deletion by authorized administrator';
                 try {
                     db.exec('BEGIN IMMEDIATE;');
-                    // 1. Audit tombstone logged before purging
+                    // 3. Serial status restoration / cleanup
+                    if (vch.voucher_type === 'PURCHASE') {
+                        db.prepare('DELETE FROM stock_item_serials WHERE purchase_voucher_id = ?').run(vch.voucher_id);
+                    }
+                    else if (vch.voucher_type === 'SALES') {
+                        db.prepare(`
+              UPDATE stock_item_serials
+              SET status = 'AVAILABLE',
+                  sales_voucher_id = NULL,
+                  sales_voucher_line_id = NULL,
+                  customer_id = NULL,
+                  sales_date = NULL,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE sales_voucher_id = ?
+            `).run(vch.voucher_id);
+                    }
+                    // 4. Linked immediate settlements cleanup
+                    for (const ls of linkedSettlements) {
+                        db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ? OR reference_voucher_id = ?').run(ls.voucher_id, ls.voucher_id);
+                        db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(ls.voucher_id);
+                        db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(ls.voucher_id);
+                    }
+                    // 5. Delete entries for this voucher
+                    db.prepare('DELETE FROM tax_entries WHERE voucher_id = ?').run(vch.voucher_id);
+                    db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ? OR reference_voucher_id = ?').run(vch.voucher_id, vch.voucher_id);
+                    db.prepare('DELETE FROM stock_entries WHERE voucher_id = ?').run(vch.voucher_id);
+                    db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(vch.voucher_id);
+                    db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(vch.voucher_id);
+                    db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(vch.voucher_id);
+                    // 6. Audit tombstone logged with release_number: true so sequence can reuse the number
                     db.prepare(`
             INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1607,24 +1680,16 @@ function createApiRouter(db) {
                         fy_id: vch.fy_id,
                         voucher_date: vch.voucher_date,
                         total_amount_paise: vch.total_amount_paise,
-                        original_status: 'CANCELLED',
-                        cancelled_by: vch.cancelled_by,
-                        cancelled_at: vch.cancelled_at,
+                        original_status: vch.status,
+                        release_number: true,
                         deleted_by: req.user.userId,
                         deleted_at: new Date().toISOString(),
                         reason
                     }));
-                    // 2. Safely purge dependent entries within atomic transaction (including stale reference allocations)
-                    db.prepare('DELETE FROM tax_entries WHERE voucher_id = ?').run(vch.voucher_id);
-                    db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ? OR reference_voucher_id = ?').run(vch.voucher_id, vch.voucher_id);
-                    db.prepare('DELETE FROM stock_entries WHERE voucher_id = ?').run(vch.voucher_id);
-                    db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(vch.voucher_id);
-                    db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(vch.voucher_id);
-                    db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(vch.voucher_id);
                     db.exec('COMMIT;');
                     return res.status(200).json({
                         success: true,
-                        message: `Voucher ${vch.voucher_number || ''} permanently deleted and audit tombstone recorded.`
+                        message: `Voucher ${vch.voucher_number || ''} permanently deleted and number freed for reuse.`
                     });
                 }
                 catch (purgeErr) {

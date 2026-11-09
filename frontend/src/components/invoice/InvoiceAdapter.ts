@@ -398,7 +398,26 @@ export function normalizeInvoiceData(rawVoucherData: any, company: any): Normali
     bankIfsc: company?.bank_ifsc,
     bankBranch: company?.bank_branch,
 
-    termsAndConditions: company?.terms_and_conditions || `1. Goods once sold will not be taken back or exchanged.\n2. Warranty as per manufacturer terms.\n3. Payment to be made by cheque/NEFT/UPI.\n4. Subject to local jurisdiction only.`
+    termsAndConditions: (() => {
+      // 1. Check voucher's specific terms if available and not draft metadata
+      let t = v.terms_conditions && !v.terms_conditions.startsWith('{"_draftMeta"')
+        ? v.terms_conditions
+        : (company?.terms_and_conditions || '');
+
+      // 2. If no terms, build default with company city
+      if (!t || !t.trim()) {
+        const city = company?.city?.trim();
+        const jurisdiction = city ? `${city} jurisdiction.` : 'local jurisdiction.';
+        t = `1. Goods once sold will not be taken back.\n2. Warranty as per manufacturer terms.\n3. Payment to be made within the credit period.\n4. Subject to ${jurisdiction}`;
+      }
+
+      // 3. Normalize any old legacy 'Coimbatore' strings if the company is not in Coimbatore
+      if (company?.city && company.city.toLowerCase() !== 'coimbatore' && /coimbatore jurisdiction/i.test(t)) {
+        t = t.replace(/coimbatore jurisdiction/gi, `${company.city} jurisdiction`);
+      }
+
+      return t;
+    })()
   };
 }
 

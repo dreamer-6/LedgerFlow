@@ -521,7 +521,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 9999,
+          zIndex: 999999,
           backdropFilter: 'blur(3px)'
         }}
       >
@@ -570,7 +570,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 9999,
+        zIndex: 999999,
         display: 'flex',
         flexDirection: 'row',
         backgroundColor: 'var(--color-background, #F8F7F4)',

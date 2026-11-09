@@ -97,11 +97,20 @@ export const InvoicePrintingTab: React.FC<InvoicePrintingTabProps> = ({
   };
 
   // Terms and conditions
-  const [terms, setTerms] = useState<string>(
-    formData.terms_and_conditions ||
-      company?.terms_and_conditions ||
-      `1. Goods once sold will not be taken back or exchanged.\n2. Warranty as per manufacturer terms.\n3. Payment to be made by cheque/NEFT/UPI.\n4. Subject to local jurisdiction only.`
-  );
+  const resolveInitialTerms = () => {
+    let t = formData.terms_and_conditions || company?.terms_and_conditions;
+    const city = company?.city?.trim() || formData.city?.trim();
+    if (!t || !t.trim()) {
+      const jurisdiction = city ? `${city} jurisdiction.` : 'local jurisdiction.';
+      return `1. Goods once sold will not be taken back.\n2. Warranty as per manufacturer terms.\n3. Payment to be made within the credit period.\n4. Subject to ${jurisdiction}`;
+    }
+    if (city && city.toLowerCase() !== 'coimbatore' && /coimbatore jurisdiction/i.test(t)) {
+      t = t.replace(/coimbatore jurisdiction/gi, `${city} jurisdiction`);
+    }
+    return t;
+  };
+
+  const [terms, setTerms] = useState<string>(resolveInitialTerms);
 
   // Persistence State
   const [saving, setSaving] = useState(false);
@@ -216,7 +225,12 @@ export const InvoicePrintingTab: React.FC<InvoicePrintingTabProps> = ({
       setStartNumber('1');
       setNumberFormat('INV0001');
     }
-    setTerms(company?.terms_and_conditions || '');
+    const city = company?.city?.trim() || formData?.city?.trim();
+    let compTerms = company?.terms_and_conditions || '';
+    if (city && city.toLowerCase() !== 'coimbatore' && /coimbatore jurisdiction/i.test(compTerms)) {
+      compTerms = compTerms.replace(/coimbatore jurisdiction/gi, `${city} jurisdiction`);
+    }
+    setTerms(compTerms || resolveInitialTerms());
     setSaveError(null);
   };
 

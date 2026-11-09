@@ -1006,6 +1006,34 @@ export const SalesRegisterView: React.FC<SalesRegisterViewProps> = ({
                                   </button>
                                 )}
 
+                                {v.status === 'CANCELLED' && (
+                                  <button
+                                    onClick={() => {
+                                      setActionMenuId(null);
+                                      setMenuCoords(null);
+                                      onEditInvoice(v.voucher_id);
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '8px',
+                                      padding: '9px 12px',
+                                      width: '100%',
+                                      fontSize: '12px',
+                                      background: 'none',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      color: '#EA580C',
+                                      textAlign: 'left',
+                                      fontWeight: 500
+                                    }}
+                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-hover, #FFF7ED)')}
+                                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
+                                  >
+                                    <RotateCcw size={13} color="#EA580C" /> Restore & Edit
+                                  </button>
+                                )}
+
                                 {onPrintInvoice && (
                                   <button
                                     onClick={() => {

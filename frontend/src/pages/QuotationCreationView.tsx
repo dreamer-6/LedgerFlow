@@ -299,6 +299,13 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
       email: party.email || ''
     });
     setCustomerDropdownOpen(false);
+    setTimeout(() => {
+      const firstItem = document.querySelector('[data-quotation-row="0"][data-quotation-field="description"]') as HTMLInputElement | null;
+      if (firstItem) {
+        firstItem.focus();
+        firstItem.select();
+      }
+    }, 60);
   };
 
   // Recalculate line amounts
@@ -383,8 +390,12 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
   });
 
   const handleItemDescriptionChange = (index: number, val: string) => {
+    const trimmed = val.trim().toLowerCase();
     const matched = stockItems.find(
-      (s) => s.item_name && s.item_name.trim().toLowerCase() === val.trim().toLowerCase()
+      (s) =>
+        (s.item_name && s.item_name.trim().toLowerCase() === trimmed) ||
+        (s.sku && s.sku.trim().toLowerCase() === trimmed) ||
+        (s.item_code && s.item_code.trim().toLowerCase() === trimmed)
     );
     if (matched) {
       const purchaseRate = matched.purchase_rate_paise
@@ -719,13 +730,29 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
               <div ref={customerDropdownRef} style={{ position: 'relative', marginBottom: '14px' }}>
                 <div style={{ position: 'relative' }}>
                   <input
+                    id="quotation-customer-input"
+                    autoFocus={!selectedCustomerId}
                     type="text"
                     value={customerSearchQuery}
                     onChange={(e) => {
                       setCustomerSearchQuery(e.target.value);
                       setCustomerDropdownOpen(true);
                     }}
-                    onFocus={() => setCustomerDropdownOpen(true)}
+                    onFocus={(e) => {
+                      setCustomerDropdownOpen(true);
+                      try {
+                        e.target.select();
+                      } catch {}
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const filteredParties = parties.filter(p => !customerSearchQuery || p.party_name.toLowerCase().includes(customerSearchQuery.toLowerCase()));
+                        if (filteredParties.length > 0) {
+                          e.preventDefault();
+                          selectParty(filteredParties[0]);
+                        }
+                      }
+                    }}
                     placeholder="Search customer by name or code..."
                     style={{
                       width: '100%',
@@ -1263,13 +1290,18 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
                           type="number"
                           min="1"
                           value={row.quantity}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => updateLineField(idx, 'quantity', parseFloat(e.target.value) || 0)}
                           data-quotation-row={idx}
                           data-quotation-field="qty"
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              (document.querySelector(`[data-quotation-row="${idx}"][data-quotation-field="rate"]`) as HTMLElement)?.focus();
+                              const rateEl = document.querySelector(`[data-quotation-row="${idx}"][data-quotation-field="rate"]`) as HTMLInputElement | null;
+                              if (rateEl) {
+                                rateEl.focus();
+                                rateEl.select();
+                              }
                             }
                           }}
                           style={{
@@ -1293,13 +1325,18 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
                           type="number"
                           min="0"
                           value={row.rate}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => updateLineField(idx, 'rate', parseFloat(e.target.value) || 0)}
                           data-quotation-row={idx}
                           data-quotation-field="rate"
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              (document.querySelector(`[data-quotation-row="${idx + 1}"][data-quotation-field="description"]`) as HTMLElement)?.focus();
+                              const nextDesc = document.querySelector(`[data-quotation-row="${idx + 1}"][data-quotation-field="description"]`) as HTMLInputElement | null;
+                              if (nextDesc) {
+                                nextDesc.focus();
+                                nextDesc.select();
+                              }
                             }
                           }}
                           style={{
@@ -1836,30 +1873,41 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
           onClose={() => setShowItemModal(false)}
           onSuccess={(newItem) => {
             setShowItemModal(false);
-            setStockItems((prev) => [newItem, ...prev]);
+            const normalized = {
+              ...newItem,
+              item_id: newItem.item_id || newItem.itemId,
+              item_name: newItem.item_name || newItem.itemName || '',
+              sku: newItem.sku || '',
+              selling_rate_paise: newItem.selling_rate_paise ?? newItem.sellingRatePaise ?? 0,
+              purchase_rate_paise: newItem.purchase_rate_paise ?? newItem.purchaseRatePaise ?? 0,
+              hsn_sac: newItem.hsn_sac || newItem.hsnSac || '84713010',
+              unit_symbol: newItem.unit_symbol || newItem.unitSymbol || 'NOS',
+              gst_rate: newItem.gst_rate ?? newItem.gstRate ?? 18
+            };
+            setStockItems((prev) => [normalized, ...prev]);
             const newRow: QuotationLineItem = {
               id: 'item_row_' + Date.now().toString(36),
-              itemId: newItem.itemId,
-              description: newItem.itemName,
-              subtext: newItem.sku ? `SKU: ${newItem.sku}` : '',
-              hsnSac: newItem.hsnSac || '84713010',
+              itemId: normalized.item_id,
+              description: normalized.item_name,
+              subtext: normalized.sku ? `SKU: ${normalized.sku}` : '',
+              hsnSac: normalized.hsn_sac,
               quantity: 1,
-              unit: newItem.unitSymbol || 'NOS',
-              rate: (newItem.sellingRatePaise ? newItem.sellingRatePaise / 100 : 0),
+              unit: normalized.unit_symbol,
+              rate: normalized.selling_rate_paise ? normalized.selling_rate_paise / 100 : (Number(normalized.selling_rate) || 0),
               discountPercent: 0,
-              gstRate: newItem.gstRate || 18,
+              gstRate: Number(normalized.gst_rate) || 18,
               taxableAmount: 0,
               cgstAmount: 0,
               sgstAmount: 0,
               igstAmount: 0,
               totalAmount: 0,
-              isService: itemModalType === 'Service',
-              dealerCost: (newItem.purchaseRatePaise ? newItem.purchaseRatePaise / 100 : (Number(newItem.purchaseRate) || 0))
+              isService: itemModalType === 'Service' || normalized.item_type === 'Service',
+              dealerCost: normalized.purchase_rate_paise ? normalized.purchase_rate_paise / 100 : (Number(normalized.purchase_rate) || 0)
             };
             const computed = recalculateLine(newRow, taxMode);
             setItems((prev) => [...prev, computed]);
             setToastType('success');
-            setToastMessage(`Item '${newItem.itemName}' created and added to quotation!`);
+            setToastMessage(`Item '${normalized.item_name}' created and added to quotation!`);
           }}
         />
       )}

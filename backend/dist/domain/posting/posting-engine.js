@@ -133,6 +133,9 @@ class PostingEngine {
         for (const pr of purgedRows) {
             try {
                 const d = JSON.parse(pr.details);
+                if (d.release_number === true || d.reuse_number === true) {
+                    continue; // Number explicitly released on permanent deletion
+                }
                 if (d.voucher_type === voucherType && d.voucher_number && !d.voucher_number.startsWith('DFT-')) {
                     if (!d.fy_id || d.fy_id === fyId || d.voucher_number.includes(fyCode)) {
                         consumedNumbers.add(d.voucher_number.trim());
@@ -370,10 +373,10 @@ class PostingEngine {
                             if (input.voucherType === 'PURCHASE') {
                                 for (const s of serialsArr) {
                                     const existingSerial = db.prepare(`
-                    SELECT serial_id, status FROM stock_item_serials
+                    SELECT serial_id, status, purchase_voucher_id FROM stock_item_serials
                     WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
                   `).get(input.companyId, line.itemId, s);
-                                    if (existingSerial && existingSerial.status !== 'CANCELLED') {
+                                    if (existingSerial && existingSerial.status !== 'CANCELLED' && existingSerial.purchase_voucher_id !== voucherId) {
                                         throw new Error(`Serial number '${s}' already exists for item '${itemDisplayName}' in this company (current status: ${existingSerial.status}).`);
                                     }
                                 }
@@ -396,14 +399,39 @@ class PostingEngine {
                   SELECT serial_id, status, godown_id, company_id FROM stock_item_serials
                   WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
                 `).get(input.companyId, line.itemId, s);
-                                if (!existingSerial) {
-                                    throw new Error(`Serial '${s}' does not exist for item '${itemDisplayName}' in this company.`);
+                                if (input.voucherType === 'PURCHASE_RETURN') {
+                                    if (!existingSerial) {
+                                        throw new Error(`Serial '${s}' does not exist for item '${itemDisplayName}' in this company.`);
+                                    }
+                                    if (existingSerial.status !== 'AVAILABLE') {
+                                        throw new Error(`Serial '${s}' for item '${itemDisplayName}' is not AVAILABLE (current status: ${existingSerial.status}).`);
+                                    }
+                                    if (resolvedGodownId && existingSerial.godown_id && existingSerial.godown_id !== resolvedGodownId) {
+                                        throw new Error(`Serial '${s}' is located in a different godown, not '${resolvedGodownId}'.`);
+                                    }
                                 }
-                                if (existingSerial.status !== 'AVAILABLE') {
-                                    throw new Error(`Serial '${s}' for item '${itemDisplayName}' is not AVAILABLE (current status: ${existingSerial.status}).`);
-                                }
-                                if (resolvedGodownId && existingSerial.godown_id && existingSerial.godown_id !== resolvedGodownId) {
-                                    throw new Error(`Serial '${s}' is located in a different godown, not '${resolvedGodownId}'.`);
+                                else if (input.voucherType === 'SALES') {
+                                    // UI-048: Allow manual serial numbers for unbilled purchases!
+                                    if (existingSerial) {
+                                        if (existingSerial.status === 'SOLD') {
+                                            throw new Error(`Serial '${s}' for item '${itemDisplayName}' is already marked as SOLD.`);
+                                        }
+                                        if (existingSerial.status === 'RETURNED') {
+                                            throw new Error(`Serial '${s}' for item '${itemDisplayName}' is currently RETURNED to supplier.`);
+                                        }
+                                    }
+                                    else {
+                                        // Check if this serial belongs to a DIFFERENT item in this company
+                                        const foreignItem = db.prepare(`
+                      SELECT s.item_id, i.item_name FROM stock_item_serials s
+                      LEFT JOIN stock_items i ON s.item_id = i.item_id
+                      WHERE (s.company_id = ? OR s.company_id IS NULL) AND s.serial_number = ?
+                    `).get(input.companyId, s);
+                                        if (foreignItem) {
+                                            throw new Error(`Serial '${s}' is already registered under a different item ('${foreignItem.item_name || foreignItem.item_id}').`);
+                                        }
+                                        // Not registered yet — allowed as a direct unbilled manual serial!
+                                    }
                                 }
                             }
                         }
@@ -901,6 +929,7 @@ class PostingEngine {
             WHERE company_id = ? AND action = 'VOUCHER_PERMANENT_PURGE'
               AND json_extract(details, '$.voucher_number') = ?
               AND json_extract(details, '$.voucher_type') = ?
+              AND (json_extract(details, '$.release_number') IS NULL OR json_extract(details, '$.release_number') = 0 OR json_extract(details, '$.release_number') = false)
           `).get(input.companyId, explicitVNum, input.voucherType);
                     if (alreadyExists || inAudit) {
                         throw new Error(`Voucher number '${explicitVNum}' already exists for this company, financial year, and voucher type.`);
@@ -945,7 +974,7 @@ class PostingEngine {
                 };
                 storedTermsConditions = JSON.stringify(draftMeta);
             }
-            // A. Insert Voucher Header
+            // A. Insert or Update Voucher Header
             db.prepare(`
         INSERT INTO vouchers (
           voucher_id, company_id, fy_id, voucher_type, voucher_number,
@@ -960,6 +989,26 @@ class PostingEngine {
           ?, ?, ?, ?,
           ?, ?, ?
         )
+        ON CONFLICT(voucher_id) DO UPDATE SET
+          company_id = excluded.company_id,
+          fy_id = excluded.fy_id,
+          voucher_type = excluded.voucher_type,
+          voucher_number = excluded.voucher_number,
+          voucher_date = excluded.voucher_date,
+          reference_number = excluded.reference_number,
+          reference_date = excluded.reference_date,
+          payment_mode = excluded.payment_mode,
+          terms_conditions = excluded.terms_conditions,
+          party_id = excluded.party_id,
+          narration = excluded.narration,
+          status = excluded.status,
+          taxable_amount_paise = excluded.taxable_amount_paise,
+          cgst_amount_paise = excluded.cgst_amount_paise,
+          sgst_amount_paise = excluded.sgst_amount_paise,
+          igst_amount_paise = excluded.igst_amount_paise,
+          round_off_paise = excluded.round_off_paise,
+          total_amount_paise = excluded.total_amount_paise,
+          created_by = excluded.created_by
       `).run(voucherId, input.companyId, fyId, input.voucherType, postedVoucherNumber, input.voucherDate, referenceNumber, referenceDate, paymentMode, storedTermsConditions, input.partyId || null, input.narration || null, voucherStatus, voucherTotals.taxableAmountPaise, voucherTotals.cgstAmountPaise, voucherTotals.sgstAmountPaise, voucherTotals.igstAmountPaise, voucherTotals.roundOffPaise, finalVoucherTotal, input.createdBy || 'system');
             // B. Insert Voucher Lines
             let lineNum = 1;
@@ -996,10 +1045,10 @@ class PostingEngine {
                         if (input.voucherType === 'PURCHASE') {
                             for (const s of serialsArr) {
                                 const existingSerial = db.prepare(`
-                  SELECT serial_id, status FROM stock_item_serials
+                  SELECT serial_id, status, purchase_voucher_id FROM stock_item_serials
                   WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
                 `).get(input.companyId, pl.lineInput.itemId, s);
-                                if (existingSerial && existingSerial.status !== 'CANCELLED') {
+                                if (existingSerial && existingSerial.status !== 'CANCELLED' && existingSerial.purchase_voucher_id !== voucherId) {
                                     throw new Error(`Serial number '${s}' already exists for item '${itemDisplayName}' in this company (current status: ${existingSerial.status}).`);
                                 }
                             }
@@ -1022,14 +1071,36 @@ class PostingEngine {
                 SELECT serial_id, item_id, godown_id, status FROM stock_item_serials
                 WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
               `).get(input.companyId, pl.lineInput.itemId, s);
-                            if (!serialRecord) {
-                                throw new Error(`Serial '${s}' does not exist for item '${itemDisplayName}' in this company.`);
+                            if (input.voucherType === 'PURCHASE_RETURN') {
+                                if (!serialRecord) {
+                                    throw new Error(`Serial '${s}' does not exist for item '${itemDisplayName}' in this company.`);
+                                }
+                                if (serialRecord.status !== 'AVAILABLE') {
+                                    throw new Error(`Serial '${s}' for item '${itemDisplayName}' is not AVAILABLE (current status: ${serialRecord.status}).`);
+                                }
+                                if (lineGodownId && serialRecord.godown_id && serialRecord.godown_id !== lineGodownId) {
+                                    throw new Error(`Serial '${s}' is located in a different godown, not '${lineGodownId}'.`);
+                                }
                             }
-                            if (serialRecord.status !== 'AVAILABLE') {
-                                throw new Error(`Serial '${s}' for item '${itemDisplayName}' is not AVAILABLE (current status: ${serialRecord.status}).`);
-                            }
-                            if (lineGodownId && serialRecord.godown_id && serialRecord.godown_id !== lineGodownId) {
-                                throw new Error(`Serial '${s}' is located in a different godown, not '${lineGodownId}'.`);
+                            else if (input.voucherType === 'SALES') {
+                                if (serialRecord) {
+                                    if (serialRecord.status === 'SOLD') {
+                                        throw new Error(`Serial '${s}' for item '${itemDisplayName}' is already marked as SOLD.`);
+                                    }
+                                    if (serialRecord.status === 'RETURNED') {
+                                        throw new Error(`Serial '${s}' for item '${itemDisplayName}' is currently RETURNED to supplier.`);
+                                    }
+                                }
+                                else {
+                                    const foreignItem = db.prepare(`
+                    SELECT s.item_id, i.item_name FROM stock_item_serials s
+                    LEFT JOIN stock_items i ON s.item_id = i.item_id
+                    WHERE (s.company_id = ? OR s.company_id IS NULL) AND s.serial_number = ?
+                  `).get(input.companyId, s);
+                                    if (foreignItem) {
+                                        throw new Error(`Serial '${s}' is already registered under a different item ('${foreignItem.item_name || foreignItem.item_id}').`);
+                                    }
+                                }
                             }
                         }
                     }
@@ -1056,21 +1127,6 @@ class PostingEngine {
                 SELECT serial_id, item_id, godown_id, status FROM stock_item_serials
                 WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
               `).get(input.companyId, pl.lineInput.itemId, s);
-                            if (!serialRecord) {
-                                const foreign = db.prepare(`
-                  SELECT item_id FROM stock_item_serials WHERE (company_id = ? OR company_id IS NULL) AND serial_number = ?
-                `).get(input.companyId, s);
-                                if (foreign) {
-                                    throw new Error(`Serial '${s}' belongs to another item ('${foreign.item_id}'), not '${pl.lineInput.itemId}'.`);
-                                }
-                                throw new Error(`Serial '${s}' does not exist for item '${pl.lineInput.itemId}'.`);
-                            }
-                            if (serialRecord.status !== 'AVAILABLE') {
-                                throw new Error(`Serial '${s}' for item '${pl.lineInput.itemId}' is not AVAILABLE (current status: ${serialRecord.status}).`);
-                            }
-                            if (lineGodownId && serialRecord.godown_id && serialRecord.godown_id !== lineGodownId) {
-                                throw new Error(`Serial '${s}' is located in a different godown, not '${lineGodownId}'.`);
-                            }
                             let saleWarrantyExpiry = null;
                             if (lineWarranty > 0 && input.voucherDate) {
                                 try {
@@ -1080,18 +1136,41 @@ class PostingEngine {
                                 }
                                 catch { }
                             }
-                            db.prepare(`
-                UPDATE stock_item_serials
-                SET status = ?,
-                    company_id = COALESCE(company_id, ?),
-                    sales_voucher_id = ?,
-                    sales_voucher_line_id = ?,
-                    customer_id = ?,
-                    sales_date = ?,
-                    warranty_expiry_date = COALESCE(?, warranty_expiry_date),
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
-              `).run(input.voucherType === 'PURCHASE_RETURN' ? 'RETURNED' : 'SOLD', input.companyId, voucherId, lineId, input.partyId || null, input.voucherDate, saleWarrantyExpiry, input.companyId, pl.lineInput.itemId, s);
+                            if (!serialRecord) {
+                                if (input.voucherType === 'PURCHASE_RETURN') {
+                                    const foreign = db.prepare(`
+                    SELECT item_id FROM stock_item_serials WHERE (company_id = ? OR company_id IS NULL) AND serial_number = ?
+                  `).get(input.companyId, s);
+                                    if (foreign) {
+                                        throw new Error(`Serial '${s}' belongs to another item ('${foreign.item_id}'), not '${pl.lineInput.itemId}'.`);
+                                    }
+                                    throw new Error(`Serial '${s}' does not exist for item '${pl.lineInput.itemId}'.`);
+                                }
+                                // UI-048: Direct manual serial entry on Sales Invoice for unbilled purchases!
+                                const newSerialId = 'ser_' + node_crypto_1.default.randomUUID().replace(/-/g, '').substring(0, 16);
+                                db.prepare(`
+                  INSERT INTO stock_item_serials (
+                    serial_id, company_id, item_id, godown_id, serial_number, status,
+                    sales_voucher_id, sales_voucher_line_id, customer_id, sales_date,
+                    warranty_expiry_date, created_at, updated_at
+                  ) VALUES (?, ?, ?, ?, ?, 'SOLD', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                `).run(newSerialId, input.companyId, pl.lineInput.itemId, lineGodownId, s, voucherId, lineId, input.partyId || null, input.voucherDate, saleWarrantyExpiry);
+                            }
+                            else {
+                                db.prepare(`
+                  UPDATE stock_item_serials
+                  SET status = ?,
+                      company_id = COALESCE(company_id, ?),
+                      godown_id = COALESCE(?, godown_id),
+                      sales_voucher_id = ?,
+                      sales_voucher_line_id = ?,
+                      customer_id = ?,
+                      sales_date = ?,
+                      warranty_expiry_date = COALESCE(?, warranty_expiry_date),
+                      updated_at = CURRENT_TIMESTAMP
+                  WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
+                `).run(input.voucherType === 'PURCHASE_RETURN' ? 'RETURNED' : 'SOLD', input.companyId, lineGodownId, voucherId, lineId, input.partyId || null, input.voucherDate, saleWarrantyExpiry, input.companyId, pl.lineInput.itemId, s);
+                            }
                         }
                         else if (input.voucherType === 'PURCHASE' || input.voucherType === 'SALES_RETURN') {
                             let expiryDate = null;
@@ -1398,10 +1477,18 @@ class PostingEngine {
                     }
                     if (paymentLedgerId) {
                         if (input.voucherType === 'SALES') {
+                            let candidateRecNum = undefined;
+                            if (postedVoucherNumber) {
+                                const testNum = postedVoucherNumber.replace(/^[A-Za-z0-9]+-(.+)$/, 'REC-$1');
+                                const alreadyTaken = db.prepare("SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = 'RECEIPT' AND voucher_number = ?").get(input.companyId, input.fyId, testNum);
+                                if (!alreadyTaken)
+                                    candidateRecNum = testNum;
+                            }
                             const res = PostingEngine.postVoucher(db, {
                                 companyId: input.companyId,
                                 fyId: input.fyId,
                                 voucherType: 'RECEIPT',
+                                voucherNumber: candidateRecNum,
                                 voucherDate: input.voucherDate,
                                 paymentMode: payMode,
                                 partyId: input.partyId,
@@ -1422,10 +1509,18 @@ class PostingEngine {
                             settlementVoucherNumber = res.voucherNumber;
                         }
                         else if (input.voucherType === 'PURCHASE') {
+                            let candidatePayNum = undefined;
+                            if (postedVoucherNumber && postedVoucherNumber.startsWith('PUR-')) {
+                                const testNum = postedVoucherNumber.replace('PUR-', 'PAY-');
+                                const alreadyTaken = db.prepare("SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = 'PAYMENT' AND voucher_number = ?").get(input.companyId, input.fyId, testNum);
+                                if (!alreadyTaken)
+                                    candidatePayNum = testNum;
+                            }
                             const res = PostingEngine.postVoucher(db, {
                                 companyId: input.companyId,
                                 fyId: input.fyId,
                                 voucherType: 'PAYMENT',
+                                voucherNumber: candidatePayNum,
                                 voucherDate: input.voucherDate,
                                 paymentMode: payMode,
                                 partyId: input.partyId,
@@ -1905,10 +2000,12 @@ class PostingEngine {
                 }
             }
             // Reconstruct payload
+            const statutoryNumber = (vch.voucher_number && !vch.voucher_number.startsWith('DFT-')) ? vch.voucher_number : undefined;
             const payload = {
                 companyId: vch.company_id,
                 fyId: vch.fy_id,
                 voucherType: vch.voucher_type,
+                voucherNumber: statutoryNumber,
                 voucherDate: vch.voucher_date,
                 referenceNumber: vch.reference_number || undefined,
                 referenceDate: vch.reference_date || undefined,
@@ -1923,9 +2020,14 @@ class PostingEngine {
                 status: 'POSTED',
                 createdBy: userId
             };
-            // Clean out draft lines and header so _postVoucherInternal can re-create them with official number
+            // Clean out existing lines and entries so _postVoucherInternal can re-create them with official number and postings.
+            // NOTE: Do NOT delete from vouchers, because child tables (stock_item_serials, bill_allocations)
+            // hold foreign keys to vouchers(voucher_id). ON CONFLICT DO UPDATE will update the header cleanly!
             db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(voucherId);
-            db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(voucherId);
+            db.prepare('DELETE FROM tax_entries WHERE voucher_id = ?').run(voucherId);
+            db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(voucherId);
+            db.prepare('DELETE FROM stock_entries WHERE voucher_id = ?').run(voucherId);
+            db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ?').run(voucherId);
             const result = this._postVoucherInternal(db, payload, { skipTransaction: true, voucherId });
             db.exec('COMMIT;');
             return {
@@ -2174,6 +2276,7 @@ class PostingEngine {
           WHERE company_id = ? AND action = 'VOUCHER_PERMANENT_PURGE'
             AND json_extract(details, '$.voucher_number') = ?
             AND json_extract(details, '$.voucher_type') = ?
+            AND (json_extract(details, '$.release_number') IS NULL OR json_extract(details, '$.release_number') = 0 OR json_extract(details, '$.release_number') = false)
         `).get(input.companyId, candidate, vch.voucher_type);
                 if (existing || inAudit) {
                     throw new Error(`Voucher number '${candidate}' already exists for this company, financial year, and voucher type.`);
