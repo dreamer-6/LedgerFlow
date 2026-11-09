@@ -279,6 +279,7 @@ console.log('--- TEST 4: Partial Immediate Payment & Credit Invoices ---');
         ratePaise: 7500000,
         gstRate: 18,
         isTaxInclusive: true,
+        serialNumber: 'SN-LP-002',
         movementType: 'OUT'
       }
     ],
@@ -299,6 +300,12 @@ console.log('--- TEST 4: Partial Immediate Payment & Credit Invoices ---');
   `).get(custLedgerId) as any;
   assert.strictEqual(custLedger.balance_paise, 4500000, 'Customer balance must reflect exact unpaid remainder of 45,000');
 
+  // Seed SN-LP-003 for next sale
+  db.prepare(`
+    INSERT INTO stock_item_serials (serial_id, item_id, serial_number, status, purchase_date)
+    VALUES ('ser_3', ?, 'SN-LP-003', 'AVAILABLE', '2026-04-01')
+  `).run(itemId);
+
   // Pure Credit Sale: Invoice for ₹75,000 with NO immediate payment
   const creditResult = PostingEngine.postVoucher(db, {
     companyId,
@@ -316,6 +323,7 @@ console.log('--- TEST 4: Partial Immediate Payment & Credit Invoices ---');
         ratePaise: 7500000,
         gstRate: 18,
         isTaxInclusive: true,
+        serialNumber: 'SN-LP-003',
         movementType: 'OUT'
       }
     ]
@@ -359,6 +367,7 @@ console.log('--- TEST 5: Purchase with Immediate Bank Payment ---');
         ratePaise: 5000000,
         gstRate: 18,
         isTaxInclusive: false,
+        serialNumber: 'SN-LP-004, SN-LP-005',
         movementType: 'IN'
       }
     ],

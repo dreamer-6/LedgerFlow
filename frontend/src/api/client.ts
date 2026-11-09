@@ -707,12 +707,81 @@ export const api = {
     return res.json();
   },
 
-  async getItemSerials(itemId: string, detailed: boolean = false): Promise<any[]> {
-    const qs = detailed ? '?detailed=true' : '';
+  async getItemSerials(itemId: string, detailed: boolean = false, godownId?: string): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (detailed) params.append('detailed', 'true');
+    if (godownId) params.append('godownId', godownId);
+    const qs = params.toString() ? `?${params.toString()}` : '';
     const res = await fetch(`${API_BASE}/masters/items/${encodeURIComponent(itemId)}/serials${qs}`, {
       headers: getHeaders()
     });
     if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to fetch serials'));
+    return res.json();
+  },
+
+  async getSerialNumberRegister(params?: {
+    itemId?: string;
+    godownId?: string;
+    status?: string;
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    supplierId?: string;
+    customerId?: string;
+  }): Promise<{
+    summary: {
+      total: number;
+      available: number;
+      sold: number;
+      returned: number;
+      damaged: number;
+    };
+    serials: Array<{
+      serialId: string;
+      serialNumber: string;
+      status: string;
+      itemId: string;
+      itemName: string;
+      itemCode: string;
+      sku: string;
+      godownId: string | null;
+      godownName: string;
+      purchaseVoucherId: string | null;
+      purchaseVoucherNumber: string | null;
+      purchaseDate: string | null;
+      supplierId: string | null;
+      supplierName: string | null;
+      salesVoucherId: string | null;
+      salesVoucherNumber: string | null;
+      salesDate: string | null;
+      customerId: string | null;
+      customerName: string | null;
+      warrantyExpiryDate: string | null;
+      createdAt: string;
+    }>;
+  }> {
+    const sp = new URLSearchParams();
+    if (params?.itemId) sp.append('itemId', params.itemId);
+    if (params?.godownId) sp.append('godownId', params.godownId);
+    if (params?.status) sp.append('status', params.status);
+    if (params?.search) sp.append('search', params.search);
+    if (params?.dateFrom) sp.append('dateFrom', params.dateFrom);
+    if (params?.dateTo) sp.append('dateTo', params.dateTo);
+    if (params?.supplierId) sp.append('supplierId', params.supplierId);
+    if (params?.customerId) sp.append('customerId', params.customerId);
+    const qs = sp.toString() ? `?${sp.toString()}` : '';
+    const res = await fetch(`${API_BASE}/inventory/serials/register${qs}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to fetch serial register'));
+    return res.json();
+  },
+
+  async getSerialHistory(serialIdOrNumber: string): Promise<any> {
+    const res = await fetch(`${API_BASE}/inventory/serials/${encodeURIComponent(serialIdOrNumber)}/history`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to fetch serial history'));
     return res.json();
   },
 

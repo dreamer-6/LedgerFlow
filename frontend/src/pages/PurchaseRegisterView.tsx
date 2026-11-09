@@ -16,6 +16,7 @@
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { api, Company, FinancialYear, Party } from '../api/client';
 import { VoucherDeleteOptionsModal } from '../components/accounting/VoucherDeleteOptionsModal';
 import {
@@ -116,6 +117,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
 
   // Action Menu dropdown state
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [menuCoords, setMenuCoords] = useState<{ top: number; left: number; openUp: boolean } | null>(null);
 
   // Delete / Cancel Modal state
   const [deleteModalVoucher, setDeleteModalVoucher] = useState<any | null>(null);
@@ -128,16 +130,28 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Close dropdown menu on outside click
+  // Close dropdown menu on outside click or scroll
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest('.pr-action-menu-wrap')) {
+      if (!(e.target as HTMLElement).closest('.pr-action-menu-wrap') && !(e.target as HTMLElement).closest('.pr-action-menu-portal')) {
         setActionMenuId(null);
+        setMenuCoords(null);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (actionMenuId) {
+        setActionMenuId(null);
+        setMenuCoords(null);
+      }
+    };
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, [actionMenuId]);
 
   // Set date ranges when period changes
   useEffect(() => {
@@ -1337,7 +1351,21 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                       <td style={{ padding: '12px 16px', textAlign: 'right', position: 'relative' }}>
                         <div className="pr-action-menu-wrap" style={{ position: 'relative', display: 'inline-block' }}>
                           <button
-                            onClick={() => setActionMenuId(prev => prev === v.voucher_id ? null : v.voucher_id)}
+                            onClick={(e) => {
+                              if (actionMenuId === v.voucher_id) {
+                                setActionMenuId(null);
+                                setMenuCoords(null);
+                              } else {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const openUp = window.innerHeight - rect.bottom < 190;
+                                setMenuCoords({
+                                  top: openUp ? rect.top : rect.bottom + 4,
+                                  left: Math.max(10, rect.right - 170),
+                                  openUp
+                                });
+                                setActionMenuId(v.voucher_id);
+                              }
+                            }}
                             style={{
                               background: 'none',
                               border: '1px solid transparent',
@@ -1354,23 +1382,28 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                             <MoreVertical size={16} />
                           </button>
 
-                          {actionMenuId === v.voucher_id && (
-                            <div style={{
-                              position: 'absolute',
-                              right: 0,
-                              top: '100%',
-                              backgroundColor: 'var(--color-surface, #FFFFFF)',
-                              border: '1px solid var(--color-border, #E2E8F0)',
-                              borderRadius: '8px',
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                              minWidth: '160px',
-                              zIndex: 100,
-                              padding: '4px 0',
-                              textAlign: 'left'
-                            }}>
+                          {actionMenuId === v.voucher_id && menuCoords && createPortal(
+                            <div
+                              className="pr-action-menu-portal"
+                              style={{
+                                position: 'fixed',
+                                top: menuCoords.openUp ? 'auto' : `${menuCoords.top}px`,
+                                bottom: menuCoords.openUp ? `${window.innerHeight - menuCoords.top + 4}px` : 'auto',
+                                left: `${menuCoords.left}px`,
+                                backgroundColor: 'var(--color-surface, #FFFFFF)',
+                                border: '1px solid var(--color-border, #E2E8F0)',
+                                borderRadius: '8px',
+                                boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                                minWidth: '160px',
+                                zIndex: 99999,
+                                padding: '4px 0',
+                                textAlign: 'left'
+                              }}
+                            >
                               <button
                                 onClick={() => {
                                   setActionMenuId(null);
+                                  setMenuCoords(null);
                                   onViewInvoice(v.voucher_id);
                                 }}
                                 style={{
@@ -1397,6 +1430,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                                   <button
                                     onClick={() => {
                                       setActionMenuId(null);
+                                      setMenuCoords(null);
                                       onEditInvoice(v.voucher_id);
                                     }}
                                     style={{
@@ -1421,6 +1455,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                                   <button
                                     onClick={() => {
                                       setActionMenuId(null);
+                                      setMenuCoords(null);
                                       handlePostDraft(v.voucher_id);
                                     }}
                                     style={{
@@ -1449,6 +1484,7 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                                 <button
                                   onClick={() => {
                                     setActionMenuId(null);
+                                    setMenuCoords(null);
                                     setDeleteModalVoucher(v);
                                   }}
                                   style={{
@@ -1470,7 +1506,8 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
                                   Cancel / Delete
                                 </button>
                               )}
-                            </div>
+                            </div>,
+                            document.body
                           )}
                         </div>
                       </td>

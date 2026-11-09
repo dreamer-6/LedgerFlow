@@ -11,6 +11,8 @@ export interface SerialPickerModalProps {
   currentQuantity: number;
   initialSerials: string[];
   warrantyMonths?: number;
+  godownId?: string;
+  godownName?: string;
   onConfirm: (serials: string[]) => void;
 }
 
@@ -23,6 +25,8 @@ export const SerialPickerModal: React.FC<SerialPickerModalProps> = ({
   currentQuantity,
   initialSerials,
   warrantyMonths = 0,
+  godownId,
+  godownName,
   onConfirm
 }) => {
   // Sales mode state
@@ -47,7 +51,7 @@ export const SerialPickerModal: React.FC<SerialPickerModalProps> = ({
       if (itemId) {
         setIsLoading(true);
         setFetchError(null);
-        api.getItemSerials(itemId, true)
+        api.getItemSerials(itemId, true, godownId)
           .then((res: any[]) => {
             // Handle both object detail format and string array format
             const formatted: ItemSerialDetail[] = (res || []).map(r => {
@@ -73,7 +77,20 @@ export const SerialPickerModal: React.FC<SerialPickerModalProps> = ({
       setBulkInput('');
       setShowBulkInput(false);
     }
-  }, [isOpen, mode, itemId]);
+  }, [isOpen, mode, itemId, godownId]);
+
+  // Handle Escape key to close cleanly
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Filtered available serials for search in SALES mode
   const filteredAvailable = useMemo(() => {
@@ -179,7 +196,7 @@ export const SerialPickerModal: React.FC<SerialPickerModalProps> = ({
                 {mode === 'SALES' ? 'Select Serial Numbers' : 'Register Purchase Serials'}
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                {itemName} {warrantyMonths > 0 && `• ${warrantyMonths}M Standard Warranty`}
+                {itemName} {godownName && `• Godown: ${godownName}`} {warrantyMonths > 0 && `• ${warrantyMonths}M Standard Warranty`}
               </div>
             </div>
           </div>

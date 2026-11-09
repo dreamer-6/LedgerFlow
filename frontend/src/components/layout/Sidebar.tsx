@@ -48,8 +48,8 @@ export interface SidebarProps {
   setReceiptViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   paymentViewMode?: 'dashboard' | 'create' | 'register' | 'view';
   setPaymentViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
-  journalViewMode?: 'dashboard' | 'create';
-  setJournalViewMode?: (mode: 'dashboard' | 'create') => void;
+  journalViewMode?: 'dashboard' | 'create' | 'register' | 'view';
+  setJournalViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   isOpen?: boolean;
   onClose?: () => void;
   isCollapsed?: boolean;
@@ -87,6 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (activeTab === 'quotation') return 'quotation';
     if (activeTab === 'receipts') return 'receipts';
     if (activeTab === 'payments') return 'payments';
+    if (activeTab === 'journal') return 'journal';
     return null;
   });
   const prevTabRef = React.useRef(activeTab);
@@ -103,12 +104,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setExpandedGroup('receipts');
     } else if (activeTab === 'payments') {
       setExpandedGroup('payments');
+    } else if (activeTab === 'journal') {
+      setExpandedGroup('journal');
     } else {
       // Navigating to another top-level section closes the previously expanded group
       setExpandedGroup(null);
     }
     prevTabRef.current = activeTab;
-  }, [activeTab, salesViewMode, purchaseViewMode, quotationViewMode, receiptViewMode, paymentViewMode]);
+  }, [activeTab, salesViewMode, purchaseViewMode, quotationViewMode, receiptViewMode, paymentViewMode, journalViewMode]);
 
   const toggleGroup = (group: string) => {
     setExpandedGroup(prev => (prev === group ? null : group));
@@ -129,6 +132,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setExpandedGroup('purchase');
     } else if (tab === 'quotation') {
       setExpandedGroup('quotation');
+    } else if (tab === 'receipts') {
+      setExpandedGroup('receipts');
+    } else if (tab === 'payments') {
+      setExpandedGroup('payments');
+    } else if (tab === 'journal') {
+      setExpandedGroup('journal');
     } else {
       setExpandedGroup(null);
     }
@@ -718,17 +727,106 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 )}
               </>
             )}
-            {renderItem(
-              'journal-module',
-              'Journal',
-              <BookText size={16} />,
-              activeTab === 'journal' || (activeTab === 'vouchers' && (window as any)._currentVoucherType === 'JOURNAL'),
-              () => {
-                setActiveTab('journal');
-                if (setJournalViewMode) setJournalViewMode('dashboard');
-                if (onClose) onClose();
-              },
-              'Alt+J'
+            {isCollapsed ? (
+              renderItem(
+                'journal-module',
+                'Journal',
+                <BookText size={20} />,
+                activeTab === 'journal',
+                () => {
+                  setActiveTab('journal');
+                  if (setJournalViewMode) setJournalViewMode('dashboard');
+                  if (onClose) onClose();
+                },
+                'Alt+J'
+              )
+            ) : (
+              <>
+                <div
+                  onClick={() => {
+                    setActiveTab('journal');
+                    if (setJournalViewMode) setJournalViewMode('dashboard');
+                    setExpandedGroup('journal');
+                    if (onClose) onClose();
+                  }}
+                  className={`nav-item ${activeTab === 'journal' ? 'active' : ''}`}
+                  title="Journal (Alt+J)"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                    <span className="nav-icon"><BookText size={16} /></span>
+                    <span style={{ flex: 1, lineHeight: 1.3, fontWeight: activeTab === 'journal' ? 600 : 500 }}>Journal</span>
+                  </div>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleGroup('journal');
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '2px',
+                      color: 'var(--text-muted, #94A3B8)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {expandedGroup === 'journal' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </div>
+                </div>
+
+                {/* Collapsible Submenu */}
+                {expandedGroup === 'journal' && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      marginTop: '2px',
+                      marginBottom: '4px',
+                      paddingLeft: '24px'
+                    }}
+                  >
+                    <div
+                      onClick={() => {
+                        setActiveTab('journal');
+                        if (setJournalViewMode) setJournalViewMode('create');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'journal' && journalViewMode === 'create' ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'journal' && journalViewMode === 'create' ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Create Journal</span>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setActiveTab('journal');
+                        if (setJournalViewMode) setJournalViewMode('register');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'journal' && (journalViewMode === 'register' || journalViewMode === 'view') ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'journal' && (journalViewMode === 'register' || journalViewMode === 'view') ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Journal Register</span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             {renderItem(
               'service_bill',

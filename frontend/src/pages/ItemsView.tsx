@@ -30,8 +30,10 @@ import {
   Trash2,
   Upload,
   Download,
-  Info
+  Info,
+  Barcode
 } from 'lucide-react';
+import { SerialNumberRegisterView } from './SerialNumberRegisterView';
 
 export type ItemSortField =
   | 'code'
@@ -46,6 +48,7 @@ export type ItemSortField =
 
 interface ItemsViewProps {
   company: Company | null;
+  activeFy?: any;
   onOpenNewVoucher?: (type: string, partyId?: string) => void;
   onNavigateReports?: (subTab: string) => void;
 }
@@ -81,6 +84,7 @@ const PRESET_BRANDS = [
 
 export const ItemsView: React.FC<ItemsViewProps> = ({
   company,
+  activeFy,
   onOpenNewVoucher,
   onNavigateReports
 }) => {
@@ -97,7 +101,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
   const [editingItem, setEditingItem] = useState<StockItem | null>(null);
 
   // Filter & Search state
-  const [activeTab, setActiveTab] = useState<'ALL' | 'STOCK' | 'SERVICES' | 'INACTIVE'>('ALL');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'STOCK' | 'SERVICES' | 'INACTIVE' | 'SERIALS'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All Categories');
   const [selectedBrand, setSelectedBrand] = useState<string>('All Brands');
@@ -210,7 +214,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
   // Serial & Warranty
   const [trackSerial, setTrackSerial] = useState<boolean>(false);
   const [serialNumbers, setSerialNumbers] = useState<string>('');
-  const [warrantyPeriod, setWarrantyPeriod] = useState<string>('1');
+  const [warrantyPeriod, setWarrantyPeriod] = useState<string>('0');
   const [warrantyUnit, setWarrantyUnit] = useState<'Years' | 'Months' | 'Days'>('Years');
   const [warrantyTerms, setWarrantyTerms] = useState<string>('');
 
@@ -524,7 +528,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
     setGodownId(godowns.length > 0 ? godowns[0].godown_id : '');
     setTrackSerial(false);
     setSerialNumbers('');
-    setWarrantyPeriod('1');
+    setWarrantyPeriod('0');
     setWarrantyUnit('Years');
     setWarrantyTerms('');
     setPurchaseRate('0');
@@ -1122,14 +1126,17 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
 
               {trackSerial && (
                 <div className="item-field-group" style={{ marginTop: '10px' }}>
-                  <label className="item-field-label">Serial Numbers (Comma-separated)</label>
+                  <label className="item-field-label">Opening Stock Serials (Optional)</label>
                   <input
                     type="text"
                     className="item-input"
-                    placeholder="e.g. SN1001, SN1002, SN1003"
+                    placeholder="e.g. SN1001, SN1002 (Only if opening stock is entered)"
                     value={serialNumbers}
                     onChange={(e) => setSerialNumbers(e.target.value)}
                   />
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px', display: 'block' }}>
+                    💡 Serial Number Tracking is enabled. Physical units will be automatically registered during Purchase Entry and allocated during Sales.
+                  </span>
                 </div>
               )}
 
@@ -1778,6 +1785,18 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
             <span>Inactive</span>
             <span className="items-tab-badge">{metrics.inactiveCount}</span>
           </button>
+
+          <button
+            type="button"
+            className={`items-tab-btn ${activeTab === 'SERIALS' ? 'active' : ''}`}
+            onClick={() => {
+              setActiveTab('SERIALS');
+              setCurrentPage(1);
+            }}
+          >
+            <Barcode size={13} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+            <span>Serial Register</span>
+          </button>
         </div>
 
         <div className="items-tabs-right">
@@ -1792,8 +1811,15 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
         </div>
       </div>
 
-      {/* Main Split Layout: Table (72%) + Details Panel (28%) */}
-      <div className="items-main-split">
+      {activeTab === 'SERIALS' ? (
+        <SerialNumberRegisterView
+          company={company}
+          activeFy={activeFy || null}
+          onBackToItems={() => setActiveTab('ALL')}
+        />
+      ) : (
+        /* Main Split Layout: Table (72%) + Details Panel (28%) */
+        <div className="items-main-split">
         {/* Left Side: Table */}
         <div className="items-table-card">
           <div className="items-table-wrapper">
@@ -1899,7 +1925,20 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
                           <div className="item-cell-name">
                             <span className="item-name-title">{item.item_name}</span>
                             <span className="item-name-desc">
-                              {isService ? 'Service / Non-Stock' : `S/N: ${item.serial_numbers || '-'} | Warranty: 1-3 Years`}
+                              {(() => {
+                                if (isService) return 'Service / Non-Stock';
+                                const parts: string[] = [];
+                                if (item.has_serial_no) {
+                                  parts.push('Serialized Tracking');
+                                } else if (item.serial_numbers) {
+                                  parts.push(`S/N: ${item.serial_numbers}`);
+                                }
+                                if (item.warranty_months && Number(item.warranty_months) > 0) {
+                                  const wm = Number(item.warranty_months);
+                                  parts.push(`Warranty: ${wm % 12 === 0 ? `${wm / 12}Y` : `${wm}M`}`);
+                                }
+                                return parts.join(' | ') || (item.item_code ? `Code: ${item.item_code}` : 'Standard Inventory Item');
+                              })()}
                             </span>
                           </div>
                         </td>
@@ -2206,12 +2245,24 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
               <div className="item-details-section-title">Description</div>
               <div className="item-details-section-body">
                 {selectedItem.item_name}
-                <br />
-                {selectedItem.serial_numbers ? `S/N: ${selectedItem.serial_numbers}` : 'S/N: NA'}
-                <br />
-                Warranty: 1-3 Years
-                <br />
-                Suitable for professional &amp; business computing.
+                {selectedItem.has_serial_no === 1 && (
+                  <>
+                    <br />
+                    <span>Tracking: Serialized Unit Tracking</span>
+                  </>
+                )}
+                {selectedItem.serial_numbers && (
+                  <>
+                    <br />
+                    <span>Initial S/N: {selectedItem.serial_numbers}</span>
+                  </>
+                )}
+                {selectedItem.warranty_months && Number(selectedItem.warranty_months) > 0 ? (
+                  <>
+                    <br />
+                    <span>Warranty: {Number(selectedItem.warranty_months) % 12 === 0 ? `${Number(selectedItem.warranty_months) / 12} Year(s)` : `${selectedItem.warranty_months} Month(s)`}</span>
+                  </>
+                ) : null}
               </div>
             </div>
 
@@ -2233,6 +2284,7 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };

@@ -22,6 +22,7 @@ export const ThermalInvoice: React.FC<ThermalInvoiceProps> = ({
     showCustomerContact = true,
     showTaxBreakdown = true,
     showAmtWords = true,
+    showWarranty = true,
     pageSize = 'THERMAL_80'
   } = options;
 
@@ -129,7 +130,12 @@ export const ThermalInvoice: React.FC<ThermalInvoiceProps> = ({
               {i + 1}. {l.itemName}
             </div>
             {l.serialNumber && (
-              <div style={{ fontSize: '9.5px', paddingLeft: '12px' }}>S/N: {l.serialNumber}</div>
+              <div style={{ fontSize: '9.5px', paddingLeft: '12px' }}>Serial No: {l.serialNumber}</div>
+            )}
+            {showWarranty && (Boolean(l.warrantyMonths) || Boolean(l.warrantyText)) && (
+              <div style={{ fontSize: '9.5px', paddingLeft: '12px', color: '#333' }}>
+                Warranty: {l.warrantyText || (l.warrantyMonths ? `${l.warrantyMonths}M` : '')}
+              </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingLeft: '12px', fontSize: '10px' }}>
               <span style={{ flex: 1, color: '#333' }}>

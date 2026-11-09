@@ -41,6 +41,7 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
   // Other Information
   const [description, setDescription] = useState('');
   const [maintainStock, setMaintainStock] = useState(true);
+  const [hasSerialNo, setHasSerialNo] = useState(false);
   const [setAsDefault, setSetAsDefault] = useState(false);
   const [markInactive, setMarkInactive] = useState(false);
 
@@ -62,6 +63,7 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
       setSalesRate('0.00');
       setDescription('');
       setMaintainStock(initialType === 'Stock Item');
+      setHasSerialNo(false);
       setSetAsDefault(false);
       setMarkInactive(false);
       setError(null);
@@ -89,6 +91,7 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
     setItemType(type);
     if (type === 'Service') {
       setMaintainStock(false);
+      setHasSerialNo(false);
       setOpeningQty('0.00');
       setOpeningValue('0.00');
       setReorderLevel('0.00');
@@ -129,7 +132,8 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
         openingQty: parsedQty,
         openingRatePaise: purchaseRatePaise,
         reorderLevel: parsedReorder,
-        godownId: selectedGodownId || undefined
+        godownId: selectedGodownId || undefined,
+        hasSerialNo: Boolean(hasSerialNo && itemType !== 'Service')
       };
 
       const result = await api.createStockItem(payload);
@@ -145,6 +149,8 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
         selling_rate_paise: sellingRatePaise,
         opening_qty: parsedQty,
         isService: itemType === 'Service',
+        has_serial_no: hasSerialNo && itemType !== 'Service' ? 1 : 0,
+        hasSerialNo: Boolean(hasSerialNo && itemType !== 'Service'),
         itemType
       };
 
@@ -765,6 +771,26 @@ export const QuickItemModal: React.FC<QuickItemModalProps> = ({
                   style={{ accentColor: '#FF641F' }}
                 />
                 Maintain stock for this item
+              </label>
+
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '12px',
+                  cursor: itemType === 'Service' ? 'not-allowed' : 'pointer',
+                  color: 'var(--text-secondary, #4B5563)'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  disabled={itemType === 'Service'}
+                  checked={hasSerialNo}
+                  onChange={(e) => setHasSerialNo(e.target.checked)}
+                  style={{ accentColor: '#FF641F' }}
+                />
+                Enable Serial Number Tracking
               </label>
 
               <label

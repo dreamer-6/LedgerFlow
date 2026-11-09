@@ -156,6 +156,7 @@ console.log('--- TEST 1: Dashboard FY Default & 12 FY Months Structure ---');
         ratePaise: 8000000,
         gstRate: 18,
         isTaxInclusive: false,
+        serialNumber: 'WS-SN-004, WS-SN-005',
         movementType: 'IN'
       }
     ]
@@ -364,6 +365,7 @@ console.log('--- TEST 4: Atomic Amendment for Posted Vouchers ---');
         ratePaise: 11000000,
         gstRate: 18,
         isTaxInclusive: false,
+        serialNumber: 'WS-SN-002',
         movementType: 'OUT'
       }
     ]
@@ -386,6 +388,7 @@ console.log('--- TEST 4: Atomic Amendment for Posted Vouchers ---');
         ratePaise: 10500000,
         gstRate: 18,
         isTaxInclusive: false,
+        serialNumber: 'WS-SN-002',
         movementType: 'OUT'
       }
     ]

@@ -137,14 +137,24 @@ export function estimateItemRowHeight(item: {
   itemName?: string;
   subtext?: string;
   serialNumber?: string;
+  serials?: string[];
+  warrantyMonths?: number;
 }): number {
   let height = 36; // Base row height
   const name = item.itemName || item.description || '';
   if (name.length > 40) {
     height += 16 * Math.floor(name.length / 40);
   }
-  const sub = item.subtext || item.serialNumber || '';
+  const sub = item.subtext || '';
   if (sub) {
+    height += 16;
+  }
+  const serialText = item.serialNumber || (item.serials && item.serials.length > 0 ? item.serials.join(', ') : '');
+  if (serialText) {
+    const serialLines = Math.max(1, Math.ceil(serialText.length / 45));
+    height += 16 * serialLines;
+  }
+  if (item.warrantyMonths && Number(item.warrantyMonths) > 0) {
     height += 16;
   }
   return height;

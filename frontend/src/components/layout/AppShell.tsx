@@ -25,8 +25,8 @@ export interface AppShellProps {
   setReceiptViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   paymentViewMode?: 'dashboard' | 'create' | 'register' | 'view';
   setPaymentViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
-  journalViewMode?: 'dashboard' | 'create';
-  setJournalViewMode?: (mode: 'dashboard' | 'create') => void;
+  journalViewMode?: 'dashboard' | 'create' | 'register' | 'view';
+  setJournalViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   currentDate?: string;
   onOpenBusinessSwitcher: () => void;
   onOpenFyModal: () => void;

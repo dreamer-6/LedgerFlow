@@ -134,6 +134,16 @@ function formatINR(paise: number): string {
   return '₹ ' + Math.abs(rupees).toLocaleString('en-IN');
 }
 
+export interface AdditionalCharge {
+  id: string;
+  ledgerId: string;
+  ledgerName: string;
+  description: string;
+  type: 'ADD' | 'SUBTRACT';
+  amount: string;
+  gstRate: number;
+}
+
 export interface LineItem {
   itemId: string;
   description: string;
@@ -153,6 +163,7 @@ export interface LineItem {
   isInventoryTracked?: boolean;
   sku?: string;
   warrantyMonths?: number;
+  warrantyDescription?: string;
   hasSerialNo?: boolean;
 }
 
@@ -171,6 +182,7 @@ const emptyLine = (): LineItem => ({
   isService: false,
   sku: '',
   warrantyMonths: 0,
+  warrantyDescription: '',
   hasSerialNo: false
 });
 
@@ -530,6 +542,56 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
   /* ── Line Items ── */
   const [lines, setLines] = useState<LineItem[]>([emptyLine()]);
 
+  /* ── Additional Charges / Bill Sundries (Freight, Packaging, Discounts) ── */
+  const [ledgers, setLedgers] = useState<any[]>([]);
+  const [charges, setCharges] = useState<AdditionalCharge[]>([]);
+
+  const handleAddChargeRow = () => {
+    const defaultLedger = ledgers.find((l: any) =>
+      /freight|transport|courier|delivery/i.test(l.ledger_name) ||
+      /indirect expense|direct expense/i.test(l.group_name || '')
+    );
+    setCharges(prev => [
+      ...prev,
+      {
+        id: 'chg_' + Date.now() + Math.random().toString(36).substring(2, 6),
+        ledgerId: defaultLedger?.ledger_id || '',
+        ledgerName: defaultLedger?.ledger_name || 'Additional Charge',
+        description: '',
+        type: 'ADD',
+        amount: '',
+        gstRate: 18
+      }
+    ]);
+  };
+
+  const addQuickCharge = (presetName: string, type: 'ADD' | 'SUBTRACT', gstRate: number) => {
+    const matched = ledgers.find((l: any) =>
+      l.ledger_name.toLowerCase().includes(presetName.toLowerCase().split(' ')[0]) ||
+      (type === 'SUBTRACT' && /discount/i.test(l.ledger_name))
+    );
+    setCharges(prev => [
+      ...prev,
+      {
+        id: 'chg_' + Date.now() + Math.random().toString(36).substring(2, 6),
+        ledgerId: matched?.ledger_id || '',
+        ledgerName: matched?.ledger_name || presetName,
+        description: presetName,
+        type,
+        amount: '',
+        gstRate
+      }
+    ]);
+  };
+
+  const updateCharge = (index: number, field: keyof AdditionalCharge, value: any) => {
+    setCharges(prev => prev.map((c, i) => (i === index ? { ...c, [field]: value } : c)));
+  };
+
+  const removeCharge = (index: number) => {
+    setCharges(prev => prev.filter((_, i) => i !== index));
+  };
+
   /* ── Other Information ── */
   const [transportMode, setTransportMode] = useState('By Road');
   const [vehicleNo, setVehicleNo] = useState('');
@@ -560,16 +622,18 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     const load = async () => {
       setMastersLoading(true);
       try {
-        const [pty, items, gd, un] = await Promise.all([
+        const [pty, items, gd, un, ld] = await Promise.all([
           api.getParties('CUSTOMER'),
           api.getStockItems(),
           api.getGodowns(),
-          api.getUnits()
+          api.getUnits(),
+          api.getLedgers()
         ]);
         setParties(pty || []);
         setStockItems(items || []);
         setGodowns(gd || []);
         setUnits(un || []);
+        setLedgers(ld || []);
 
         const defaultGdId = gd?.[0]?.godown_id || '';
         setLines(prev => prev.map(l => ({ ...l, godownId: l.godownId || defaultGdId })));
@@ -621,24 +685,48 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
         setTermsAndCond(voucher.terms_conditions || voucher.terms_and_conditions || termsAndCond);
 
         if (vLines && vLines.length > 0) {
-          setLines(
-            vLines.map((l: any, idx: number) => ({
-              id: `line_${idx}_${Date.now()}`,
-              itemId: l.item_id || '',
-              description: l.description || '',
-              godownId: l.godown_id || '',
-              quantity: Number(l.quantity) || 1,
-              unit: l.unit_symbol || l.unit || 'NOS',
-              hsnSac: l.hsn_sac || '',
-              rate: (Number(l.rate_paise) || 0) / 100,
-              rateInclTax: 0,
-              discountPercent: Number(l.discount_percent) || 0,
-              gstRate: Number(l.gst_rate) || 18,
-              serialNumber: l.serial_number || '',
-              warrantyMonths: Number(l.warranty_months) || 0,
-              isService: Boolean(l.is_service)
-            }))
-          );
+          const itemLines = vLines.filter((l: any) => l.item_id);
+          const chargeLines = vLines.filter((l: any) => !l.item_id && (l.ledger_id || l.rate_paise !== 0));
+
+          if (itemLines.length > 0) {
+            setLines(
+              itemLines.map((l: any, idx: number) => ({
+                id: `line_${idx}_${Date.now()}`,
+                itemId: l.item_id || '',
+                description: l.description || '',
+                godownId: l.godown_id || '',
+                quantity: Number(l.quantity) || 1,
+                unit: l.unit_symbol || l.unit || 'NOS',
+                hsnSac: l.hsn_sac || '',
+                rate: (Number(l.rate_paise) || 0) / 100,
+                rateInclTax: 0,
+                discountPercent: Number(l.discount_percent) || 0,
+                gstRate: Number(l.gst_rate) || 18,
+                serialNumber: l.serial_number || '',
+                warrantyMonths: Number(l.warranty_months) || 0,
+                warrantyDescription: l.warranty_text || (l.warranty_months ? `${l.warranty_months}m Warranty` : ''),
+                isService: Boolean(l.is_service)
+              }))
+            );
+          }
+
+          if (chargeLines.length > 0) {
+            setCharges(
+              chargeLines.map((vl: any, cIdx: number) => {
+                const rate = (Number(vl.rate_paise) || 0) / 100;
+                const isSub = rate < 0;
+                return {
+                  id: `chg_edit_${cIdx}_${Date.now()}`,
+                  ledgerId: vl.ledger_id || '',
+                  ledgerName: vl.ledger_name || vl.description || 'Additional Charge',
+                  description: vl.description || '',
+                  type: isSub ? 'SUBTRACT' : 'ADD',
+                  amount: String(Math.abs(rate)),
+                  gstRate: Number(vl.gst_rate) ?? Number(vl.tax_rate) ?? 0
+                };
+              })
+            );
+          }
         }
       })
       .catch((err) => {
@@ -744,14 +832,14 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     }
   };
 
-  const selectItem = (lineIndex: number, itemId: string) => {
-    const item = stockItems.find(s => s.item_id === itemId);
+  const selectItem = (lineIndex: number, itemId: string, itemOverride?: any) => {
+    const item = itemOverride || stockItems.find(s => s.item_id === itemId);
     if (!item) return;
     const defaultGodown = godowns[0]?.godown_id || '';
     const sellRate = item.selling_rate_paise ? item.selling_rate_paise / 100 : 0;
     const gstRate = item.gst_rate ?? 18;
     const chosenGodown = lines[lineIndex]?.godownId || defaultGodown;
-    const hasSerial = Boolean(item.has_serial_no || (item.serial_numbers && item.serial_numbers.trim()));
+    const hasSerial = Boolean(item.has_serial_no || (item.serial_numbers && item.serial_numbers.trim()) || item.hasSerialNo);
 
     setLines(prev => {
       const updated = prev.map((l, i) =>
@@ -768,6 +856,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
               godownId: chosenGodown,
               sku: item.sku || '',
               warrantyMonths: item.warranty_months || 0,
+              warrantyDescription: item.warranty_months ? (item.warranty_months >= 12 && item.warranty_months % 12 === 0 ? `${item.warranty_months / 12} Year${item.warranty_months / 12 > 1 ? 's' : ''} Warranty` : `${item.warranty_months}m Warranty`) : '',
               hasSerialNo: hasSerial,
               serialNumber: '',
               stockLoading: true,
@@ -792,11 +881,16 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     // Authoritative stock balance fetch
     fetchStockForLine(lineIndex, item.item_id, chosenGodown);
 
-    // Auto-advance focus to quantity input
-    setTimeout(() => {
-      const qtyInput = document.getElementById(`sales-qty-${lineIndex}`);
-      if (qtyInput) (qtyInput as HTMLInputElement).focus();
-    }, 50);
+    // If serialized item, auto-prompt serial selection modal; if non-serialized, focus quantity
+    if (hasSerial) {
+      setActiveSerialRowIdx(lineIndex);
+      setShowSerialModal(true);
+    } else {
+      setTimeout(() => {
+        const qtyInput = document.getElementById(`sales-qty-${lineIndex}`);
+        if (qtyInput) (qtyInput as HTMLInputElement).focus();
+      }, 50);
+    }
   };
 
   const handleGodownChange = (lineIndex: number, newGodownId: string) => {
@@ -827,21 +921,75 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
 
   /* ── Indicative totals calculated in UI (Authoritative total computed by backend) ── */
   const totals = useMemo(() => {
-    let subtotal = 0;
+    let validItemsCount = 0;
+    let totalQty = 0;
+    let itemsTaxable = 0;
     let discountTotal = 0;
-    let taxTotal = 0;
+    let itemTaxTotal = 0;
 
     lines.forEach(l => {
+      if (!l.itemId && !l.description) return;
+      validItemsCount++;
+      totalQty += Number(l.quantity) || 0;
       const { taxable, discount, taxAmt } = calcLineAmounts(l, taxMode);
-      subtotal += taxable + discount;
+      itemsTaxable += taxable;
       discountTotal += discount;
-      taxTotal += taxAmt;
+      itemTaxTotal += taxAmt;
     });
 
-    const taxable = subtotal - discountTotal;
-    const grandTotal = Math.round(taxable + taxTotal);
-    return { subtotal, discountTotal, taxable, taxTotal, grandTotal };
-  }, [lines, taxMode]);
+    let chargesTaxable = 0;
+    let chargesTaxTotal = 0;
+    let chargesTotal = 0;
+
+    charges.forEach(c => {
+      const rawAmt = Number(c.amount) || 0;
+      if (rawAmt <= 0) return;
+      const mult = c.type === 'SUBTRACT' ? -1 : 1;
+      const gst = Number(c.gstRate) || 0;
+
+      let lineTaxable = 0;
+      let lineTax = 0;
+      if (taxMode === 'INCLUSIVE') {
+        lineTaxable = rawAmt / (1 + gst / 100);
+        lineTax = rawAmt - lineTaxable;
+      } else {
+        lineTaxable = rawAmt;
+        lineTax = rawAmt * (gst / 100);
+      }
+
+      lineTaxable *= mult;
+      lineTax *= mult;
+
+      chargesTaxable += lineTaxable;
+      chargesTaxTotal += lineTax;
+      chargesTotal += (lineTaxable + lineTax);
+    });
+
+    const isInterState = Boolean(company?.state_code && placeOfSupply && company.state_code !== placeOfSupply);
+    const taxable = itemsTaxable + chargesTaxable;
+    const taxTotal = itemTaxTotal + chargesTaxTotal;
+    const subTotalBeforeRound = taxable + taxTotal;
+    const grandTotal = Math.round(subTotalBeforeRound);
+    const roundOff = Math.round((grandTotal - subTotalBeforeRound) * 100) / 100;
+
+    return {
+      validItemsCount,
+      totalQty,
+      subtotal: itemsTaxable + discountTotal,
+      discountTotal,
+      itemsTaxable,
+      chargesTaxable,
+      chargesTotal,
+      taxable,
+      taxTotal,
+      cgst: isInterState ? 0 : taxTotal / 2,
+      sgst: isInterState ? 0 : taxTotal / 2,
+      igst: isInterState ? taxTotal : 0,
+      roundOff,
+      grandTotal,
+      isInterState
+    };
+  }, [lines, charges, taxMode, company, placeOfSupply]);
 
   // Auto-sync settlement amount with grand total unless user manually adjusted
   useEffect(() => {
@@ -853,6 +1001,24 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
   /* ── Build Voucher Payload ── */
   const buildPayload = (status: 'DRAFT' | 'POSTED') => {
     const validLines = lines.filter(l => l.itemId && Number(l.quantity) > 0 && Number(l.rate) >= 0);
+
+    const chargeLines = charges
+      .filter(c => Number(c.amount) > 0)
+      .map(c => {
+        const amt = Number(c.amount) || 0;
+        const signedRate = c.type === 'SUBTRACT' ? -amt : amt;
+        return {
+          itemId: undefined,
+          ledgerId: c.ledgerId || undefined,
+          description: c.description || c.ledgerName || 'Additional Charge',
+          quantity: 1,
+          ratePaise: Math.round(signedRate * 100),
+          discountPercent: 0,
+          gstRate: Number(c.gstRate) || 0,
+          isTaxInclusive: taxMode === 'INCLUSIVE',
+          movementType: undefined
+        };
+      });
 
     const immediatePay = (status === 'POSTED' && paymentMode !== 'CREDIT' && settlementAmount > 0)
       ? {
@@ -875,20 +1041,24 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
       termsConditions: termsAndCond || undefined,
       status,
       isTaxInclusive: taxMode === 'INCLUSIVE',
-      lines: validLines.map(l => ({
-        itemId: l.itemId,
-        description: l.description || undefined,
-        godownId: l.godownId || undefined,
-        quantity: Number(l.quantity),
-        ratePaise: Math.round(Number(l.rate) * 100),
-        discountPercent: Number(l.discountPercent) || 0,
-        gstRate: Number(l.gstRate),
-        isTaxInclusive: taxMode === 'INCLUSIVE',
-        serialNumber: l.serialNumber || undefined,
-        warrantyMonths: l.warrantyMonths || undefined,
-        isService: Boolean(l.isService || (l.hsnSac && l.hsnSac.startsWith('99')) || (l.description && l.description.toLowerCase().includes('service'))),
-        movementType: 'OUT'
-      }))
+      lines: [
+        ...validLines.map(l => ({
+          itemId: l.itemId,
+          description: l.description || undefined,
+          godownId: l.godownId || undefined,
+          quantity: Number(l.quantity),
+          ratePaise: Math.round(Number(l.rate) * 100),
+          discountPercent: Number(l.discountPercent) || 0,
+          gstRate: Number(l.gstRate),
+          isTaxInclusive: taxMode === 'INCLUSIVE',
+          serialNumber: l.serialNumber || undefined,
+          warrantyMonths: l.warrantyMonths !== undefined ? Number(l.warrantyMonths) : undefined,
+          warrantyText: l.warrantyDescription || undefined,
+          isService: Boolean(l.isService || (l.hsnSac && l.hsnSac.startsWith('99')) || (l.description && l.description.toLowerCase().includes('service'))),
+          movementType: 'OUT'
+        })),
+        ...chargeLines
+      ]
     };
   };
 
@@ -924,6 +1094,25 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
       setError('Please select a customer before posting the invoice.');
       return;
     }
+
+    // UI-045: Enforce serial selection for serial-tracked items
+    for (let idx = 0; idx < lines.length; idx++) {
+      const line = lines[idx];
+      if (line.itemId && line.hasSerialNo && Number(line.quantity) > 0) {
+        const itemObj = stockItems.find(it => it.item_id === line.itemId);
+        const itemName = line.description || itemObj?.item_name || `Line #${idx + 1}`;
+        if (!line.serialNumber || !line.serialNumber.trim()) {
+          setError(`Item '${itemName}' requires ${line.quantity} serial numbers. Please click 'Select Unit Serials' before posting.`);
+          return;
+        }
+        const serialsArr = line.serialNumber.split(',').map(s => s.trim()).filter(Boolean);
+        if (serialsArr.length !== Number(line.quantity)) {
+          setError(`Item '${itemName}' has ${serialsArr.length} serials selected, but selling quantity is ${line.quantity}. Selected count must exactly match quantity.`);
+          return;
+        }
+      }
+    }
+
     const payload = buildPayload('POSTED');
     if (!payload.lines.length) {
       setError('Please select at least one valid item line to post the invoice.');
@@ -957,7 +1146,53 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
   const prepareLiveVoucherData = () => {
     const validLines = lines.filter(l => l.itemId || l.description?.trim() || (Number(l.quantity) > 0 && Number(l.rate) > 0));
     const linesToUse = validLines.length > 0 ? validLines : lines;
-    const isInterState = company?.state_code && placeOfSupply && company.state_code !== placeOfSupply;
+    const isInterState = Boolean(company?.state_code && placeOfSupply && company.state_code !== placeOfSupply);
+
+    const liveChargeLines = charges
+      .filter(c => Number(c.amount) > 0)
+      .map((c, cIdx) => {
+        const rawAmt = Number(c.amount) || 0;
+        const mult = c.type === 'SUBTRACT' ? -1 : 1;
+        const gstRate = Number(c.gstRate) || 0;
+        let taxablePaise = 0;
+        let taxPaise = 0;
+        if (taxMode === 'INCLUSIVE') {
+          const fullPaise = Math.round(rawAmt * 100);
+          taxablePaise = Math.round(fullPaise / (1 + gstRate / 100));
+          taxPaise = fullPaise - taxablePaise;
+        } else {
+          taxablePaise = Math.round(rawAmt * 100);
+          taxPaise = Math.round(taxablePaise * (gstRate / 100));
+        }
+        taxablePaise *= mult;
+        taxPaise *= mult;
+        const cgstPaise = isInterState ? 0 : Math.round(taxPaise / 2);
+        const sgstPaise = isInterState ? 0 : cgstPaise;
+        const igstPaise = isInterState ? taxPaise : 0;
+
+        return {
+          line_number: linesToUse.length + cIdx + 1,
+          item_id: null,
+          ledger_id: c.ledgerId || null,
+          ledger_name: c.ledgerName || 'Additional Charge',
+          item_name: c.ledgerName || c.description || 'Additional Charge',
+          description: c.description || undefined,
+          hsn_sac: '',
+          quantity: 1,
+          unit: '',
+          unit_symbol: '',
+          rate_paise: Math.round((mult * rawAmt) * 100),
+          taxable_amount_paise: taxablePaise,
+          tax_rate: gstRate,
+          cgst_amount_paise: cgstPaise,
+          sgst_amount_paise: sgstPaise,
+          igst_amount_paise: igstPaise,
+          total_amount_paise: taxablePaise + taxPaise,
+          serial_number: undefined,
+          warranty_months: 0,
+          is_charge: true
+        };
+      });
 
     return {
       voucher: {
@@ -981,9 +1216,10 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
         phone: selectedParty?.phone || undefined,
         email: selectedParty?.email || undefined,
         taxable_amount_paise: Math.round(totals.taxable * 100),
-        cgst_amount_paise: isInterState ? 0 : Math.round((totals.taxTotal / 2) * 100),
-        sgst_amount_paise: isInterState ? 0 : Math.round((totals.taxTotal / 2) * 100),
-        igst_amount_paise: isInterState ? Math.round(totals.taxTotal * 100) : 0,
+        cgst_amount_paise: Math.round(totals.cgst * 100),
+        sgst_amount_paise: Math.round(totals.sgst * 100),
+        igst_amount_paise: Math.round(totals.igst * 100),
+        round_off_paise: Math.round(totals.roundOff * 100),
         tax_amount_paise: Math.round(totals.taxTotal * 100),
         total_amount_paise: Math.round(totals.grandTotal * 100),
         narration: narration || notes || undefined,
@@ -991,30 +1227,34 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
         status: 'DRAFT',
         payment_terms: paymentTerms ? `${paymentTerms} Days` : 'Immediate'
       },
-      lines: linesToUse.map((l, idx) => {
-        const { taxable, taxAmt, lineTotal } = calcLineAmounts(l, taxMode);
-        const itemObj = stockItems.find(it => it.item_id === l.itemId);
+      lines: [
+        ...linesToUse.map((l, idx) => {
+          const { taxable, taxAmt, lineTotal } = calcLineAmounts(l, taxMode);
+          const itemObj = stockItems.find(it => it.item_id === l.itemId);
 
-        return {
-          line_number: idx + 1,
-          item_id: l.itemId,
-          item_name: itemObj?.item_name || l.description || 'Item',
-          description: l.description,
-          hsn_sac: l.hsnSac || itemObj?.hsn_sac || '',
-          quantity: Number(l.quantity) || 1,
-          unit: l.unit || itemObj?.unit_symbol || 'NOS',
-          unit_symbol: l.unit || itemObj?.unit_symbol || 'NOS',
-          rate_paise: Math.round((Number(l.rate) || 0) * 100),
-          taxable_amount_paise: Math.round(taxable * 100),
-          tax_rate: Number(l.gstRate) || 0,
-          cgst_amount_paise: isInterState ? 0 : Math.round((taxAmt / 2) * 100),
-          sgst_amount_paise: isInterState ? 0 : Math.round((taxAmt / 2) * 100),
-          igst_amount_paise: isInterState ? Math.round(taxAmt * 100) : 0,
-          total_amount_paise: Math.round(lineTotal * 100),
-          serial_number: l.serialNumber || undefined,
-          warranty_months: l.warrantyMonths || itemObj?.warranty_months || undefined
-        };
-      })
+          return {
+            line_number: idx + 1,
+            item_id: l.itemId,
+            item_name: itemObj?.item_name || l.description || 'Item',
+            description: l.description,
+            hsn_sac: l.hsnSac || itemObj?.hsn_sac || '',
+            quantity: Number(l.quantity) || 1,
+            unit: l.unit || itemObj?.unit_symbol || 'NOS',
+            unit_symbol: l.unit || itemObj?.unit_symbol || 'NOS',
+            rate_paise: Math.round((Number(l.rate) || 0) * 100),
+            taxable_amount_paise: Math.round(taxable * 100),
+            tax_rate: Number(l.gstRate) || 0,
+            cgst_amount_paise: isInterState ? 0 : Math.round((taxAmt / 2) * 100),
+            sgst_amount_paise: isInterState ? 0 : Math.round((taxAmt / 2) * 100),
+            igst_amount_paise: isInterState ? Math.round(taxAmt * 100) : 0,
+            total_amount_paise: Math.round(lineTotal * 100),
+            serial_number: l.serialNumber || undefined,
+            warranty_months: l.warrantyMonths || itemObj?.warranty_months || undefined,
+            warranty_text: l.warrantyDescription || undefined
+          };
+        }),
+        ...liveChargeLines
+      ]
     };
   };
 
@@ -1442,6 +1682,17 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                 <button
                   type="button"
                   className="lf-btn lf-btn-secondary"
+                  onClick={() => {
+                    setActiveItemRowIdx(null);
+                    setShowQuickItemModal(true);
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', padding: '5px 12px', borderColor: '#FF641F', color: '#FF641F' }}
+                >
+                  <Plus size={13} /> New Item
+                </button>
+                <button
+                  type="button"
+                  className="lf-btn lf-btn-secondary"
                   onClick={() => addRow(false)}
                   style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', padding: '5px 12px' }}
                 >
@@ -1493,26 +1744,6 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                               addNewLabel="+ Quick Add Item"
                               style={{ minWidth: '210px' }}
                             />
-                            <button
-                              type="button"
-                              title="Create New Item"
-                              onClick={() => {
-                                setActiveItemRowIdx(idx);
-                                setShowQuickItemModal(true);
-                              }}
-                              style={{
-                                background: 'transparent',
-                                border: '1px solid #FF641F',
-                                color: '#FF641F',
-                                borderRadius: '4px',
-                                padding: '5px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center'
-                              }}
-                            >
-                              <Plus size={12} />
-                            </button>
                           </div>
                           {line.description && (
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', padding: '2px 4px', fontStyle: 'normal' }}>
@@ -1520,51 +1751,113 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                             </div>
                           )}
 
-                          {/* Stock Details: SKU & Warranty Badge (Phase 1) */}
-                          {(line.sku || (line.warrantyMonths !== undefined && line.warrantyMonths > 0)) && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', flexWrap: 'wrap', paddingLeft: '4px' }}>
+                          {/* Stock Details: SKU & Interactive Warranty Configuration */}
+                          {line.itemId && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap', paddingLeft: '4px' }}>
                               {line.sku && (
                                 <span style={{ fontSize: '10.5px', color: '#64748B', backgroundColor: 'rgba(100,116,139,0.1)', padding: '1px 5px', borderRadius: '4px' }}>
                                   SKU: {line.sku}
                                 </span>
                               )}
-                              {line.warrantyMonths !== undefined && line.warrantyMonths > 0 && (
-                                <span style={{ fontSize: '10.5px', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '1px 5px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                  <ShieldCheck size={11} /> {line.warrantyMonths}m Warranty
-                                </span>
-                              )}
+
+                              {/* Interactive Warranty Duration & Terms Description */}
+                              <div style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                backgroundColor: '#F0FDF4',
+                                border: '1px solid #BBF7D0',
+                                borderRadius: '4px',
+                                padding: '1px 6px'
+                              }}>
+                                <ShieldCheck size={12} color="#16A34A" />
+                                <select
+                                  value={line.warrantyMonths ?? 0}
+                                  onChange={e => {
+                                    const val = Number(e.target.value);
+                                    updateLine(idx, 'warrantyMonths', val);
+                                    const defaultDesc = val === 0 ? 'No Warranty' : (val >= 12 && val % 12 === 0 ? `${val / 12} Year${val / 12 > 1 ? 's' : ''} Warranty` : `${val}m Warranty`);
+                                    updateLine(idx, 'warrantyDescription', defaultDesc);
+                                  }}
+                                  style={{
+                                    border: 'none',
+                                    backgroundColor: 'transparent',
+                                    fontSize: '11px',
+                                    fontWeight: 600,
+                                    color: '#15803D',
+                                    cursor: 'pointer',
+                                    padding: '1px 2px',
+                                    outline: 'none'
+                                  }}
+                                  title="Change warranty duration"
+                                >
+                                  <option value={0}>No Warranty</option>
+                                  <option value={1}>1 Month</option>
+                                  <option value={3}>3 Months</option>
+                                  <option value={6}>6 Months</option>
+                                  <option value={12}>1 Year</option>
+                                  <option value={24}>2 Years</option>
+                                  <option value={36}>3 Years</option>
+                                  <option value={60}>5 Years</option>
+                                </select>
+
+                                <span style={{ color: '#86EFAC' }}>|</span>
+
+                                <input
+                                  type="text"
+                                  placeholder="Terms (e.g. 1 Year Limited)"
+                                  value={line.warrantyDescription ?? (line.warrantyMonths ? `${line.warrantyMonths}m Warranty` : '')}
+                                  onChange={e => updateLine(idx, 'warrantyDescription', e.target.value)}
+                                  style={{
+                                    border: 'none',
+                                    backgroundColor: 'transparent',
+                                    fontSize: '11px',
+                                    color: '#166534',
+                                    width: '150px',
+                                    outline: 'none',
+                                    padding: '1px 2px'
+                                  }}
+                                  title="Edit custom warranty description / terms for printed invoice"
+                                />
+                              </div>
                             </div>
                           )}
 
                           {/* Unit-level Serial Selection Trigger (Phase 1) */}
                           {line.hasSerialNo && (
                             <div style={{ marginTop: '4px', paddingLeft: '4px' }}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveSerialRowIdx(idx);
-                                  setShowSerialModal(true);
-                                }}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  fontSize: '11px',
-                                  fontWeight: 600,
-                                  padding: '2px 8px',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer',
-                                  color: line.serialNumber ? '#16A34A' : '#EA580C',
-                                  backgroundColor: line.serialNumber ? '#DCFCE7' : '#FFEDD5',
-                                  border: '1px solid ' + (line.serialNumber ? '#86EFAC' : '#FDBA74'),
-                                  transition: 'all 0.15s ease'
-                                }}
-                              >
-                                <Barcode size={12} />
-                                {line.serialNumber
-                                  ? `✓ ${line.serialNumber.split(',').filter(Boolean).length} Serials Selected`
-                                  : `Select Unit Serials (${line.quantity || 1}) *`}
-                              </button>
+                              {(() => {
+                                const count = line.serialNumber ? line.serialNumber.split(',').filter(Boolean).length : 0;
+                                const isMatch = count === Number(line.quantity);
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveSerialRowIdx(idx);
+                                      setShowSerialModal(true);
+                                    }}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      fontSize: '11px',
+                                      fontWeight: 600,
+                                      padding: '2px 8px',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      color: isMatch ? '#16A34A' : count > 0 ? '#D97706' : '#EA580C',
+                                      backgroundColor: isMatch ? '#DCFCE7' : count > 0 ? '#FEF3C7' : '#FFEDD5',
+                                      border: '1px solid ' + (isMatch ? '#86EFAC' : count > 0 ? '#FCD34D' : '#FDBA74'),
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                  >
+                                    <Barcode size={12} />
+                                    {count > 0
+                                      ? `✓ ${count} / ${line.quantity} Serials Selected`
+                                      : `Select Unit Serials (${line.quantity || 1}) *`}
+                                  </button>
+                                );
+                              })()}
                             </div>
                           )}
 
@@ -1729,6 +2022,234 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
             </div>
           </div>
 
+          {/* Additional Charges & Bill Sundries Card */}
+          <div className="ledger-card" style={{ padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div
+                  style={{
+                    width: '26px',
+                    height: '26px',
+                    borderRadius: '6px',
+                    backgroundColor: 'rgba(59,130,246,0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#2563EB'
+                  }}
+                >
+                  <Truck size={14} />
+                </div>
+                <div>
+                  <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Additional Charges &amp; Bill Sundries
+                  </span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                    Freight, Delivery, Packaging, Discounts
+                  </span>
+                </div>
+              </div>
+
+              {/* Quick Add Presets */}
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => addQuickCharge('Freight Charges', 'ADD', 18)}
+                  className="lf-btn lf-btn-secondary"
+                  style={{ fontSize: '11.5px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Plus size={12} /> 🚚 + Freight
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addQuickCharge('Packaging Charges', 'ADD', 18)}
+                  className="lf-btn lf-btn-secondary"
+                  style={{ fontSize: '11.5px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Plus size={12} /> 📦 + Packaging
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addQuickCharge('Discount Allowed', 'SUBTRACT', 0)}
+                  className="lf-btn lf-btn-secondary"
+                  style={{ fontSize: '11.5px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Plus size={12} /> 🏷️ - Discount
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddChargeRow}
+                  className="lf-btn lf-btn-secondary"
+                  style={{ fontSize: '11.5px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <Plus size={12} /> + Other Charge
+                </button>
+              </div>
+            </div>
+
+            {charges.length === 0 ? (
+              <div style={{
+                padding: '16px',
+                border: '1px dashed var(--border-subtle, #CBD5E1)',
+                borderRadius: '8px',
+                textAlign: 'center',
+                color: 'var(--text-muted)',
+                fontSize: '12px'
+              }}>
+                No additional charges added. Click preset buttons above or <strong>+ Other Charge</strong> to include freight, packaging, or discounts without creating dummy stock items.
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-subtle, #E2E8F0)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                      <th style={{ padding: '6px 8px' }}>Charge / Ledger</th>
+                      <th style={{ padding: '6px 8px' }}>Description / Note</th>
+                      <th style={{ padding: '6px 8px', width: '110px' }}>Type</th>
+                      <th style={{ padding: '6px 8px', width: '120px' }}>Amount (₹)</th>
+                      <th style={{ padding: '6px 8px', width: '90px' }}>GST Rate</th>
+                      <th style={{ padding: '6px 8px', width: '120px', textAlign: 'right' }}>Net (₹)</th>
+                      <th style={{ padding: '6px 4px', width: '36px' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {charges.map((c, cIdx) => {
+                      const rawAmt = Number(c.amount) || 0;
+                      const mult = c.type === 'SUBTRACT' ? -1 : 1;
+                      const gstRate = Number(c.gstRate) || 0;
+                      const net = taxMode === 'INCLUSIVE'
+                        ? rawAmt * mult
+                        : (rawAmt + (rawAmt * gstRate) / 100) * mult;
+
+                      return (
+                        <tr key={c.id} style={{ borderBottom: '1px solid var(--border-subtle, #F1F5F9)' }}>
+                          <td style={{ padding: '6px 8px' }}>
+                            <select
+                              value={c.ledgerId}
+                              onChange={e => {
+                                const selLed = ledgers.find((l: any) => l.ledger_id === e.target.value);
+                                updateCharge(cIdx, 'ledgerId', e.target.value);
+                                if (selLed) updateCharge(cIdx, 'ledgerName', selLed.ledger_name);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                borderRadius: '4px',
+                                border: '1px solid var(--border-subtle, #CBD5E1)',
+                                fontSize: '12px',
+                                backgroundColor: 'var(--bg-card)'
+                              }}
+                            >
+                              <option value="">Select Ledger</option>
+                              {ledgers.map((l: any) => (
+                                <option key={l.ledger_id} value={l.ledger_id}>
+                                  {l.ledger_name} ({l.group_name || 'Ledger'})
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td style={{ padding: '6px 8px' }}>
+                            <input
+                              type="text"
+                              placeholder="e.g. Outward transport, promotional discount"
+                              value={c.description}
+                              onChange={e => updateCharge(cIdx, 'description', e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                borderRadius: '4px',
+                                border: '1px solid var(--border-subtle, #CBD5E1)',
+                                fontSize: '12px'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '6px 8px' }}>
+                            <select
+                              value={c.type}
+                              onChange={e => updateCharge(cIdx, 'type', e.target.value as 'ADD' | 'SUBTRACT')}
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                borderRadius: '4px',
+                                border: '1px solid var(--border-subtle, #CBD5E1)',
+                                fontSize: '12px',
+                                backgroundColor: 'var(--bg-card)',
+                                fontWeight: 600,
+                                color: c.type === 'SUBTRACT' ? '#DC2626' : '#2563EB'
+                              }}
+                            >
+                              <option value="ADD">+ Add (+)</option>
+                              <option value="SUBTRACT">- Deduct (-)</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: '6px 8px' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={c.amount}
+                              onChange={e => updateCharge(cIdx, 'amount', e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                borderRadius: '4px',
+                                border: '1px solid var(--border-subtle, #CBD5E1)',
+                                fontSize: '12px',
+                                textAlign: 'right',
+                                fontFamily: 'var(--font-mono)'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '6px 8px' }}>
+                            <select
+                              value={c.gstRate}
+                              onChange={e => updateCharge(cIdx, 'gstRate', Number(e.target.value))}
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                borderRadius: '4px',
+                                border: '1px solid var(--border-subtle, #CBD5E1)',
+                                fontSize: '12px',
+                                textAlign: 'center',
+                                backgroundColor: 'var(--bg-card)'
+                              }}
+                            >
+                              <option value={0}>0%</option>
+                              <option value={5}>5%</option>
+                              <option value={12}>12%</option>
+                              <option value={18}>18%</option>
+                              <option value={28}>28%</option>
+                            </select>
+                          </td>
+                          <td style={{
+                            padding: '6px 8px',
+                            textAlign: 'right',
+                            fontWeight: 700,
+                            fontFamily: 'var(--font-mono)',
+                            color: c.type === 'SUBTRACT' ? '#DC2626' : 'var(--text-primary)'
+                          }}>
+                            ₹ {net.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ textAlign: 'center', padding: '6px 4px' }}>
+                            <button
+                              type="button"
+                              onClick={() => removeCharge(cIdx)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                              title="Remove Charge"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Terms and Notes Card */}
           <div className="ledger-card" style={{ padding: '16px 18px' }}>
             <div style={{ fontSize: '13.5px', fontWeight: 700, marginBottom: '10px', color: 'var(--text-primary)' }}>
@@ -1785,9 +2306,25 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
 
               <div style={{ borderTop: '1px solid var(--border-subtle)', marginTop: '4px', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Sub Total</span>
+                  <span style={{ color: 'var(--text-muted)' }}>Items Sub Total</span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                    ₹ {totals.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₹ {totals.itemsTaxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                {totals.chargesTotal !== 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: totals.chargesTotal < 0 ? '#DC2626' : '#2563EB' }}>
+                    <span>Charges / Discounts</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                      {totals.chargesTotal > 0 ? '+ ' : ''}₹ {totals.chargesTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Taxable Value</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                    ₹ {totals.taxable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
 
@@ -1820,6 +2357,15 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                     </div>
                   );
                 })()}
+
+                {totals.roundOff !== 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '11.5px' }}>
+                    <span>Round Off</span>
+                    <span style={{ fontFamily: 'var(--font-mono)' }}>
+                      {totals.roundOff > 0 ? '+' : ''}{totals.roundOff.toFixed(2)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Grand Total */}
@@ -2084,15 +2630,21 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
           setActiveItemRowIdx(null);
         }}
         onSuccess={(newItem) => {
-          setStockItems(prev => [...prev, newItem]);
+          const itemNormalized = {
+            ...newItem,
+            item_id: newItem.item_id || newItem.itemId,
+            item_name: newItem.item_name || newItem.itemName,
+            has_serial_no: newItem.has_serial_no !== undefined ? newItem.has_serial_no : (newItem.hasSerialNo ? 1 : 0)
+          };
+          setStockItems(prev => [...prev.filter(s => s.item_id !== itemNormalized.item_id), itemNormalized]);
           if (activeItemRowIdx !== null && activeItemRowIdx < lines.length) {
-            selectItem(activeItemRowIdx, newItem.item_id);
+            selectItem(activeItemRowIdx, itemNormalized.item_id, itemNormalized);
           }
-          showToast(`Item '${newItem.item_name}' created and selected!`);
+          showToast(`Item '${itemNormalized.item_name}' created and selected!`);
         }}
       />
 
-      {/* Unit-Level Serial Picker Modal (Phase 1) */}
+      {/* Unit-Level Serial Picker Modal (Phase 1 & UI-045) */}
       {showSerialModal && activeSerialRowIdx !== null && lines[activeSerialRowIdx] && (
         <SerialPickerModal
           isOpen={showSerialModal}
@@ -2102,6 +2654,8 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
           currentQuantity={Number(lines[activeSerialRowIdx].quantity) || 1}
           initialSerials={lines[activeSerialRowIdx].serialNumber ? lines[activeSerialRowIdx].serialNumber.split(',').map(s => s.trim()).filter(Boolean) : []}
           warrantyMonths={lines[activeSerialRowIdx].warrantyMonths || 0}
+          godownId={lines[activeSerialRowIdx].godownId || godowns[0]?.godown_id}
+          godownName={godowns.find(g => g.godown_id === (lines[activeSerialRowIdx].godownId || godowns[0]?.godown_id))?.godown_name}
           onConfirm={(serials) => {
             updateLine(activeSerialRowIdx, 'serialNumber', serials.join(', '));
             setShowSerialModal(false);

@@ -48,8 +48,11 @@ import { PaymentDetailsView } from './pages/PaymentDetailsView';
 import { PaymentPrintModal } from './components/payment/PaymentPrintModal';
 import { PaymentsView } from './pages/PaymentsView';
 import { PaymentCreationView } from './pages/PaymentCreationView';
-import { JournalView } from './pages/JournalView';
-import { JournalCreationView } from './pages/JournalCreationView';
+import { JournalDashboardView } from './pages/JournalDashboardView';
+import { CreateJournalView } from './pages/CreateJournalView';
+import { JournalRegisterView } from './pages/JournalRegisterView';
+import { JournalDetailsView } from './pages/JournalDetailsView';
+import { JournalPrintModal } from './components/journal/JournalPrintModal';
 import { QuotationDashboardView } from './pages/QuotationDashboardView';
 import { QuotationRegisterView } from './pages/QuotationRegisterView';
 import { QuotationDetailsView } from './pages/QuotationDetailsView';
@@ -145,7 +148,12 @@ export const App: React.FC = () => {
   const [activePrintPaymentId, setActivePrintPaymentId] = useState<string | null>(null);
   const [paymentRegisterFilter, setPaymentRegisterFilter] = useState<any>(undefined);
   const [paymentPreviewData, setPaymentPreviewData] = useState<any | null>(null);
-  const [journalViewMode, setJournalViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [journalViewMode, setJournalViewMode] = useState<'dashboard' | 'create' | 'register' | 'view'>('dashboard');
+  const [journalOrigin, setJournalOrigin] = useState<'dashboard' | 'register'>('dashboard');
+  const [selectedJournalId, setSelectedJournalId] = useState<string | null>(null);
+  const [activePrintJournalId, setActivePrintJournalId] = useState<string | null>(null);
+  const [journalRegisterFilter, setJournalRegisterFilter] = useState<{ type?: string; status?: string; minAmount?: number } | undefined>(undefined);
+  const [duplicateJournalData, setDuplicateJournalData] = useState<any | null>(null);
   const [serviceBillViewMode, setServiceBillViewMode] = useState<'dashboard' | 'create'>('dashboard');
   const [quotationViewMode, setQuotationViewMode] = useState<'dashboard' | 'create' | 'register' | 'view'>('dashboard');
   const [quotationOrigin, setQuotationOrigin] = useState<'dashboard' | 'register'>('dashboard');
@@ -617,6 +625,7 @@ export const App: React.FC = () => {
     { label: 'Create Payment', tab: 'payments_create', category: 'Voucher', icon: <ArrowLeftRight size={14} />, hotkey: 'F5' },
     { label: 'Journal Dashboard', tab: 'journal', category: 'Module', icon: <BookText size={14} />, hotkey: 'Alt+J' },
     { label: 'Create Journal Entry', tab: 'journal_create', category: 'Voucher', icon: <BookText size={14} />, hotkey: 'F7' },
+    { label: 'Journal Register', tab: 'journal_register', category: 'Register', icon: <BookText size={14} /> },
     { label: 'Service Bills Dashboard', tab: 'service_bill', category: 'Module', icon: <Wrench size={14} />, hotkey: 'Alt+W' },
     { label: 'Create Service Bill', tab: 'service_bill_create', category: 'Voucher', icon: <Wrench size={14} /> },
     { label: 'Parties (Customers & Suppliers)', tab: 'parties', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+3' },
@@ -725,6 +734,13 @@ export const App: React.FC = () => {
     }
     if (item.tab === 'journal_create') {
       setJournalViewMode('create');
+      setActiveTab('journal');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'journal_register') {
+      setJournalViewMode('register');
       setActiveTab('journal');
       setShowSearchModal(false);
       setSearchQuery('');
@@ -1370,29 +1386,85 @@ export const App: React.FC = () => {
             </div>
           )}
 
-          {/* 1.5 Journal Module (UI-008) — Journal Dashboard & New Journal Entry */}
+          {/* 1.5 Journal Module (UI-044) — Journal Dashboard, Creation, Register, Details */}
           {activeTab === 'journal' && (
             <div key="journal" className="view-container-animated">
-              {journalViewMode === 'dashboard' ? (
-                <JournalView
+              {journalViewMode === 'dashboard' && (
+                <JournalDashboardView
                   company={company}
                   activeFy={activeFy}
-                  onCreateJournal={() => setJournalViewMode('create')}
-                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
-                  onNavigateTab={(tab, sub) => {
-                    setActiveTab(tab);
-                    if (sub) setReportSubTab(sub);
+                  onCreateJournal={() => {
+                    setJournalOrigin('dashboard');
+                    setDuplicateJournalData(null);
+                    setJournalViewMode('create');
+                  }}
+                  onViewRegister={(filter) => {
+                    setJournalRegisterFilter(filter);
+                    setJournalViewMode('register');
+                  }}
+                  onSelectJournal={(id) => {
+                    setSelectedJournalId(id);
+                    setJournalOrigin('dashboard');
+                    setJournalViewMode('view');
                   }}
                 />
-              ) : (
-                <JournalCreationView
+              )}
+
+              {journalViewMode === 'create' && (
+                <CreateJournalView
                   company={company}
                   activeFy={activeFy}
                   currentDate={currentDate}
-                  onBack={() => setJournalViewMode('dashboard')}
+                  duplicateVoucherData={duplicateJournalData || undefined}
+                  onBack={() => {
+                    setDuplicateJournalData(null);
+                    setJournalViewMode(journalOrigin);
+                  }}
                   onPostSuccess={(voucherId) => {
-                    setActivePrintVoucherId(voucherId);
-                    setJournalViewMode('dashboard');
+                    setDuplicateJournalData(null);
+                    setSelectedJournalId(voucherId);
+                    setJournalOrigin('register');
+                    setJournalViewMode('view');
+                  }}
+                />
+              )}
+
+              {journalViewMode === 'register' && (
+                <JournalRegisterView
+                  company={company}
+                  activeFy={activeFy}
+                  initialFilter={journalRegisterFilter}
+                  onCreateJournal={() => {
+                    setJournalOrigin('register');
+                    setDuplicateJournalData(null);
+                    setJournalViewMode('create');
+                  }}
+                  onSelectJournal={(id) => {
+                    setSelectedJournalId(id);
+                    setJournalOrigin('register');
+                    setJournalViewMode('view');
+                  }}
+                  onPrintJournal={(id) => {
+                    setActivePrintJournalId(id);
+                  }}
+                />
+              )}
+
+              {journalViewMode === 'view' && selectedJournalId && (
+                <JournalDetailsView
+                  voucherId={selectedJournalId}
+                  company={company}
+                  activeFy={activeFy}
+                  onBack={() => {
+                    setJournalViewMode(journalOrigin);
+                  }}
+                  onPrint={(id) => {
+                    setActivePrintJournalId(id);
+                  }}
+                  onDuplicate={(vch) => {
+                    setDuplicateJournalData(vch);
+                    setJournalOrigin('register');
+                    setJournalViewMode('create');
                   }}
                 />
               )}
@@ -1473,6 +1545,7 @@ export const App: React.FC = () => {
             <div key="items" className="view-container-animated">
               <ItemsView
                 company={company}
+                activeFy={activeFy}
                 onOpenNewVoucher={handleOpenNewVoucher}
                 onNavigateReports={(sub) => {
                   setReportSubTab(sub);
@@ -2056,6 +2129,17 @@ export const App: React.FC = () => {
           onClose={() => {
             setActivePrintPaymentId(null);
             setPaymentPreviewData(null);
+          }}
+        />
+      )}
+
+      {/* Journal Print Modal (UI-044) */}
+      {activePrintJournalId && (
+        <JournalPrintModal
+          voucherId={activePrintJournalId}
+          company={company}
+          onClose={() => {
+            setActivePrintJournalId(null);
           }}
         />
       )}

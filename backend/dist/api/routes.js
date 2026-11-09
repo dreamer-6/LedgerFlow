@@ -88,13 +88,57 @@ function createApiRouter(db) {
     // --------------------------------------------------------------------------
     router.get('/masters/ledgers', ...withCompany, (req, res) => {
         try {
+            const companyId = req.companyId;
+            // UI-046/UI-047: Auto-ensure standard charge & bill sundry ledgers exist for this company
+            const expenseGroup = db.prepare(`
+        SELECT group_id FROM ledger_groups 
+        WHERE (company_id = ? OR company_id IS NULL) AND (group_id LIKE '%indirect_expense%' OR group_id LIKE '%direct_expense%' OR nature = 'EXPENSE')
+        LIMIT 1
+      `).get(companyId);
+            const incomeGroup = db.prepare(`
+        SELECT group_id FROM ledger_groups 
+        WHERE (company_id = ? OR company_id IS NULL) AND (group_id LIKE '%indirect_income%' OR nature = 'INCOME')
+        LIMIT 1
+      `).get(companyId);
+            if (expenseGroup) {
+                const hasFreight = db.prepare('SELECT 1 FROM ledgers WHERE company_id = ? AND (ledger_name LIKE ? OR ledger_id LIKE ?)').get(companyId, '%Freight%', '%_led_freight');
+                if (!hasFreight) {
+                    db.prepare(`
+            INSERT OR IGNORE INTO ledgers (ledger_id, company_id, group_id, ledger_name, code, opening_balance_paise, opening_balance_type, is_party, is_active)
+            VALUES (?, ?, ?, ?, ?, 0, 'DR', 0, 1)
+          `).run(`${companyId}_led_freight`, companyId, expenseGroup.group_id, 'Freight Charges', 'FREIGHT');
+                }
+                const hasPackaging = db.prepare('SELECT 1 FROM ledgers WHERE company_id = ? AND (ledger_name LIKE ? OR ledger_id LIKE ?)').get(companyId, '%Packaging%', '%_led_packaging');
+                if (!hasPackaging) {
+                    db.prepare(`
+            INSERT OR IGNORE INTO ledgers (ledger_id, company_id, group_id, ledger_name, code, opening_balance_paise, opening_balance_type, is_party, is_active)
+            VALUES (?, ?, ?, ?, ?, 0, 'DR', 0, 1)
+          `).run(`${companyId}_led_packaging`, companyId, expenseGroup.group_id, 'Packaging Charges', 'PACK');
+                }
+                const hasDiscountAllowed = db.prepare('SELECT 1 FROM ledgers WHERE company_id = ? AND (ledger_name LIKE ? OR ledger_id LIKE ?)').get(companyId, '%Discount%', '%_led_discount%');
+                if (!hasDiscountAllowed) {
+                    db.prepare(`
+            INSERT OR IGNORE INTO ledgers (ledger_id, company_id, group_id, ledger_name, code, opening_balance_paise, opening_balance_type, is_party, is_active)
+            VALUES (?, ?, ?, ?, ?, 0, 'DR', 0, 1)
+          `).run(`${companyId}_led_discount_allowed`, companyId, expenseGroup.group_id, 'Discount Allowed', 'DISC_ALW');
+                }
+            }
+            if (incomeGroup) {
+                const hasDiscountReceived = db.prepare('SELECT 1 FROM ledgers WHERE company_id = ? AND ledger_name LIKE ?').get(companyId, '%Discount Received%');
+                if (!hasDiscountReceived) {
+                    db.prepare(`
+            INSERT OR IGNORE INTO ledgers (ledger_id, company_id, group_id, ledger_name, code, opening_balance_paise, opening_balance_type, is_party, is_active)
+            VALUES (?, ?, ?, ?, ?, 0, 'CR', 0, 1)
+          `).run(`${companyId}_led_discount_received`, companyId, incomeGroup.group_id, 'Discount Received', 'DISC_REC');
+                }
+            }
             const rows = db.prepare(`
         SELECT l.*, g.group_name, g.nature
         FROM ledgers l
         JOIN ledger_groups g ON l.group_id = g.group_id
         WHERE l.company_id = ? AND l.is_active = 1
         ORDER BY l.ledger_name ASC
-      `).all(req.companyId);
+      `).all(companyId);
             res.json(rows);
         }
         catch (err) {
@@ -659,29 +703,65 @@ function createApiRouter(db) {
     router.get('/masters/items/:id/serials', ...withCompany, (req, res) => {
         try {
             // Verify item belongs to company
-            const item = db.prepare('SELECT item_id, company_id, serial_numbers FROM stock_items WHERE item_id = ?').get(req.params.id);
+            const item = db.prepare('SELECT item_id, company_id, item_name, serial_numbers FROM stock_items WHERE item_id = ?').get(req.params.id);
             if (!item || !(0, security_js_1.assertResourceOwnership)(res, item.company_id, req.companyId))
                 return;
             const isDetailed = req.query.detailed === 'true';
-            const rows = db.prepare(`
-        SELECT serial_number, status, purchase_date, warranty_expiry_date FROM stock_item_serials
-        WHERE item_id = ? AND status = 'AVAILABLE'
-      `).all(req.params.id);
+            const godownId = req.query.godownId;
+            let query = `
+        SELECT serial_id, serial_number, status, godown_id, purchase_date, warranty_expiry_date
+        FROM stock_item_serials
+        WHERE (company_id = ? OR company_id IS NULL)
+          AND item_id = ?
+          AND status = 'AVAILABLE'
+      `;
+            const params = [req.companyId, req.params.id];
+            if (godownId) {
+                query += ` AND (godown_id = ? OR godown_id IS NULL)`;
+                params.push(godownId);
+            }
+            query += ` ORDER BY purchase_date ASC, created_at ASC`;
+            const rows = db.prepare(query).all(...params);
             if (isDetailed) {
-                res.json(rows.map(r => ({
+                const result = rows.map(r => ({
+                    serialId: r.serial_id,
                     serialNumber: r.serial_number,
                     status: r.status,
+                    godownId: r.godown_id || null,
                     purchaseDate: r.purchase_date || null,
                     warrantyExpiryDate: r.warranty_expiry_date || null
-                })));
-                return;
+                }));
+                if (result.length > 0) {
+                    return res.json(result);
+                }
+                // Backward compatibility fallback: parse item.serial_numbers if no physical unit rows exist yet
+                if (item.serial_numbers) {
+                    const soldRows = db.prepare(`
+            SELECT serial_number FROM stock_item_serials
+            WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND status = 'SOLD'
+          `).all(req.companyId, req.params.id);
+                    const soldSet = new Set(soldRows.map((r) => r.serial_number));
+                    const list = item.serial_numbers
+                        .split(/[\n,]+/)
+                        .map((s) => s.trim())
+                        .filter((s) => Boolean(s) && !soldSet.has(s));
+                    return res.json(list.map((sn) => ({
+                        serialId: `ser_legacy_${sn}`,
+                        serialNumber: sn,
+                        status: 'AVAILABLE',
+                        godownId: godownId || null,
+                        purchaseDate: null,
+                        warrantyExpiryDate: null
+                    })));
+                }
+                return res.json([]);
             }
             let list = rows.map((r) => r.serial_number);
             if (list.length === 0 && item.serial_numbers) {
                 const soldRows = db.prepare(`
           SELECT serial_number FROM stock_item_serials
-          WHERE item_id = ? AND status = 'SOLD'
-        `).all(req.params.id);
+          WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND status = 'SOLD'
+        `).all(req.companyId, req.params.id);
                 const soldSet = new Set(soldRows.map((r) => r.serial_number));
                 list = item.serial_numbers
                     .split(/[\n,]+/)
@@ -689,6 +769,159 @@ function createApiRouter(db) {
                     .filter((s) => Boolean(s) && !soldSet.has(s));
             }
             res.json(list);
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+    // UI-045: Serial Number Register API
+    router.get('/inventory/serials/register', ...withCompany, (req, res) => {
+        try {
+            const companyId = req.companyId;
+            const itemId = req.query.itemId;
+            const godownId = req.query.godownId;
+            const statusFilter = req.query.status;
+            const search = (req.query.search || '').trim().toLowerCase();
+            const dateFrom = req.query.dateFrom;
+            const dateTo = req.query.dateTo;
+            const supplierId = req.query.supplierId;
+            const customerId = req.query.customerId;
+            // Summary KPIs
+            const summaryRows = db.prepare(`
+        SELECT status, COUNT(*) as cnt
+        FROM stock_item_serials
+        WHERE (company_id = ? OR company_id IS NULL)
+        GROUP BY status
+      `).all(companyId);
+            let total = 0;
+            let available = 0;
+            let sold = 0;
+            let returned = 0;
+            let damaged = 0;
+            for (const r of summaryRows) {
+                total += Number(r.cnt);
+                if (r.status === 'AVAILABLE')
+                    available += Number(r.cnt);
+                else if (r.status === 'SOLD')
+                    sold += Number(r.cnt);
+                else if (r.status === 'RETURNED')
+                    returned += Number(r.cnt);
+                else if (r.status === 'DAMAGED' || r.status === 'WRITTEN_OFF')
+                    damaged += Number(r.cnt);
+            }
+            // Query detailed serial items
+            let query = `
+        SELECT 
+          s.serial_id, s.serial_number, s.status, s.purchase_date, s.warranty_expiry_date, s.sales_date, s.created_at,
+          s.item_id, i.item_name, i.item_code, i.sku,
+          s.godown_id, g.godown_name,
+          s.purchase_voucher_id, pv.voucher_number as purchase_voucher_number,
+          s.supplier_id, sup.party_name as supplier_name,
+          s.sales_voucher_id, sv.voucher_number as sales_voucher_number,
+          s.customer_id, cus.party_name as customer_name
+        FROM stock_item_serials s
+        JOIN stock_items i ON s.item_id = i.item_id
+        LEFT JOIN godowns g ON s.godown_id = g.godown_id
+        LEFT JOIN vouchers pv ON s.purchase_voucher_id = pv.voucher_id
+        LEFT JOIN parties sup ON s.supplier_id = sup.party_id
+        LEFT JOIN vouchers sv ON s.sales_voucher_id = sv.voucher_id
+        LEFT JOIN parties cus ON s.customer_id = cus.party_id
+        WHERE (s.company_id = ? OR s.company_id IS NULL)
+      `;
+            const params = [companyId];
+            if (itemId) {
+                query += ` AND s.item_id = ?`;
+                params.push(itemId);
+            }
+            if (godownId) {
+                query += ` AND s.godown_id = ?`;
+                params.push(godownId);
+            }
+            if (statusFilter && statusFilter !== 'ALL') {
+                query += ` AND s.status = ?`;
+                params.push(statusFilter);
+            }
+            if (supplierId) {
+                query += ` AND s.supplier_id = ?`;
+                params.push(supplierId);
+            }
+            if (customerId) {
+                query += ` AND s.customer_id = ?`;
+                params.push(customerId);
+            }
+            if (dateFrom) {
+                query += ` AND (s.purchase_date >= ? OR s.created_at >= ?)`;
+                params.push(dateFrom, dateFrom);
+            }
+            if (dateTo) {
+                query += ` AND (s.purchase_date <= ? OR s.created_at <= ?)`;
+                params.push(dateTo, dateTo);
+            }
+            if (search) {
+                query += ` AND (LOWER(s.serial_number) LIKE ? OR LOWER(i.item_name) LIKE ? OR LOWER(COALESCE(i.item_code, '')) LIKE ?)`;
+                const wild = `%${search}%`;
+                params.push(wild, wild, wild);
+            }
+            query += ` ORDER BY s.created_at DESC, s.purchase_date DESC LIMIT 500`;
+            const rows = db.prepare(query).all(...params);
+            const formattedSerials = rows.map(r => ({
+                serialId: r.serial_id,
+                serialNumber: r.serial_number,
+                status: r.status,
+                itemId: r.item_id,
+                itemName: r.item_name,
+                itemCode: r.item_code || '',
+                sku: r.sku || '',
+                godownId: r.godown_id || null,
+                godownName: r.godown_name || 'Main Location',
+                purchaseVoucherId: r.purchase_voucher_id || null,
+                purchaseVoucherNumber: r.purchase_voucher_number || null,
+                purchaseDate: r.purchase_date || null,
+                supplierId: r.supplier_id || null,
+                supplierName: r.supplier_name || null,
+                salesVoucherId: r.sales_voucher_id || null,
+                salesVoucherNumber: r.sales_voucher_number || null,
+                salesDate: r.sales_date || null,
+                customerId: r.customer_id || null,
+                customerName: r.customer_name || null,
+                warrantyExpiryDate: r.warranty_expiry_date || null,
+                createdAt: r.created_at
+            }));
+            res.json({
+                summary: { total, available, sold, returned, damaged },
+                serials: formattedSerials
+            });
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+    // UI-045: Serial Lifecycle History API
+    router.get('/inventory/serials/:id/history', ...withCompany, (req, res) => {
+        try {
+            const serial = db.prepare(`
+        SELECT 
+          s.*,
+          i.item_name, i.item_code, i.sku,
+          g.godown_name,
+          pv.voucher_number as purchase_voucher_number,
+          sup.party_name as supplier_name,
+          sv.voucher_number as sales_voucher_number,
+          cus.party_name as customer_name
+        FROM stock_item_serials s
+        JOIN stock_items i ON s.item_id = i.item_id
+        LEFT JOIN godowns g ON s.godown_id = g.godown_id
+        LEFT JOIN vouchers pv ON s.purchase_voucher_id = pv.voucher_id
+        LEFT JOIN parties sup ON s.supplier_id = sup.party_id
+        LEFT JOIN vouchers sv ON s.sales_voucher_id = sv.voucher_id
+        LEFT JOIN parties cus ON s.customer_id = cus.party_id
+        WHERE (s.company_id = ? OR s.company_id IS NULL)
+          AND (s.serial_id = ? OR s.serial_number = ?)
+      `).get(req.companyId, req.params.id, req.params.id);
+            if (!serial) {
+                return res.status(404).json({ error: `Serial '${req.params.id}' not found.` });
+            }
+            res.json(serial);
         }
         catch (err) {
             res.status(500).json({ error: err.message });
@@ -803,6 +1036,7 @@ function createApiRouter(db) {
             const sellingRatePaise = b.sellingRatePaise !== undefined && b.sellingRatePaise !== null ? Number(b.sellingRatePaise) : (item.selling_rate_paise ?? 0);
             const reorderLevel = b.reorderLevel !== undefined && b.reorderLevel !== null ? Number(b.reorderLevel) : (item.reorder_level ?? 0);
             const warrantyMonths = b.warrantyMonths !== undefined && b.warrantyMonths !== null ? Number(b.warrantyMonths) : (item.warranty_months ?? 0);
+            const hasSerialNo = b.hasSerialNo !== undefined ? (b.hasSerialNo ? 1 : 0) : item.has_serial_no;
             if (b.purchaseRatePaise !== undefined && b.purchaseRatePaise !== null && Number(b.purchaseRatePaise) < 0) {
                 return res.status(400).json({ error: 'Purchase rate cannot be negative.' });
             }
@@ -814,9 +1048,9 @@ function createApiRouter(db) {
           item_name = ?, item_code = ?, sku = ?, hsn_sac = ?,
           unit_id = ?, gst_rate = ?, cess_rate = ?,
           purchase_rate_paise = ?, selling_rate_paise = ?,
-          reorder_level = ?, warranty_months = ?
+          reorder_level = ?, warranty_months = ?, has_serial_no = ?
         WHERE item_id = ?
-      `).run(itemName, itemCode, sku, hsnSac, unitId, gstRate, cessRate, purchaseRatePaise, sellingRatePaise, reorderLevel, warrantyMonths, req.params.id);
+      `).run(itemName, itemCode, sku, hsnSac, unitId, gstRate, cessRate, purchaseRatePaise, sellingRatePaise, reorderLevel, warrantyMonths, hasSerialNo, req.params.id);
             res.json({ success: true, message: 'Stock item updated successfully.' });
         }
         catch (err) {
@@ -906,7 +1140,42 @@ function createApiRouter(db) {
                  JOIN vouchers rv ON ba.voucher_id = rv.voucher_id
                  WHERE ba.reference_voucher_id = v.voucher_id
                    AND rv.status != 'CANCELLED'
-               ), 0) as paid_amount_paise
+               ), 0) as paid_amount_paise,
+               COALESCE((
+                 SELECT SUM(ba.amount_paise)
+                 FROM bill_allocations ba
+                 WHERE ba.voucher_id = v.voucher_id
+                   AND ba.allocation_type = 'AGAINST_REF'
+               ), 0) as allocated_amount_paise,
+                (
+                  SELECT l.ledger_name
+                  FROM ledger_entries le
+                  JOIN ledgers l ON le.ledger_id = l.ledger_id
+                  WHERE le.voucher_id = v.voucher_id
+                    AND le.debit_paise > 0
+                  LIMIT 1
+                ) as received_into_ledger_name,
+                (
+                  SELECT l.ledger_name
+                  FROM ledger_entries le
+                  JOIN ledgers l ON le.ledger_id = l.ledger_id
+                  WHERE le.voucher_id = v.voucher_id
+                    AND le.credit_paise > 0
+                  LIMIT 1
+                ) as paid_from_ledger_name,
+                (
+                  SELECT l.ledger_name
+                  FROM ledger_entries le
+                  JOIN ledgers l ON le.ledger_id = l.ledger_id
+                  WHERE le.voucher_id = v.voucher_id
+                    AND le.debit_paise > 0
+                  LIMIT 1
+                ) as paid_to_ledger_name,
+               COALESCE((
+                 SELECT COUNT(*)
+                 FROM voucher_lines vl
+                 WHERE vl.voucher_id = v.voucher_id
+               ), 0) as line_items_count
         FROM vouchers v
         LEFT JOIN parties p ON v.party_id = p.party_id
         LEFT JOIN (
@@ -968,18 +1237,87 @@ function createApiRouter(db) {
                 return;
             const lines = db.prepare(`
         SELECT vl.*, si.item_name, si.hsn_sac, u.symbol as unit_symbol, g.godown_name,
-               si.gst_rate as item_gst_rate, si.warranty_months as item_warranty_months
+               si.gst_rate as item_gst_rate, si.warranty_months as item_warranty_months,
+               si.has_serial_no,
+               l.ledger_name, lg.group_name
         FROM voucher_lines vl
         LEFT JOIN stock_items si ON vl.item_id = si.item_id
         LEFT JOIN units u ON si.unit_id = u.unit_id
         LEFT JOIN godowns g ON vl.godown_id = g.godown_id
+        LEFT JOIN ledgers l ON vl.ledger_id = l.ledger_id
+        LEFT JOIN ledger_groups lg ON l.group_id = lg.group_id
         WHERE vl.voucher_id = ?
         ORDER BY vl.line_number ASC
       `).all(req.params.id);
+            // QA-012 & UI-046: Faithful historical serial recovery using exact line mapping
+            const allocatedSerialIds = new Set();
+            for (const line of lines) {
+                if (line.item_id) {
+                    let matchedSerials = [];
+                    if (voucher.voucher_type === 'SALES' || voucher.voucher_type === 'DELIVERY_NOTE') {
+                        // 1. Direct line-level mapping via sales_voucher_line_id
+                        const lineRows = db.prepare(`
+              SELECT serial_id, serial_number FROM stock_item_serials 
+              WHERE sales_voucher_line_id = ? AND item_id = ? 
+              ORDER BY serial_number ASC
+            `).all(line.line_id, line.item_id);
+                        if (lineRows.length > 0) {
+                            matchedSerials = lineRows.map(r => {
+                                allocatedSerialIds.add(r.serial_id);
+                                return r.serial_number;
+                            });
+                        }
+                        else if (!line.serial_number) {
+                            // 2. Legacy fallback for records created without line_id: allocate unassigned serials up to quantity
+                            const legacyRows = db.prepare(`
+                SELECT serial_id, serial_number FROM stock_item_serials 
+                WHERE sales_voucher_id = ? AND item_id = ? 
+                ORDER BY serial_number ASC
+              `).all(voucher.voucher_id, line.item_id);
+                            const availableForLine = legacyRows.filter(r => !allocatedSerialIds.has(r.serial_id));
+                            const qty = Math.max(1, Math.round(Number(line.quantity) || 1));
+                            const slice = availableForLine.slice(0, qty);
+                            slice.forEach(r => allocatedSerialIds.add(r.serial_id));
+                            matchedSerials = slice.map(r => r.serial_number);
+                        }
+                    }
+                    else if (voucher.voucher_type === 'PURCHASE' || voucher.voucher_type === 'RECEIPT_NOTE') {
+                        // 1. Direct line-level mapping via purchase_voucher_line_id
+                        const lineRows = db.prepare(`
+              SELECT serial_id, serial_number FROM stock_item_serials 
+              WHERE purchase_voucher_line_id = ? AND item_id = ? 
+              ORDER BY serial_number ASC
+            `).all(line.line_id, line.item_id);
+                        if (lineRows.length > 0) {
+                            matchedSerials = lineRows.map(r => {
+                                allocatedSerialIds.add(r.serial_id);
+                                return r.serial_number;
+                            });
+                        }
+                        else if (!line.serial_number) {
+                            // 2. Legacy fallback for records created without line_id: allocate unassigned serials up to quantity
+                            const legacyRows = db.prepare(`
+                SELECT serial_id, serial_number FROM stock_item_serials 
+                WHERE purchase_voucher_id = ? AND item_id = ? 
+                ORDER BY serial_number ASC
+              `).all(voucher.voucher_id, line.item_id);
+                            const availableForLine = legacyRows.filter(r => !allocatedSerialIds.has(r.serial_id));
+                            const qty = Math.max(1, Math.round(Number(line.quantity) || 1));
+                            const slice = availableForLine.slice(0, qty);
+                            slice.forEach(r => allocatedSerialIds.add(r.serial_id));
+                            matchedSerials = slice.map(r => r.serial_number);
+                        }
+                    }
+                    if (matchedSerials.length > 0) {
+                        line.serial_number = matchedSerials.join(', ');
+                    }
+                }
+            }
             const ledgerEntries = db.prepare(`
-        SELECT le.*, l.ledger_name
+        SELECT le.*, l.ledger_name, lg.group_name
         FROM ledger_entries le
         JOIN ledgers l ON le.ledger_id = l.ledger_id
+        LEFT JOIN ledger_groups lg ON l.group_id = lg.group_id
         WHERE le.voucher_id = ?
       `).all(req.params.id);
             const stockEntries = db.prepare(`
@@ -990,11 +1328,28 @@ function createApiRouter(db) {
         WHERE se.voucher_id = ?
       `).all(req.params.id);
             const billAllocations = db.prepare(`
-        SELECT ba.*, v.voucher_number as ref_voucher_number, v.voucher_type as ref_voucher_type,
-               v.voucher_date as ref_voucher_date, v.payment_mode as ref_payment_mode,
-               v.status as ref_voucher_status
+        SELECT ba.*,
+               v.voucher_number as alloc_voucher_number,
+               v.voucher_type as alloc_voucher_type,
+               v.voucher_date as alloc_voucher_date,
+               v.payment_mode as alloc_payment_mode,
+               v.status as alloc_voucher_status,
+               COALESCE(ref_v.voucher_number, v.voucher_number) as ref_voucher_number,
+               COALESCE(ref_v.voucher_type, v.voucher_type) as ref_voucher_type,
+               COALESCE(ref_v.voucher_date, v.voucher_date) as ref_voucher_date,
+               COALESCE(ref_v.payment_mode, v.payment_mode) as ref_payment_mode,
+               COALESCE(ref_v.status, v.status) as ref_voucher_status,
+               ref_v.total_amount_paise as ref_total_amount_paise,
+               (
+                 SELECT COALESCE(SUM(sub_ba.amount_paise), 0)
+                 FROM bill_allocations sub_ba
+                 JOIN vouchers sub_rv ON sub_ba.voucher_id = sub_rv.voucher_id
+                 WHERE sub_ba.reference_voucher_id = ref_v.voucher_id
+                   AND sub_rv.status != 'CANCELLED'
+               ) as ref_paid_amount_paise
         FROM bill_allocations ba
         LEFT JOIN vouchers v ON (ba.voucher_id = v.voucher_id)
+        LEFT JOIN vouchers ref_v ON (ba.reference_voucher_id = ref_v.voucher_id)
         WHERE (ba.reference_voucher_id = ? OR ba.voucher_id = ?)
           AND COALESCE(v.status, 'POSTED') != 'CANCELLED'
         ORDER BY ba.created_at ASC

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api, Company } from '../api/client';
 import {
   Printer,
@@ -112,6 +113,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
   const [format, setFormat] = useState<PaperFormat>('A4');
   const [orientation, setOrientation] = useState<'PORTRAIT' | 'LANDSCAPE'>('PORTRAIT');
   const [paperMargin, setPaperMargin] = useState<'compact' | 'normal' | 'spacious'>('normal');
+  const [showSettingsPanel, setShowSettingsPanel] = useState<boolean>(true);
 
   // Zoom & Page Navigation
   const [zoomMode, setZoomMode] = useState<'fit' | number>('fit');
@@ -139,6 +141,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
     showTerms: true,
     showSignature: true,
     showSerial: true,
+    showWarranty: true,
     showGridLines: false,
     showLedgerflowWordmark: false,
     warrantyDisplayFormat: 'Years',
@@ -151,7 +154,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
       if (company?.invoice_settings) {
         saved = JSON.parse(company.invoice_settings);
       }
-    } catch {}
+    } catch { }
 
     const shipToModeVal = saved?.dispToggles?.shipToMode || (saved?.dispToggles?.showShipTo === false ? 'HIDE' : 'SHOW');
     return {
@@ -169,6 +172,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
       showTerms: saved?.dispToggles?.showTerms ?? true,
       showSignature: saved?.dispToggles?.showSignature ?? true,
       showSerial: saved?.dispToggles?.showSerial ?? true,
+      showWarranty: saved?.dispToggles?.showWarranty ?? true,
       showGridLines: saved?.dispToggles?.showGridLines ?? false,
       showLedgerflowWordmark: saved?.showLedgerflowWordmark ?? false,
       warrantyDisplayFormat: 'Years',
@@ -245,8 +249,8 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
           ...(updates.headerToggles || {})
         }
       };
-      api.updateCurrentCompany({ invoice_settings: JSON.stringify(updated) }).catch(() => {});
-    } catch {}
+      api.updateCurrentCompany({ invoice_settings: JSON.stringify(updated) }).catch(() => { });
+    } catch { }
   };
 
   // Handle format and orientation alignment
@@ -337,6 +341,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
           showTerms: next.showTerms,
           showSignature: next.showSignature,
           showSerial: next.showSerial,
+          showWarranty: next.showWarranty,
           showGridLines: next.showGridLines
         },
         headerToggles: {
@@ -506,17 +511,17 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
   };
 
   if (loading || !normalized) {
-    return (
+    return createPortal(
       <div
         className="lf-print-preview-loading"
         style={{
-          position: 'absolute',
+          position: 'fixed',
           inset: 0,
           backgroundColor: 'rgba(15, 23, 42, 0.75)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 50,
+          zIndex: 9999,
           backdropFilter: 'blur(3px)'
         }}
       >
@@ -546,7 +551,8 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
           />
           <span>Loading Document Preview...</span>
         </div>
-      </div>
+      </div>,
+      document.body
     );
   }
 
@@ -558,13 +564,13 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
   const badgeColor = isCancelled ? '#991B1B' : isDraft ? '#92400E' : '#166534';
   const badgeText = isCancelled ? 'Cancelled' : isDraft ? 'Draft' : 'Original';
 
-  return (
+  return createPortal(
     <div
       className="lf-print-preview-workspace"
       style={{
-        position: 'absolute',
+        position: 'fixed',
         inset: 0,
-        zIndex: 50,
+        zIndex: 9999,
         display: 'flex',
         flexDirection: 'row',
         backgroundColor: 'var(--color-background, #F8F7F4)',
@@ -583,7 +589,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
           overflowY: 'auto',
           backgroundColor: 'var(--surface, #FFFFFF)',
           borderRight: '1px solid var(--border-subtle, #E2E8F0)',
-          display: 'flex',
+          display: showSettingsPanel ? 'flex' : 'none',
           flexDirection: 'column',
           gap: '16px',
           padding: '18px 18px 24px 18px',
@@ -591,30 +597,51 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
         }}
       >
         {/* Panel Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '8px',
+                backgroundColor: '#FFF7ED',
+                border: '1px solid #FFEDD5',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <Printer size={20} color="#EA580C" />
+            </div>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--color-text, #0F172A)', lineHeight: 1.2 }}>
+                Print Preview
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748B)', marginTop: '2px', lineHeight: 1.35 }}>
+                Review and print the document. Adjust settings if needed.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSettingsPanel(false)}
+            title="Hide Options Panel"
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '8px',
-              backgroundColor: '#FFF7ED',
-              border: '1px solid #FFEDD5',
+              width: '28px',
+              height: '28px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              flexShrink: 0
+              backgroundColor: 'transparent',
+              border: '1px solid var(--border-subtle, #CBD5E1)',
+              borderRadius: '6px',
+              color: 'var(--color-text-secondary, #64748B)',
+              cursor: 'pointer'
             }}
           >
-            <Printer size={20} color="#EA580C" />
-          </div>
-          <div>
-            <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--color-text, #0F172A)', lineHeight: 1.2 }}>
-              Print Preview
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--color-text-secondary, #64748B)', marginTop: '2px', lineHeight: 1.35 }}>
-              Review and print the document. Adjust settings if needed.
-            </div>
-          </div>
+            <ChevronLeft size={16} />
+          </button>
         </div>
 
         {/* ─── SECTION 1: DOCUMENT ─── */}
@@ -949,9 +976,10 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
               )}
             </div>
 
-            {/* Remaining toggles (HSN, Taxes, Bank, Terms, Signature) */}
+            {/* Remaining toggles (HSN, Warranty, Taxes, Bank, Terms, Signature) */}
             {[
               { key: 'showHsn', label: 'Item HSN/SAC' },
+              { key: 'showWarranty', label: 'Warranty Terms / Badges' },
               { key: 'showTaxBreakdown', label: 'Tax Breakdown' },
               { key: 'showBankDetails', label: 'Bank Details' },
               { key: 'showTerms', label: 'Terms & Conditions' },
@@ -1134,6 +1162,31 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
         >
           {/* Left / Center: Navigation & Zoom Controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* Toggle Settings Panel Button */}
+            <button
+              type="button"
+              onClick={() => setShowSettingsPanel(!showSettingsPanel)}
+              title={showSettingsPanel ? 'Hide Options Panel' : 'Show Options Panel'}
+              style={{
+                height: '28px',
+                padding: '0 10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '11.5px',
+                fontWeight: 600,
+                color: showSettingsPanel ? '#EA580C' : '#CBD5E1',
+                backgroundColor: showSettingsPanel ? 'rgba(234, 88, 12, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid ' + (showSettingsPanel ? 'rgba(234, 88, 12, 0.4)' : 'rgba(255, 255, 255, 0.12)'),
+                borderRadius: '4px',
+                cursor: 'pointer',
+                marginRight: '6px'
+              }}
+            >
+              <Sliders size={13} />
+              <span>Options</span>
+            </button>
+
             {/* Page Navigation */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
               <button
@@ -1449,6 +1502,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
           </div>
         </div>
       </main>
-    </div>
+    </div>,
+    document.body
   );
 };

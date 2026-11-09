@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   NormalizedInvoiceData,
   InvoiceVisibilityOptions,
-  formatCurrency
+  formatCurrency,
+  formatWarrantyDisplay
 } from './InvoiceAdapter';
 
 interface SimpleInvoiceProps {
@@ -26,6 +27,7 @@ export const SimpleInvoice: React.FC<SimpleInvoiceProps> = ({
     showBankDetails = true,
     showTerms = true,
     showSignature = true,
+    showWarranty = true,
     pageSize = 'A4',
     orientation = 'PORTRAIT',
     paperMargin = 'normal'
@@ -43,6 +45,15 @@ export const SimpleInvoice: React.FC<SimpleInvoiceProps> = ({
     : (isLandscape ? 'A4 landscape' : 'A4 portrait');
 
   const sheetPadding = paperMargin === 'compact' ? '14px 18px' : paperMargin === 'spacious' ? '36px 40px' : '24px 28px';
+
+  const effectiveTerms = useMemo(() => {
+    if (!data.termsAndConditions) return '';
+    if (showWarranty !== false) return data.termsAndConditions;
+    return data.termsAndConditions
+      .split('\n')
+      .filter(line => !/warranty/i.test(line))
+      .join('\n');
+  }, [data.termsAndConditions, showWarranty]);
 
   return (
     <div
@@ -197,8 +208,17 @@ export const SimpleInvoice: React.FC<SimpleInvoiceProps> = ({
               <td style={{ padding: '7px 8px', textAlign: 'center', color: '#94A3B8' }}>{l.index}</td>
               <td style={{ padding: '7px 8px' }}>
                 <span style={{ fontWeight: 600, color: '#0F172A' }}>{l.itemName}</span>
-                {l.serialNumber && <span style={{ color: '#64748B', fontSize: '10px' }}> (S/N: {l.serialNumber})</span>}
-                {l.description && <div style={{ color: '#64748B', fontSize: '10px' }}>{l.description}</div>}
+                {l.serialNumber && (
+                  <div style={{ color: '#64748B', fontSize: '10px', marginTop: '1px' }}>
+                    Serial No: {l.serialNumber}
+                  </div>
+                )}
+                {showWarranty && (Boolean(l.warrantyMonths) || Boolean(l.warrantyText)) && (
+                  <div style={{ color: '#475569', fontSize: '10px', marginTop: '1px', fontWeight: 500 }}>
+                    Warranty: {l.warrantyText || formatWarrantyDisplay(l.warrantyMonths, 'Years')}
+                  </div>
+                )}
+                {l.description && <div style={{ color: '#64748B', fontSize: '10px', marginTop: '1px' }}>{l.description}</div>}
               </td>
               {showHsn && <td style={{ padding: '7px 8px', textAlign: 'center', fontFamily: 'monospace' }}>{l.hsnSac || '—'}</td>}
               <td style={{ padding: '7px 8px', textAlign: 'center', fontWeight: 600 }}>{l.quantity}</td>
@@ -248,10 +268,10 @@ export const SimpleInvoice: React.FC<SimpleInvoiceProps> = ({
 
       {/* ─── FOOTER ─── */}
       <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', fontSize: '10px', color: '#64748B' }}>
-        {showTerms && data.termsAndConditions ? (
+        {showTerms && effectiveTerms ? (
           <div style={{ maxWidth: '60%' }}>
             <div style={{ fontWeight: 700, color: '#475569' }}>Terms:</div>
-            <div style={{ whiteSpace: 'pre-line' }}>{data.termsAndConditions}</div>
+            <div style={{ whiteSpace: 'pre-line' }}>{effectiveTerms}</div>
           </div>
         ) : <div />}
 

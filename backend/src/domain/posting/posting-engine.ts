@@ -26,17 +26,17 @@ export interface CreateVoucherInput {
   companyId: string;
   fyId: string;
   voucherType:
-    | 'SALES'
-    | 'PURCHASE'
-    | 'RECEIPT'
-    | 'PAYMENT'
-    | 'CONTRA'
-    | 'JOURNAL'
-    | 'CREDIT_NOTE'
-    | 'DEBIT_NOTE'
-    | 'SALES_RETURN'
-    | 'PURCHASE_RETURN'
-    | 'STOCK_JOURNAL';
+  | 'SALES'
+  | 'PURCHASE'
+  | 'RECEIPT'
+  | 'PAYMENT'
+  | 'CONTRA'
+  | 'JOURNAL'
+  | 'CREDIT_NOTE'
+  | 'DEBIT_NOTE'
+  | 'SALES_RETURN'
+  | 'PURCHASE_RETURN'
+  | 'STOCK_JOURNAL';
   voucherDate: string; // YYYY-MM-DD
   voucherNumber?: string;
   referenceNumber?: string;
@@ -98,7 +98,7 @@ export class PostingEngine {
       RECEIPT: 'REC',
       PAYMENT: 'PAY',
       CONTRA: 'CON',
-      JOURNAL: 'JNL',
+      JOURNAL: 'JRN',
       CREDIT_NOTE: 'CRN',
       DEBIT_NOTE: 'DBN',
       SALES_RETURN: 'SLR',
@@ -152,7 +152,7 @@ export class PostingEngine {
             configuredFormat = numConfig.format.trim();
           }
         }
-      } catch {}
+      } catch { }
     }
 
     // 3. Determine active prefix
@@ -207,7 +207,7 @@ export class PostingEngine {
             consumedNumbers.add(d.voucher_number.trim());
           }
         }
-      } catch {}
+      } catch { }
     }
 
     // 5. Determine maximum used numeric counter
@@ -437,6 +437,112 @@ export class PostingEngine {
       // Calculate Stock Movements only for physical inventory items (services do not move stock)
       if (line.itemId && !isServiceItem && resolvedGodownId && (line.quantity || 0) > 0) {
         const qty = Number(line.quantity);
+
+        // UI-045: For serialized items, validate serial numbers prior to stock movement & availability checks
+        const isPostingStatus = (input.status || 'POSTED') === 'POSTED';
+        if (isPostingStatus) {
+          // If SALES_RETURN with reference voucher, enforce over-return guard prior to serial/stock checks
+          if ((input.voucherType === 'SALES_RETURN' || input.voucherType === 'CREDIT_NOTE') && input.referenceNumber) {
+            const origVch = db.prepare(`
+              SELECT voucher_id, voucher_number, company_id FROM vouchers
+              WHERE (voucher_number = ? OR voucher_id = ?) AND company_id = ?
+            `).get(input.referenceNumber, input.referenceNumber, input.companyId) as any;
+
+            if (origVch) {
+              const origItemLine = db.prepare(`
+                SELECT SUM(quantity) as total_sold_qty
+                FROM voucher_lines
+                WHERE voucher_id = ? AND item_id = ?
+              `).get(origVch.voucher_id, line.itemId) as any;
+              const soldQty = Number(origItemLine?.total_sold_qty || 0);
+
+              if (soldQty > 0) {
+                const excludeVchId = options?.excludeVoucherId || options?.voucherId;
+                const prevRetRow = db.prepare(`
+                  SELECT SUM(vl.quantity) as total_returned_qty
+                  FROM voucher_lines vl
+                  JOIN vouchers v ON vl.voucher_id = v.voucher_id
+                  WHERE (v.voucher_type = 'SALES_RETURN' OR v.voucher_type = 'CREDIT_NOTE')
+                    AND v.status != 'CANCELLED'
+                    AND (v.reference_number = ? OR v.reference_number = ? OR v.voucher_id IN (
+                      SELECT ba.voucher_id FROM bill_allocations ba WHERE ba.reference_voucher_id = ?
+                    ))
+                    AND vl.item_id = ?
+                    ${excludeVchId ? `AND v.voucher_id != '${excludeVchId}'` : ''}
+                `).get(origVch.voucher_id, origVch.voucher_number, origVch.voucher_id, line.itemId) as any;
+
+                const prevReturned = Number(prevRetRow?.total_returned_qty || 0);
+                const maxReturnable = soldQty - prevReturned;
+                if (qty > maxReturnable) {
+                  throw new Error(
+                    `Cannot return ${qty} units of item '${line.itemId}'. Original invoice '${origVch.voucher_number}' sold ${soldQty} units, of which ${prevReturned} units were already returned (maximum returnable: ${maxReturnable}).`
+                  );
+                }
+              }
+            }
+          }
+
+          const itemMeta = db.prepare('SELECT has_serial_no, item_name FROM stock_items WHERE item_id = ?').get(line.itemId) as { has_serial_no?: number; item_name?: string } | undefined;
+          const isSerialTracked = itemMeta?.has_serial_no === 1;
+          const itemDisplayName = itemMeta?.item_name || line.itemId;
+
+          if (isSerialTracked) {
+            if (input.voucherType === 'PURCHASE' || input.voucherType === 'SALES_RETURN') {
+              if (!line.serialNumber || !line.serialNumber.trim()) {
+                throw new Error(`Item '${itemDisplayName}' requires serial numbers. None provided for quantity ${qty}.`);
+              }
+              const serialsArr = line.serialNumber.split(',').map((s: string) => s.trim()).filter(Boolean);
+              if (serialsArr.length !== qty) {
+                throw new Error(`Serial count (${serialsArr.length}) does not match quantity (${qty}) for item '${itemDisplayName}'.`);
+              }
+              const uniqueSet = new Set(serialsArr);
+              if (uniqueSet.size !== serialsArr.length) {
+                throw new Error(`Duplicate serial numbers found in line for item '${itemDisplayName}'.`);
+              }
+              if (input.voucherType === 'PURCHASE') {
+                for (const s of serialsArr) {
+                  const existingSerial = db.prepare(`
+                    SELECT serial_id, status FROM stock_item_serials
+                    WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
+                  `).get(input.companyId, line.itemId, s) as { serial_id: string; status: string } | undefined;
+
+                  if (existingSerial && existingSerial.status !== 'CANCELLED') {
+                    throw new Error(`Serial number '${s}' already exists for item '${itemDisplayName}' in this company (current status: ${existingSerial.status}).`);
+                  }
+                }
+              }
+            } else if (input.voucherType === 'SALES' || input.voucherType === 'PURCHASE_RETURN') {
+              if (!line.serialNumber || !line.serialNumber.trim()) {
+                throw new Error(`Item '${itemDisplayName}' requires serial numbers. None provided for quantity ${qty}.`);
+              }
+              const serialsArr = line.serialNumber.split(',').map((s: string) => s.trim()).filter(Boolean);
+              if (serialsArr.length !== qty) {
+                throw new Error(`Serial count (${serialsArr.length}) does not match quantity (${qty}) for item '${itemDisplayName}'.`);
+              }
+              const uniqueSet = new Set(serialsArr);
+              if (uniqueSet.size !== serialsArr.length) {
+                throw new Error(`Duplicate serial numbers found in line for item '${itemDisplayName}'.`);
+              }
+
+              for (const s of serialsArr) {
+                const existingSerial = db.prepare(`
+                  SELECT serial_id, status, godown_id, company_id FROM stock_item_serials
+                  WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
+                `).get(input.companyId, line.itemId, s) as { serial_id: string; status: string; godown_id?: string; company_id?: string } | undefined;
+
+                if (!existingSerial) {
+                  throw new Error(`Serial '${s}' does not exist for item '${itemDisplayName}' in this company.`);
+                }
+                if (existingSerial.status !== 'AVAILABLE') {
+                  throw new Error(`Serial '${s}' for item '${itemDisplayName}' is not AVAILABLE (current status: ${existingSerial.status}).`);
+                }
+                if (resolvedGodownId && existingSerial.godown_id && existingSerial.godown_id !== resolvedGodownId) {
+                  throw new Error(`Serial '${s}' is located in a different godown, not '${resolvedGodownId}'.`);
+                }
+              }
+            }
+          }
+        }
 
         if (input.voucherType === 'SALES' || input.voucherType === 'PURCHASE_RETURN') {
           // C-4: Validate stock availability prior to outward posting
@@ -694,8 +800,8 @@ export class PostingEngine {
 
                 if (ledgerCheck) {
                   const isPartyLedger = ledgerCheck.is_party === 1 ||
-                                        !!ledgerCheck.party_id ||
-                                        /debtor|creditor/i.test(ledgerCheck.group_name);
+                    !!ledgerCheck.party_id ||
+                    /debtor|creditor/i.test(ledgerCheck.group_name);
                   if (isPartyLedger) {
                     throw new Error(`Party is mandatory for ${input.voucherType} voucher affecting party/debtor/creditor ledger '${cl.ledgerId}'.`);
                   }
@@ -708,6 +814,32 @@ export class PostingEngine {
         ledgerLines = input.customLedgerLines;
       } else if (input.voucherType === 'SALES') {
         if (!partyLedgerId) throw new Error('Party (Customer) is mandatory for Sales voucher.');
+
+        // UI-046/UI-047: Extract dedicated non-item charge lines (Freight, Delivery, Packaging, Discount, etc.)
+        const chargePostingLines: Array<{
+          ledgerId: string;
+          taxableAmountPaise: number;
+          description?: string;
+        }> = [];
+
+        for (const pl of processedLines) {
+          if (!pl.lineInput.itemId && (pl.lineInput.ledgerId || pl.taxResult.taxableAmountPaise !== 0)) {
+            let resolvedLedgerId = pl.lineInput.ledgerId;
+            if (!resolvedLedgerId) {
+              try {
+                resolvedLedgerId = findLedgerId(['led_freight_income', 'led_freight', 'led_other_income'], '%Freight%');
+              } catch {
+                resolvedLedgerId = findLedgerId(['led_sales'], '%Sales%');
+              }
+            }
+            chargePostingLines.push({
+              ledgerId: resolvedLedgerId,
+              taxableAmountPaise: pl.taxResult.taxableAmountPaise,
+              description: pl.lineInput.description
+            });
+          }
+        }
+
         ledgerLines = DoubleEntryEngine.buildSalesEntries({
           customerLedgerId: partyLedgerId,
           salesLedgerId: findLedgerId(['led_sales'], '%Sales%'),
@@ -725,11 +857,38 @@ export class PostingEngine {
           roundOffLedgerId: findLedgerId(['led_roundoff', 'led_round_off'], '%Round Off%'),
           cogsAmountPaise,
           cogsLedgerId: findLedgerId(['led_cogs'], '%Cost of Goods%'),
-          inventoryLedgerId: findLedgerId(['led_inventory'], '%Inventory%')
+          inventoryLedgerId: findLedgerId(['led_inventory'], '%Inventory%'),
+          chargeLines: chargePostingLines
         });
       } else if (input.voucherType === 'PURCHASE') {
         // A-4: Perpetual Inventory Model — Purchase increases Inventory Asset
         if (!partyLedgerId) throw new Error('Party (Supplier) is mandatory for Purchase voucher.');
+
+        // UI-046/UI-047: Extract dedicated non-item charge lines for purchase (Freight Inward, Direct Expenses, Discount Received)
+        const chargePostingLines: Array<{
+          ledgerId: string;
+          taxableAmountPaise: number;
+          description?: string;
+        }> = [];
+
+        for (const pl of processedLines) {
+          if (!pl.lineInput.itemId && (pl.lineInput.ledgerId || pl.taxResult.taxableAmountPaise !== 0)) {
+            let resolvedLedgerId = pl.lineInput.ledgerId;
+            if (!resolvedLedgerId) {
+              try {
+                resolvedLedgerId = findLedgerId(['led_freight', 'led_direct_expense', 'led_other_charges'], '%Freight%');
+              } catch {
+                resolvedLedgerId = findLedgerId(['led_inventory', 'led_purchase'], '%Inventory%');
+              }
+            }
+            chargePostingLines.push({
+              ledgerId: resolvedLedgerId,
+              taxableAmountPaise: pl.taxResult.taxableAmountPaise,
+              description: pl.lineInput.description
+            });
+          }
+        }
+
         ledgerLines = DoubleEntryEngine.buildPurchaseEntries({
           supplierLedgerId: partyLedgerId,
           purchaseLedgerId: findLedgerId(['led_inventory', 'led_purchase'], '%Inventory%'),
@@ -744,7 +903,8 @@ export class PostingEngine {
           inputSgstLedgerId: findLedgerId(['led_in_sgst', 'led_input_sgst'], '%Input SGST%'),
           inputIgstLedgerId: findLedgerId(['led_in_igst', 'led_input_igst'], '%Input IGST%'),
           inputCessLedgerId: findLedgerId(['led_in_cess', 'led_input_cess'], '%Input CESS%') || findLedgerId(['led_in_igst', 'led_input_igst'], '%Input IGST%'),
-          roundOffLedgerId: findLedgerId(['led_roundoff', 'led_round_off'], '%Round Off%')
+          roundOffLedgerId: findLedgerId(['led_roundoff', 'led_round_off'], '%Round Off%'),
+          chargeLines: chargePostingLines
         });
       } else if (input.voucherType === 'SALES_RETURN' || input.voucherType === 'CREDIT_NOTE') {
         // A-1 / A-3 / A-4: SALES_RETURN and CREDIT_NOTE — reverse the sales journal.
@@ -983,9 +1143,71 @@ export class PostingEngine {
         const lineGodownId = pl.lineInput.itemId ? resolveValidGodownId(pl.lineInput.godownId) : null;
         const lineSerial = pl.lineInput.serialNumber || (input.voucherType === 'STOCK_JOURNAL' ? pl.lineInput.movementType : null) || null;
         let lineWarranty = 0;
+        let isSerialTracked = false;
+        let itemDisplayName = pl.lineInput.description || 'Item';
         if (pl.lineInput.itemId) {
-          const itemMeta = db.prepare('SELECT warranty_months FROM stock_items WHERE item_id = ?').get(pl.lineInput.itemId) as any;
-          lineWarranty = Number(itemMeta?.warranty_months || 0);
+          const itemMeta = db.prepare('SELECT item_name, warranty_months, has_serial_no FROM stock_items WHERE item_id = ?').get(pl.lineInput.itemId) as any;
+          lineWarranty = pl.lineInput.warrantyMonths !== undefined
+            ? Number(pl.lineInput.warrantyMonths)
+            : Number(itemMeta?.warranty_months || 0);
+          isSerialTracked = Boolean(itemMeta?.has_serial_no === 1);
+          if (itemMeta?.item_name) itemDisplayName = itemMeta.item_name;
+        }
+
+        // UI-045: Strict validation for serial-tracked items
+        if (isSerialTracked && isPosted && Number(pl.lineInput.quantity) > 0) {
+          if (input.voucherType === 'PURCHASE' || input.voucherType === 'SALES_RETURN') {
+            if (!pl.lineInput.serialNumber || !pl.lineInput.serialNumber.trim()) {
+              throw new Error(`Item '${itemDisplayName}' requires serial numbers. None provided for quantity ${pl.lineInput.quantity}.`);
+            }
+            const serialsArr = pl.lineInput.serialNumber.split(',').map((s: string) => s.trim()).filter(Boolean);
+            if (serialsArr.length !== Number(pl.lineInput.quantity)) {
+              throw new Error(`Serial count (${serialsArr.length}) does not match quantity (${pl.lineInput.quantity}) for item '${itemDisplayName}'.`);
+            }
+            const uniqueSet = new Set(serialsArr);
+            if (uniqueSet.size !== serialsArr.length) {
+              throw new Error(`Duplicate serial numbers found in line for item '${itemDisplayName}'.`);
+            }
+            if (input.voucherType === 'PURCHASE') {
+              for (const s of serialsArr) {
+                const existingSerial = db.prepare(`
+                  SELECT serial_id, status FROM stock_item_serials
+                  WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
+                `).get(input.companyId, pl.lineInput.itemId!, s) as { serial_id: string; status: string } | undefined;
+                if (existingSerial && existingSerial.status !== 'CANCELLED') {
+                  throw new Error(`Serial number '${s}' already exists for item '${itemDisplayName}' in this company (current status: ${existingSerial.status}).`);
+                }
+              }
+            }
+          } else if (input.voucherType === 'SALES' || input.voucherType === 'PURCHASE_RETURN') {
+            if (!pl.lineInput.serialNumber || !pl.lineInput.serialNumber.trim()) {
+              throw new Error(`Item '${itemDisplayName}' requires serial numbers. None selected for quantity ${pl.lineInput.quantity}.`);
+            }
+            const serialsArr = pl.lineInput.serialNumber.split(',').map((s: string) => s.trim()).filter(Boolean);
+            if (serialsArr.length !== Number(pl.lineInput.quantity)) {
+              throw new Error(`Serial count (${serialsArr.length}) does not match quantity (${pl.lineInput.quantity}) for item '${itemDisplayName}'.`);
+            }
+            const uniqueSet = new Set(serialsArr);
+            if (uniqueSet.size !== serialsArr.length) {
+              throw new Error(`Duplicate serial numbers selected for item '${itemDisplayName}'.`);
+            }
+            for (const s of serialsArr) {
+              const serialRecord = db.prepare(`
+                SELECT serial_id, item_id, godown_id, status FROM stock_item_serials
+                WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
+              `).get(input.companyId, pl.lineInput.itemId!, s) as { serial_id: string; item_id: string; godown_id?: string; status: string } | undefined;
+
+              if (!serialRecord) {
+                throw new Error(`Serial '${s}' does not exist for item '${itemDisplayName}' in this company.`);
+              }
+              if (serialRecord.status !== 'AVAILABLE') {
+                throw new Error(`Serial '${s}' for item '${itemDisplayName}' is not AVAILABLE (current status: ${serialRecord.status}).`);
+              }
+              if (lineGodownId && serialRecord.godown_id && serialRecord.godown_id !== lineGodownId) {
+                throw new Error(`Serial '${s}' is located in a different godown, not '${lineGodownId}'.`);
+              }
+            }
+          }
         }
 
         db.prepare(`
@@ -1008,20 +1230,20 @@ export class PostingEngine {
           lineSerial, lineWarranty
         );
 
-        // DEF-VCH-06 & DEF-008-07: Accurate serial lifecycle tracking and validation
+        // DEF-VCH-06, DEF-008-07 & UI-045: Authoritative serial lifecycle tracking and mutation
         if (isPosted && pl.lineInput.itemId && pl.lineInput.serialNumber) {
           const serialsArr = pl.lineInput.serialNumber.split(',').map((s: string) => s.trim()).filter(Boolean);
           for (const s of serialsArr) {
             if (input.voucherType === 'SALES' || input.voucherType === 'PURCHASE_RETURN') {
               const serialRecord = db.prepare(`
-                SELECT serial_id, item_id, status FROM stock_item_serials
-                WHERE item_id = ? AND serial_number = ?
-              `).get(pl.lineInput.itemId, s) as { serial_id: string; item_id: string; status: string } | undefined;
+                SELECT serial_id, item_id, godown_id, status FROM stock_item_serials
+                WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
+              `).get(input.companyId, pl.lineInput.itemId!, s) as { serial_id: string; item_id: string; godown_id?: string; status: string } | undefined;
 
               if (!serialRecord) {
                 const foreign = db.prepare(`
-                  SELECT item_id FROM stock_item_serials WHERE serial_number = ?
-                `).get(s) as { item_id: string } | undefined;
+                  SELECT item_id FROM stock_item_serials WHERE (company_id = ? OR company_id IS NULL) AND serial_number = ?
+                `).get(input.companyId, s) as { item_id: string } | undefined;
                 if (foreign) {
                   throw new Error(`Serial '${s}' belongs to another item ('${foreign.item_id}'), not '${pl.lineInput.itemId}'.`);
                 }
@@ -1030,6 +1252,9 @@ export class PostingEngine {
               if (serialRecord.status !== 'AVAILABLE') {
                 throw new Error(`Serial '${s}' for item '${pl.lineInput.itemId}' is not AVAILABLE (current status: ${serialRecord.status}).`);
               }
+              if (lineGodownId && serialRecord.godown_id && serialRecord.godown_id !== lineGodownId) {
+                throw new Error(`Serial '${s}' is located in a different godown, not '${lineGodownId}'.`);
+              }
 
               let saleWarrantyExpiry: string | null = null;
               if (lineWarranty > 0 && input.voucherDate) {
@@ -1037,15 +1262,27 @@ export class PostingEngine {
                   const [y, m, d] = input.voucherDate.split('-').map(Number);
                   const exp = new Date(y, m - 1 + lineWarranty, d);
                   saleWarrantyExpiry = `${exp.getFullYear()}-${String(exp.getMonth() + 1).padStart(2, '0')}-${String(exp.getDate()).padStart(2, '0')}`;
-                } catch {}
+                } catch { }
               }
 
               db.prepare(`
                 UPDATE stock_item_serials
-                SET status = 'SOLD',
-                    warranty_expiry_date = COALESCE(?, warranty_expiry_date)
-                WHERE item_id = ? AND serial_number = ?
-              `).run(saleWarrantyExpiry, pl.lineInput.itemId, s);
+                SET status = ?,
+                    company_id = COALESCE(company_id, ?),
+                    sales_voucher_id = ?,
+                    sales_voucher_line_id = ?,
+                    customer_id = ?,
+                    sales_date = ?,
+                    warranty_expiry_date = COALESCE(?, warranty_expiry_date),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
+              `).run(
+                input.voucherType === 'PURCHASE_RETURN' ? 'RETURNED' : 'SOLD',
+                input.companyId,
+                voucherId, lineId, input.partyId || null, input.voucherDate,
+                saleWarrantyExpiry,
+                input.companyId, pl.lineInput.itemId, s
+              );
             } else if (input.voucherType === 'PURCHASE' || input.voucherType === 'SALES_RETURN') {
               let expiryDate: string | null = null;
               if (lineWarranty > 0 && input.voucherDate) {
@@ -1053,24 +1290,60 @@ export class PostingEngine {
                   const [y, m, d] = input.voucherDate.split('-').map(Number);
                   const exp = new Date(y, m - 1 + lineWarranty, d);
                   expiryDate = `${exp.getFullYear()}-${String(exp.getMonth() + 1).padStart(2, '0')}-${String(exp.getDate()).padStart(2, '0')}`;
-                } catch {}
+                } catch { }
               }
 
-              const existingSerial = db.prepare('SELECT serial_id, status FROM stock_item_serials WHERE item_id = ? AND serial_number = ?')
-                .get(pl.lineInput.itemId, s) as { serial_id: string; status: string } | undefined;
+              const existingSerial = db.prepare('SELECT serial_id, status FROM stock_item_serials WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?')
+                .get(input.companyId, pl.lineInput.itemId, s) as { serial_id: string; status: string } | undefined;
               if (!existingSerial) {
-                db.prepare(`INSERT INTO stock_item_serials (serial_id, item_id, serial_number, status, purchase_date, warranty_expiry_date) VALUES (?, ?, ?, 'AVAILABLE', ?, ?)`)
-                  .run('ser_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16), pl.lineInput.itemId, s, input.voucherDate, expiryDate);
+                db.prepare(`
+                  INSERT INTO stock_item_serials (
+                    serial_id, company_id, item_id, godown_id, serial_number, status,
+                    purchase_voucher_id, purchase_voucher_line_id, supplier_id, purchase_date,
+                    warranty_expiry_date, created_at, updated_at
+                  ) VALUES (?, ?, ?, ?, ?, 'AVAILABLE', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                `).run(
+                  'ser_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16),
+                  input.companyId, pl.lineInput.itemId, lineGodownId, s,
+                  voucherId, lineId, input.partyId || null, input.voucherDate, expiryDate
+                );
                 introducedSerials.push({ itemId: pl.lineInput.itemId, serialNumber: s });
               } else if (input.voucherType === 'SALES_RETURN') {
-                // A customer returning goods restores the serial back to AVAILABLE in stock
-                db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE', warranty_expiry_date = COALESCE(warranty_expiry_date, ?) WHERE item_id = ? AND serial_number = ?`)
-                  .run(expiryDate, pl.lineInput.itemId, s);
+                // Customer returning goods restores unit to AVAILABLE
+                db.prepare(`
+                  UPDATE stock_item_serials
+                  SET status = 'AVAILABLE',
+                      company_id = COALESCE(company_id, ?),
+                      godown_id = COALESCE(?, godown_id),
+                      warranty_expiry_date = COALESCE(warranty_expiry_date, ?),
+                      sales_voucher_id = NULL,
+                      sales_voucher_line_id = NULL,
+                      customer_id = NULL,
+                      sales_date = NULL,
+                      updated_at = CURRENT_TIMESTAMP
+                  WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
+                `).run(input.companyId, lineGodownId, expiryDate, input.companyId, pl.lineInput.itemId, s);
               } else {
-                // PURCHASE: If serial is already SOLD to a customer, NEVER revert it to AVAILABLE on amendment
+                // PURCHASE: update record
                 if (existingSerial.status !== 'SOLD') {
-                  db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE', purchase_date = COALESCE(purchase_date, ?), warranty_expiry_date = COALESCE(warranty_expiry_date, ?) WHERE item_id = ? AND serial_number = ?`)
-                    .run(input.voucherDate, expiryDate, pl.lineInput.itemId, s);
+                  db.prepare(`
+                    UPDATE stock_item_serials
+                    SET status = 'AVAILABLE',
+                        company_id = COALESCE(company_id, ?),
+                        godown_id = COALESCE(?, godown_id),
+                        purchase_voucher_id = ?,
+                        purchase_voucher_line_id = ?,
+                        supplier_id = COALESCE(?, supplier_id),
+                        purchase_date = COALESCE(?, purchase_date),
+                        warranty_expiry_date = COALESCE(?, warranty_expiry_date),
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE (company_id = ? OR company_id IS NULL) AND item_id = ? AND serial_number = ?
+                  `).run(
+                    input.companyId,
+                    lineGodownId, voucherId, lineId, input.partyId || null,
+                    input.voucherDate, expiryDate,
+                    input.companyId, pl.lineInput.itemId, s
+                  );
                 }
               }
             }
@@ -1136,7 +1409,7 @@ export class PostingEngine {
         // DEF-008-05: Group line taxes by exact statutory rate slab instead of hardcoding 9%/18%
         const teId = () => 'te_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
         const isReturn = input.voucherType === 'SALES_RETURN' || input.voucherType === 'CREDIT_NOTE' ||
-                         input.voucherType === 'PURCHASE_RETURN' || input.voucherType === 'DEBIT_NOTE';
+          input.voucherType === 'PURCHASE_RETURN' || input.voucherType === 'DEBIT_NOTE';
         const isPurchaseType = input.voucherType === 'PURCHASE' || input.voucherType === 'PURCHASE_RETURN' || input.voucherType === 'DEBIT_NOTE';
 
         const cgstSlabs = new Map<number, { taxablePaise: number; taxPaise: number }>();
@@ -1242,8 +1515,8 @@ export class PostingEngine {
           if (partyAmountPaise > 0) {
             const allocId = 'ba_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
             const isSettlement = input.voucherType === 'RECEIPT' || input.voucherType === 'PAYMENT' ||
-                                 input.voucherType === 'CREDIT_NOTE' || input.voucherType === 'DEBIT_NOTE' ||
-                                 input.voucherType === 'SALES_RETURN' || input.voucherType === 'PURCHASE_RETURN';
+              input.voucherType === 'CREDIT_NOTE' || input.voucherType === 'DEBIT_NOTE' ||
+              input.voucherType === 'SALES_RETURN' || input.voucherType === 'PURCHASE_RETURN';
 
             // UI-042: Support multi-invoice allocation breakdown alongside singular allocation
             if (input.billAllocations && Array.isArray(input.billAllocations) && input.billAllocations.length > 0) {
@@ -1425,7 +1698,7 @@ export class PostingEngine {
           db.exec('COMMIT;');
           break;
         } catch (err: any) {
-          try { db.exec('ROLLBACK;'); } catch (_) {}
+          try { db.exec('ROLLBACK;'); } catch (_) { }
           if (attempt < maxRetries - 1 && err.message && (err.message.includes('UNIQUE constraint') || err.message.includes('database is locked') || err.message.includes('busy'))) {
             attempt++;
             continue;
@@ -1486,6 +1759,21 @@ export class PostingEngine {
       throw new Error(`Cannot cancel voucher '${vch.voucher_number}': Financial Year status is ${vch.fy_status}. Cancellation prohibited.`);
     }
 
+    // UI-045: Check purchase serialized sold guard first - fail fast with exact serial if any unit was sold
+    if (vch.voucher_type === 'PURCHASE') {
+      const soldUnit = db.prepare(`
+        SELECT serial_number FROM stock_item_serials
+        WHERE company_id = ? AND purchase_voucher_id = ? AND status = 'SOLD'
+        LIMIT 1
+      `).get(vch.company_id, voucherId) as { serial_number: string } | undefined;
+
+      if (soldUnit) {
+        throw new Error(
+          `Cannot cancel purchase voucher '${vch.voucher_number}': Serial '${soldUnit.serial_number}' has already been sold to a customer. Reverse the sales voucher first.`
+        );
+      }
+    }
+
     // DEF-VCH-05: Inward stock cancellation integrity check (PURCHASE, SALES_RETURN, STOCK_JOURNAL with IN)
     const inwardEntries = db.prepare(`
       SELECT item_id, godown_id, quantity
@@ -1512,9 +1800,20 @@ export class PostingEngine {
       }
     }
 
-    // DEF-VCH-06: Serial safety and lifecycle restoration
+    // DEF-VCH-06 & UI-045: Serial safety and lifecycle restoration
     if (vch.voucher_type === 'SALES' || vch.voucher_type === 'PURCHASE_RETURN') {
       // Outward voucher cancelled: restore SOLD serials belonging to this voucher to AVAILABLE
+      db.prepare(`
+        UPDATE stock_item_serials
+        SET status = 'AVAILABLE',
+            sales_voucher_id = NULL,
+            sales_voucher_line_id = NULL,
+            customer_id = NULL,
+            sales_date = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE company_id = ? AND sales_voucher_id = ?
+      `).run(vch.company_id, voucherId);
+
       const soldSerials = db.prepare(`
         SELECT item_id, serial_number
         FROM voucher_lines
@@ -1524,8 +1823,16 @@ export class PostingEngine {
       for (const s of soldSerials) {
         const serialsArr = s.serial_number.split(',').map((sn: string) => sn.trim()).filter(Boolean);
         for (const sn of serialsArr) {
-          db.prepare(`UPDATE stock_item_serials SET status = 'AVAILABLE' WHERE item_id = ? AND serial_number = ? AND status = 'SOLD'`)
-            .run(s.item_id, sn);
+          db.prepare(`
+            UPDATE stock_item_serials
+            SET status = 'AVAILABLE',
+                sales_voucher_id = NULL,
+                sales_voucher_line_id = NULL,
+                customer_id = NULL,
+                sales_date = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ? AND item_id = ? AND serial_number = ? AND (status = 'SOLD' OR status = 'RETURNED')
+          `).run(vch.company_id, s.item_id, sn);
         }
       }
     } else if (vch.voucher_type === 'SALES_RETURN') {
@@ -1539,12 +1846,29 @@ export class PostingEngine {
       for (const s of returnedSerials) {
         const serialsArr = s.serial_number.split(',').map((sn: string) => sn.trim()).filter(Boolean);
         for (const sn of serialsArr) {
-          db.prepare(`UPDATE stock_item_serials SET status = 'SOLD' WHERE item_id = ? AND serial_number = ? AND status = 'AVAILABLE'`)
-            .run(s.item_id, sn);
+          db.prepare(`
+            UPDATE stock_item_serials
+            SET status = 'SOLD',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ? AND item_id = ? AND serial_number = ? AND status = 'AVAILABLE'
+          `).run(vch.company_id, s.item_id, sn);
         }
       }
     } else if (vch.voucher_type === 'PURCHASE') {
-      // Inward voucher cancelled: only remove serial records introduced by this voucher
+      // Inward voucher cancelled:
+      // Guard check: Reject cancellation if ANY unit from this purchase has already been SOLD to a customer!
+      const soldUnit = db.prepare(`
+        SELECT serial_number FROM stock_item_serials
+        WHERE company_id = ? AND purchase_voucher_id = ? AND status = 'SOLD'
+        LIMIT 1
+      `).get(vch.company_id, voucherId) as { serial_number: string } | undefined;
+
+      if (soldUnit) {
+        throw new Error(
+          `Cannot cancel purchase voucher '${vch.voucher_number}': Serial '${soldUnit.serial_number}' has already been sold to a customer. Reverse the sales voucher first.`
+        );
+      }
+
       let introducedSerials: Array<{ itemId: string; serialNumber: string }> = [];
       const auditRow = db.prepare(`
         SELECT details FROM audit_logs
@@ -1558,7 +1882,7 @@ export class PostingEngine {
           if (Array.isArray(parsed.introducedSerials)) {
             introducedSerials = parsed.introducedSerials;
           }
-        } catch (_) {}
+        } catch (_) { }
       }
 
       for (const is of introducedSerials) {
@@ -1571,10 +1895,21 @@ export class PostingEngine {
         `).get(is.itemId, is.serialNumber, `%, ${is.serialNumber}%`, `${is.serialNumber}, %`, `%${is.serialNumber}%`);
 
         if (!otherRef) {
-          db.prepare(`DELETE FROM stock_item_serials WHERE item_id = ? AND serial_number = ? AND status = 'AVAILABLE'`)
-            .run(is.itemId, is.serialNumber);
+          // QA-012: Transition serials to CANCELLED instead of hard-deleting, preserving transaction history
+          db.prepare(`
+            UPDATE stock_item_serials
+            SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP
+            WHERE company_id = ? AND item_id = ? AND serial_number = ? AND status = 'AVAILABLE'
+          `).run(vch.company_id, is.itemId, is.serialNumber);
         }
       }
+
+      // QA-012: Safeguard all serial units introduced by this purchase voucher to CANCELLED
+      db.prepare(`
+        UPDATE stock_item_serials
+        SET status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP
+        WHERE company_id = ? AND purchase_voucher_id = ? AND status = 'AVAILABLE'
+      `).run(vch.company_id, voucherId);
     }
 
     // 1. Mark voucher header as CANCELLED
@@ -1653,7 +1988,7 @@ export class PostingEngine {
       this._cancelVoucherInternal(db, companyId, voucherId, cancelledBy, reason, options);
       db.exec('COMMIT;');
     } catch (err: any) {
-      try { db.exec('ROLLBACK;'); } catch (_) {}
+      try { db.exec('ROLLBACK;'); } catch (_) { }
       throw err;
     }
   }
@@ -1780,7 +2115,7 @@ export class PostingEngine {
         status: 'POSTED'
       };
     } catch (err: any) {
-      try { db.exec('ROLLBACK;'); } catch (_) {}
+      try { db.exec('ROLLBACK;'); } catch (_) { }
       throw new Error(`Amendment failed and was rolled back: ${err.message}`);
     }
   }
@@ -1847,7 +2182,7 @@ export class PostingEngine {
           if (parsed && parsed._draftMeta) {
             parsedMeta = parsed._draftMeta;
           }
-        } catch (_) {}
+        } catch (_) { }
       }
 
       if (parsedMeta) {
@@ -1925,7 +2260,7 @@ export class PostingEngine {
         status: 'POSTED' as const
       };
     } catch (err: any) {
-      try { db.exec('ROLLBACK;'); } catch (_) {}
+      try { db.exec('ROLLBACK;'); } catch (_) { }
       throw new Error(`Draft promotion failed and was rolled back: ${err.message}`);
     }
   }
@@ -1947,6 +2282,7 @@ export class PostingEngine {
       ratePaise: number;
       date?: string;
       userId?: string;
+      serialNumbers?: string | string[];
     },
     options?: { skipTransaction?: boolean }
   ): { voucherId: string; stockEntryId: string; openingValPaise: number } {
@@ -2034,6 +2370,39 @@ export class PostingEngine {
         `).run(Math.abs(newBal), newBal >= 0 ? 'DR' : 'CR', invLedger.ledger_id);
       }
 
+      // 5. Register opening stock serialized units if provided
+      if (params.serialNumbers) {
+        const serialsArr = Array.isArray(params.serialNumbers)
+          ? params.serialNumbers.map(s => s.trim()).filter(Boolean)
+          : params.serialNumbers.split(',').map((s: string) => s.trim()).filter(Boolean);
+
+        for (const s of serialsArr) {
+          const existing = db.prepare(`
+            SELECT serial_id FROM stock_item_serials
+            WHERE company_id = ? AND item_id = ? AND serial_number = ?
+          `).get(params.companyId, params.itemId, s) as any;
+
+          if (!existing) {
+            db.prepare(`
+              INSERT INTO stock_item_serials (
+                serial_id, company_id, item_id, godown_id, serial_number, status,
+                purchase_voucher_id, purchase_date, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, 'AVAILABLE', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            `).run(
+              'ser_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16),
+              params.companyId, params.itemId, godownId, s,
+              voucherId, entryDate
+            );
+          } else {
+            db.prepare(`
+              UPDATE stock_item_serials
+              SET status = 'AVAILABLE', godown_id = ?, purchase_date = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE company_id = ? AND item_id = ? AND serial_number = ?
+            `).run(godownId, entryDate, params.companyId, params.itemId, s);
+          }
+        }
+      }
+
       if (!inOuterTx) {
         db.exec('RELEASE SAVEPOINT sp_record_opening_stock;');
       }
@@ -2044,7 +2413,7 @@ export class PostingEngine {
         try {
           db.exec('ROLLBACK TO SAVEPOINT sp_record_opening_stock;');
           db.exec('RELEASE SAVEPOINT sp_record_opening_stock;');
-        } catch (_) {}
+        } catch (_) { }
       }
       throw err;
     }
@@ -2295,7 +2664,7 @@ export class PostingEngine {
         status: 'DRAFT'
       };
     } catch (err: any) {
-      try { db.exec('ROLLBACK;'); } catch (_) {}
+      try { db.exec('ROLLBACK;'); } catch (_) { }
       throw err;
     }
   }

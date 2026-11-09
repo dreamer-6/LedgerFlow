@@ -4,6 +4,8 @@ export interface InvoiceLineItem {
   description?: string;
   serialNumber?: string;
   warrantyMonths?: number;
+  warrantyText?: string;
+  isCharge?: boolean;
   hsnSac: string;
   quantity: number;
   unit: string;
@@ -108,6 +110,7 @@ export interface InvoiceVisibilityOptions {
   showTerms?: boolean;
   showSignature?: boolean;
   showSerial?: boolean;
+  showWarranty?: boolean;
   showGridLines?: boolean;
   showLedgerflowWordmark?: boolean;
   warrantyDisplayFormat?: 'Years' | 'Months' | 'Both';
@@ -265,19 +268,21 @@ export function normalizeInvoiceData(rawVoucherData: any, company: any): Normali
 
     // Unit fallback: actual configured unit, or "—" fallback (never invent unit)
     const rawUnit = (line.unit_symbol || line.unit_name || line.unit || '').trim();
-    const unitDisplay = rawUnit ? rawUnit : '—';
+    const unitDisplay = rawUnit ? rawUnit : (line.item_id ? '—' : '');
 
-    // Warranty duration in authoritative unit (months)
+    // Warranty duration in authoritative unit (months) or custom description
     const rawWarranty = line.warranty_months ?? line.item_warranty_months ?? line.warrantyMonths;
     const warrantyMonths = rawWarranty ? Number(rawWarranty) : undefined;
+    const warrantyText = line.warranty_text || line.warrantyText || undefined;
 
     return {
       index: idx + 1,
-      itemName: line.item_name || line.description || 'Item / Service',
+      itemName: line.item_name || line.description || (line.ledger_name ? line.ledger_name : 'Item / Service'),
       description: line.item_name && line.description && line.description !== line.item_name ? line.description : undefined,
       serialNumber: line.serial_number || undefined,
       warrantyMonths: warrantyMonths,
-      hsnSac: line.hsn_sac || line.hsnSac || '',
+      warrantyText: warrantyText,
+      hsnSac: line.hsn_sac || line.hsnSac || line.hsn_code || '',
       quantity: qty,
       unit: unitDisplay,
       rate: ratePaise / 100,
@@ -286,7 +291,8 @@ export function normalizeInvoiceData(rawVoucherData: any, company: any): Normali
       taxableAmount: taxablePaise / 100,
       cgstAmount: cgstPaise / 100,
       sgstAmount: sgstPaise / 100,
-      igstAmount: igstPaise / 100
+      igstAmount: igstPaise / 100,
+      isCharge: !line.item_id && Boolean(line.ledger_id || line.ledger_name)
     };
   });
 

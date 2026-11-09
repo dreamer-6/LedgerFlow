@@ -70,13 +70,37 @@ class DoubleEntryEngine {
             creditPaise: 0,
             particulars: 'To Sales'
         });
-        // 2. Sales CR for Taxable Amount
-        lines.push({
-            ledgerId: params.salesLedgerId,
-            debitPaise: 0,
-            creditPaise: params.taxableAmountPaise,
-            particulars: 'By Customer'
-        });
+        // 2. Sales CR for Taxable Amount (excluding dedicated additional charges)
+        const chargeLines = params.chargeLines || [];
+        const chargesTaxableTotal = chargeLines.reduce((acc, c) => acc + c.taxableAmountPaise, 0);
+        const mainSalesTaxable = params.taxableAmountPaise - chargesTaxableTotal;
+        if (mainSalesTaxable > 0) {
+            lines.push({
+                ledgerId: params.salesLedgerId,
+                debitPaise: 0,
+                creditPaise: mainSalesTaxable,
+                particulars: 'By Customer'
+            });
+        }
+        // 2b. Additional Charges (Freight, Packaging, Delivery) & Discounts
+        for (const chg of chargeLines) {
+            if (chg.taxableAmountPaise > 0) {
+                lines.push({
+                    ledgerId: chg.ledgerId,
+                    debitPaise: 0,
+                    creditPaise: chg.taxableAmountPaise,
+                    particulars: chg.description || 'Additional Charge'
+                });
+            }
+            else if (chg.taxableAmountPaise < 0) {
+                lines.push({
+                    ledgerId: chg.ledgerId,
+                    debitPaise: Math.abs(chg.taxableAmountPaise),
+                    creditPaise: 0,
+                    particulars: chg.description || 'Discount Allowed'
+                });
+            }
+        }
         // 3. GST Outputs CR
         if (params.cgstAmountPaise > 0 && params.outputCgstLedgerId) {
             lines.push({
@@ -153,13 +177,38 @@ class DoubleEntryEngine {
      */
     static buildPurchaseEntries(params) {
         const lines = [];
-        // 1. Purchase A/c DR for Taxable Amount
-        lines.push({
-            ledgerId: params.purchaseLedgerId,
-            debitPaise: params.taxableAmountPaise,
-            creditPaise: 0,
-            particulars: 'Purchase of Goods'
-        });
+        // Calculate sum of charge lines' taxable amounts
+        const chargeLines = params.chargeLines || [];
+        const chargesTaxableTotal = chargeLines.reduce((acc, c) => acc + c.taxableAmountPaise, 0);
+        const mainPurchaseTaxable = params.taxableAmountPaise - chargesTaxableTotal;
+        // 1. Purchase A/c DR for Main Items Taxable Amount
+        if (mainPurchaseTaxable > 0) {
+            lines.push({
+                ledgerId: params.purchaseLedgerId,
+                debitPaise: mainPurchaseTaxable,
+                creditPaise: 0,
+                particulars: 'Purchase of Goods'
+            });
+        }
+        // 1b. Additional Charges (Freight Inward, Direct Expenses) & Discounts
+        for (const chg of chargeLines) {
+            if (chg.taxableAmountPaise > 0) {
+                lines.push({
+                    ledgerId: chg.ledgerId,
+                    debitPaise: chg.taxableAmountPaise,
+                    creditPaise: 0,
+                    particulars: chg.description || 'Freight / Expense'
+                });
+            }
+            else if (chg.taxableAmountPaise < 0) {
+                lines.push({
+                    ledgerId: chg.ledgerId,
+                    debitPaise: 0,
+                    creditPaise: Math.abs(chg.taxableAmountPaise),
+                    particulars: chg.description || 'Discount Received'
+                });
+            }
+        }
         // 2. Input GST DR
         if (params.cgstAmountPaise > 0 && params.inputCgstLedgerId) {
             lines.push({

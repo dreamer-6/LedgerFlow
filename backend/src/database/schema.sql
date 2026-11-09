@@ -130,6 +130,8 @@ CREATE TABLE IF NOT EXISTS stock_items (
     opening_rate_paise INTEGER DEFAULT 0,
     reorder_level NUMERIC(15,3) DEFAULT 0,
     warranty_months INTEGER DEFAULT 0,
+    has_serial_no INTEGER DEFAULT 0,
+    serial_numbers TEXT,
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(company_id, item_name)
@@ -217,6 +219,32 @@ CREATE TABLE IF NOT EXISTS stock_entries (
     value_paise INTEGER NOT NULL CHECK(value_paise >= 0),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 7b. PHYSICAL SERIALIZED INVENTORY UNITS (UI-045)
+CREATE TABLE IF NOT EXISTS stock_item_serials (
+    serial_id TEXT PRIMARY KEY,
+    company_id TEXT REFERENCES companies(company_id),
+    item_id TEXT NOT NULL REFERENCES stock_items(item_id) ON DELETE CASCADE,
+    godown_id TEXT REFERENCES godowns(godown_id),
+    serial_number TEXT NOT NULL,
+    status TEXT CHECK(status IN ('DRAFT', 'AVAILABLE', 'RESERVED', 'SOLD', 'RETURNED', 'DAMAGED', 'WRITTEN_OFF', 'CANCELLED')) DEFAULT 'AVAILABLE',
+    purchase_voucher_id TEXT REFERENCES vouchers(voucher_id),
+    purchase_voucher_line_id TEXT,
+    supplier_id TEXT REFERENCES parties(party_id),
+    purchase_date DATE,
+    sales_voucher_id TEXT REFERENCES vouchers(voucher_id),
+    sales_voucher_line_id TEXT,
+    customer_id TEXT REFERENCES parties(party_id),
+    sales_date DATE,
+    warranty_expiry_date DATE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, item_id, serial_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_serials_comp_item_godown ON stock_item_serials(company_id, item_id, godown_id, status);
+CREATE INDEX IF NOT EXISTS idx_serials_purchase_vch ON stock_item_serials(purchase_voucher_id);
+CREATE INDEX IF NOT EXISTS idx_serials_sales_vch ON stock_item_serials(sales_voucher_id);
 
 -- 8. STATUTORY TAX ENTRIES
 CREATE TABLE IF NOT EXISTS tax_entries (

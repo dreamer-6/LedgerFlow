@@ -39,6 +39,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
     showTerms = true,
     showSignature = true,
     showSerial = true,
+    showWarranty = true,
     showGridLines = true,
     showLedgerflowWordmark = false,
     warrantyDisplayFormat = 'Years',
@@ -51,6 +52,16 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
   const shouldShowShipTo = showShipTo !== false && effectiveShipToMode !== 'HIDE';
 
   const hasGstin = Boolean(data.companyGstin && data.companyGstin.trim());
+
+  // Filter out warranty clauses from terms & conditions if showWarranty is turned off
+  const filteredTerms = useMemo(() => {
+    if (!data.termsAndConditions) return '';
+    if (showWarranty !== false) return data.termsAndConditions;
+    return data.termsAndConditions
+      .split('\n')
+      .filter(line => !/warranty/i.test(line))
+      .join('\n');
+  }, [data.termsAndConditions, showWarranty]);
   const hasPan = Boolean(data.companyPan && data.companyPan.trim());
   const compStateName = data.companyState || (data.placeOfSupply ? data.placeOfSupply.replace(/\s*\(\d+\)/, '') : '');
   const compStateCode = data.companyStateCode || (data.placeOfSupply && data.placeOfSupply.match(/\((\d+)\)/) ? data.placeOfSupply.match(/\((\d+)\)/)?.[1] : '');
@@ -85,8 +96,8 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
   const printPageSizeCss = isA5
     ? (isLandscape ? 'A5 landscape' : 'A5 portrait')
     : isLetter
-    ? (isLandscape ? 'letter landscape' : 'letter portrait')
-    : (isLandscape ? 'A4 landscape' : 'A4 portrait');
+      ? (isLandscape ? 'letter landscape' : 'letter portrait')
+      : (isLandscape ? 'A4 landscape' : 'A4 portrait');
 
   const sheetPadding = paperMargin === 'compact' ? '14px 18px' : paperMargin === 'spacious' ? '36px 40px' : '24px 28px';
 
@@ -303,8 +314,8 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
             {data.voucherType === 'PURCHASE'
               ? 'PURCHASE INVOICE RECORD'
               : data.voucherType === 'QUOTATION'
-              ? 'PRICE OFFER • ORIGINAL FOR CUSTOMER'
-              : 'ORIGINAL FOR RECIPIENT'}
+                ? 'PRICE OFFER • ORIGINAL FOR CUSTOMER'
+                : 'ORIGINAL FOR RECIPIENT'}
           </div>
         </div>
 
@@ -371,10 +382,12 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
         alignItems: 'center',
         borderBottom: '1.5px solid #0F172A',
         paddingBottom: '8px',
-        marginBottom: '14px'
+        marginBottom: '14px',
+        flexWrap: 'wrap',
+        gap: '6px'
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
         {showLogo && data.companyLogo && (
           <img
             src={data.companyLogo}
@@ -385,22 +398,33 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
         <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px' }}>
           {data.companyName}
         </span>
+        {hasGstin && (
+          <span style={{ fontSize: '11px', color: '#64748B', fontFamily: 'monospace' }}>
+            GSTIN: {data.companyGstin}
+          </span>
+        )}
         <span style={{ color: '#94A3B8', fontSize: '11px' }}>•</span>
-        <span style={{ color: '#EA580C', fontWeight: 800, fontSize: '12px', letterSpacing: '0.02em' }}>
+        <span style={{ color: '#EA580C', fontWeight: 800, fontSize: '11px', letterSpacing: '0.02em', backgroundColor: '#FFF7ED', padding: '1px 6px', borderRadius: '4px', border: '1px solid #FFEDD5' }}>
           {data.voucherType === 'QUOTATION'
             ? 'QUOTATION'
             : data.voucherType === 'PURCHASE'
-            ? 'PURCHASE VOUCHER'
-            : 'TAX INVOICE'}{' '}
-          (Continuation)
+              ? 'PURCHASE VOUCHER'
+              : 'TAX INVOICE'}{' '}
+          (Continued)
         </span>
       </div>
-      <div style={{ fontSize: '11px', color: '#475569' }}>
+      <div style={{ fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        {data.partyName && (
+          <span>
+            Party: <strong style={{ color: '#0F172A' }}>{data.partyName}</strong>
+          </span>
+        )}
+        <span style={{ color: '#CBD5E1' }}>|</span>
         <span>
           {data.voucherType === 'QUOTATION' ? 'Quotation No: ' : 'Invoice No: '}
           <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{data.voucherNumber}</strong>
         </span>
-        <span style={{ margin: '0 8px', color: '#CBD5E1' }}>|</span>
+        <span style={{ color: '#CBD5E1' }}>|</span>
         <span>Date: <strong style={{ color: '#0F172A' }}>{data.voucherDate}</strong></span>
       </div>
     </div>
@@ -616,12 +640,12 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
                     <div style={{ fontWeight: 700, color: '#0F172A' }}>{item.itemName}</div>
                     {showSerial && item.serialNumber && (
                       <div style={{ fontSize: '10px', color: '#64748B', marginTop: '1px' }}>
-                        S/N: {item.serialNumber}
+                        Serial No: {item.serialNumber}
                       </div>
                     )}
-                    {showSerial && Boolean(item.warrantyMonths) && (
+                    {showWarranty && (Boolean(item.warrantyMonths) || Boolean(item.warrantyText)) && (
                       <div style={{ fontSize: '10px', color: '#475569', marginTop: '1px', fontWeight: 500 }}>
-                        Warranty: {formatWarrantyDisplay(item.warrantyMonths, warrantyDisplayFormat)}
+                        Warranty: {item.warrantyText || formatWarrantyDisplay(item.warrantyMonths, warrantyDisplayFormat)}
                       </div>
                     )}
                     {item.description && (
@@ -833,7 +857,7 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
             Terms & Conditions
           </div>
           <div style={{ color: '#475569', whiteSpace: 'pre-line', lineHeight: 1.5, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
-            {data.termsAndConditions}
+            {filteredTerms}
           </div>
         </div>
       )}
@@ -979,7 +1003,8 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
           .a4-page-sheet {
             page-break-after: always;
             break-after: page;
-            min-height: ${printSheetMinHeight};
+            min-height: 0 !important;
+            height: auto !important;
             box-sizing: border-box;
             width: 100% !important;
             max-width: 100% !important;
