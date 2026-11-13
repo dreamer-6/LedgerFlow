@@ -333,7 +333,14 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
       if (sortField === 'date') {
         const dateA = new Date(a.voucher_date || 0).getTime();
         const dateB = new Date(b.voucher_date || 0).getTime();
-        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+        if (dateA !== dateB) {
+          return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+        }
+        const numA = a.voucher_number || '';
+        const numB = b.voucher_number || '';
+        return sortOrder === 'asc'
+          ? numA.localeCompare(numB, undefined, { numeric: true })
+          : numB.localeCompare(numA, undefined, { numeric: true });
       }
       if (sortField === 'amount') {
         const amtA = a.total_amount_paise || 0;
@@ -343,7 +350,9 @@ export const PurchaseRegisterView: React.FC<PurchaseRegisterViewProps> = ({
       if (sortField === 'number') {
         const numA = a.voucher_number || '';
         const numB = b.voucher_number || '';
-        return sortOrder === 'asc' ? numA.localeCompare(numB) : numB.localeCompare(numA);
+        return sortOrder === 'asc'
+          ? numA.localeCompare(numB, undefined, { numeric: true })
+          : numB.localeCompare(numA, undefined, { numeric: true });
       }
       return 0;
     });

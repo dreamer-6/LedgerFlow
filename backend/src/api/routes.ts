@@ -1370,7 +1370,7 @@ export function createApiRouter(db: DatabaseSync): Router {
         query += ` AND v.voucher_date <= ?`;
         params.push(toDate);
       }
-      query += ` ORDER BY v.voucher_date DESC, v.created_at DESC LIMIT 200`;
+      query += ` ORDER BY v.voucher_date DESC, v.voucher_number DESC, v.created_at DESC LIMIT 200`;
       const rows = db.prepare(query).all(...params);
       res.json(rows);
     } catch (err: any) {
@@ -1755,6 +1755,40 @@ export function createApiRouter(db: DatabaseSync): Router {
       if (vch.status === 'DRAFT') {
         try {
           db.exec('BEGIN IMMEDIATE;');
+
+          // 1. Serials cleanup / release
+          if (vch.voucher_type === 'PURCHASE') {
+            db.prepare('DELETE FROM stock_item_serials WHERE purchase_voucher_id = ?').run(vch.voucher_id);
+          } else if (vch.voucher_type === 'SALES') {
+            db.prepare(`
+              UPDATE stock_item_serials
+              SET status = 'AVAILABLE',
+                  sales_voucher_id = NULL,
+                  sales_voucher_line_id = NULL,
+                  customer_id = NULL,
+                  sales_date = NULL,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE sales_voucher_id = ?
+            `).run(vch.voucher_id);
+          }
+
+          // 2. Linked immediate settlement vouchers cleanup (e.g. REC created for this invoice)
+          const linkedSettlements = db.prepare(`
+            SELECT voucher_id FROM vouchers
+            WHERE company_id = ? AND voucher_id != ? AND (reference_number = ? OR narration LIKE ?)
+          `).all(vch.company_id, vch.voucher_id, vch.voucher_number, `%${vch.voucher_number}%`) as Array<{ voucher_id: string }>;
+
+          for (const ls of linkedSettlements) {
+            db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ? OR reference_voucher_id = ?').run(ls.voucher_id, ls.voucher_id);
+            db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(ls.voucher_id);
+            db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(ls.voucher_id);
+          }
+
+          // 3. Delete all dependent auxiliary records for this draft voucher
+          db.prepare('DELETE FROM tax_entries WHERE voucher_id = ?').run(vch.voucher_id);
+          db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ? OR reference_voucher_id = ?').run(vch.voucher_id, vch.voucher_id);
+          db.prepare('DELETE FROM stock_entries WHERE voucher_id = ?').run(vch.voucher_id);
+          db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(vch.voucher_id);
           db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(vch.voucher_id);
           db.prepare('DELETE FROM vouchers WHERE voucher_id = ?').run(vch.voucher_id);
 

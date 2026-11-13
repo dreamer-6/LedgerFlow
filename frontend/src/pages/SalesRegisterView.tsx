@@ -38,7 +38,10 @@ import {
   Trash2,
   Printer,
   ChevronDown,
-  X
+  X,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 
 export interface SalesRegisterViewProps {
@@ -92,6 +95,10 @@ export const SalesRegisterView: React.FC<SalesRegisterViewProps> = ({
 
   // Selected rows
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Sorting
+  const [sortField, setSortField] = useState<'date' | 'number' | 'customer' | 'amount'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -304,13 +311,50 @@ export const SalesRegisterView: React.FC<SalesRegisterViewProps> = ({
     };
   }, [filteredVouchers]);
 
+  // Sorted vouchers: Defaults to Date DESC, with secondary natural numeric invoice number sort
+  const sortedVouchers = useMemo(() => {
+    return [...filteredVouchers].sort((a, b) => {
+      if (sortField === 'date') {
+        const dateA = a.voucher_date || '';
+        const dateB = b.voucher_date || '';
+        if (dateA !== dateB) {
+          return sortOrder === 'asc' ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
+        }
+        // Secondary sort on identical dates: natural numeric invoice number
+        const numA = a.voucher_number || '';
+        const numB = b.voucher_number || '';
+        return sortOrder === 'asc'
+          ? numA.localeCompare(numB, undefined, { numeric: true })
+          : numB.localeCompare(numA, undefined, { numeric: true });
+      }
+      if (sortField === 'number') {
+        const numA = a.voucher_number || '';
+        const numB = b.voucher_number || '';
+        return sortOrder === 'asc'
+          ? numA.localeCompare(numB, undefined, { numeric: true })
+          : numB.localeCompare(numA, undefined, { numeric: true });
+      }
+      if (sortField === 'customer') {
+        const custA = (a.party_name || '').toLowerCase();
+        const custB = (b.party_name || '').toLowerCase();
+        return sortOrder === 'asc' ? custA.localeCompare(custB) : custB.localeCompare(custA);
+      }
+      if (sortField === 'amount') {
+        const amtA = a.totalPaise || 0;
+        const amtB = b.totalPaise || 0;
+        return sortOrder === 'asc' ? amtA - amtB : amtB - amtA;
+      }
+      return 0;
+    });
+  }, [filteredVouchers, sortField, sortOrder]);
+
   // Pagination calculation
-  const totalEntries = filteredVouchers.length;
+  const totalEntries = sortedVouchers.length;
   const totalPages = Math.max(1, Math.ceil(totalEntries / pageSize));
   const paginatedVouchers = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredVouchers.slice(start, start + pageSize);
-  }, [filteredVouchers, currentPage, pageSize]);
+    return sortedVouchers.slice(start, start + pageSize);
+  }, [sortedVouchers, currentPage, pageSize]);
 
   // Selection
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -333,13 +377,13 @@ export const SalesRegisterView: React.FC<SalesRegisterViewProps> = ({
 
   // Export to CSV
   const handleExportCSV = () => {
-    if (filteredVouchers.length === 0) {
+    if (sortedVouchers.length === 0) {
       alert('No sales records to export');
       return;
     }
 
     const headers = ['Date', 'Invoice No', 'Customer Name', 'City', 'GSTIN', 'Payment Mode', 'Status', 'Taxable Amt (₹)', 'Tax Amt (₹)', 'Grand Total (₹)'];
-    const rows = filteredVouchers.map(v => {
+    const rows = sortedVouchers.map(v => {
       const grandTotal = (v.totalPaise / 100).toFixed(2);
       const taxable = ((v.taxable_amount_paise || 0) / 100).toFixed(2);
       const tax = (((v.cgst_amount_paise || 0) + (v.sgst_amount_paise || 0) + (v.igst_amount_paise || 0)) / 100).toFixed(2);
@@ -720,17 +764,61 @@ export const SalesRegisterView: React.FC<SalesRegisterViewProps> = ({
                     style={{ accentColor: '#EA580C', cursor: 'pointer' }}
                   />
                 </th>
-                <th style={{ padding: '12px 14px', textAlign: 'left', fontWeight: 700, color: 'var(--text-muted)', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Date
+                <th
+                  onClick={() => {
+                    if (sortField === 'date') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                    else { setSortField('date'); setSortOrder('desc'); }
+                  }}
+                  style={{ padding: '12px 14px', textAlign: 'left', fontWeight: 700, color: 'var(--text-muted)', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <span>Date</span>
+                    {sortField === 'date' ? (
+                      sortOrder === 'asc' ? <ArrowUp size={13} color="#EA580C" /> : <ArrowDown size={13} color="#EA580C" />
+                    ) : <ArrowUpDown size={12} color="#94A3B8" />}
+                  </div>
                 </th>
-                <th style={{ padding: '12px 14px', textAlign: 'left', fontWeight: 700, color: 'var(--text-muted)', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Invoice No.
+                <th
+                  onClick={() => {
+                    if (sortField === 'number') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                    else { setSortField('number'); setSortOrder('desc'); }
+                  }}
+                  style={{ padding: '12px 14px', textAlign: 'left', fontWeight: 700, color: 'var(--text-muted)', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <span>Invoice No.</span>
+                    {sortField === 'number' ? (
+                      sortOrder === 'asc' ? <ArrowUp size={13} color="#EA580C" /> : <ArrowDown size={13} color="#EA580C" />
+                    ) : <ArrowUpDown size={12} color="#94A3B8" />}
+                  </div>
                 </th>
-                <th style={{ padding: '12px 14px', textAlign: 'left', fontWeight: 700, color: 'var(--text-muted)', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Customer
+                <th
+                  onClick={() => {
+                    if (sortField === 'customer') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                    else { setSortField('customer'); setSortOrder('asc'); }
+                  }}
+                  style={{ padding: '12px 14px', textAlign: 'left', fontWeight: 700, color: 'var(--text-muted)', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <span>Customer</span>
+                    {sortField === 'customer' ? (
+                      sortOrder === 'asc' ? <ArrowUp size={13} color="#EA580C" /> : <ArrowDown size={13} color="#EA580C" />
+                    ) : <ArrowUpDown size={12} color="#94A3B8" />}
+                  </div>
                 </th>
-                <th style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: 'var(--text-muted)', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Amount
+                <th
+                  onClick={() => {
+                    if (sortField === 'amount') setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                    else { setSortField('amount'); setSortOrder('desc'); }
+                  }}
+                  style={{ padding: '12px 14px', textAlign: 'right', fontWeight: 700, color: 'var(--text-muted)', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', width: '100%' }}>
+                    <span>Amount</span>
+                    {sortField === 'amount' ? (
+                      sortOrder === 'asc' ? <ArrowUp size={13} color="#EA580C" /> : <ArrowDown size={13} color="#EA580C" />
+                    ) : <ArrowUpDown size={12} color="#94A3B8" />}
+                  </div>
                 </th>
                 <th style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 700, color: 'var(--text-muted)', fontSize: '11.5px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   Payment
