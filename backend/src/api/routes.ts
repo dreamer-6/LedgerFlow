@@ -2008,51 +2008,124 @@ export function createApiRouter(db: DatabaseSync): Router {
         };
       };
 
-      // 1. Resolve Date Range according to period filter
+      // 1. Resolve Date Range and Previous Period according to period filter (UI-047 Phase 4 & 5)
+      const todayDate = new Date();
       let fromDate: string;
       let toDate = (req.query.toDate as string) || today;
+      let prevFromDate: string;
+      let prevToDate: string;
       let fyStartYear = parseInt(today.substring(0, 4), 10);
       let isFyScope = false;
+      let granularity: 'daily' | 'weekly' | 'monthly' = 'monthly';
 
-      if (periodParam === 'Single Day') {
+      if (periodParam === 'This Week') {
+        granularity = 'daily';
+        const dayOfWeek = todayDate.getDay(); // 0 Sun, 1 Mon...
+        const diffToMon = (dayOfWeek + 6) % 7;
+        const mon = new Date(todayDate);
+        mon.setDate(todayDate.getDate() - diffToMon);
+        const sun = new Date(mon);
+        sun.setDate(mon.getDate() + 6);
+        fromDate = mon.toISOString().split('T')[0];
+        toDate = sun.toISOString().split('T')[0];
+
+        const prevMon = new Date(mon);
+        prevMon.setDate(mon.getDate() - 7);
+        const prevSun = new Date(prevMon);
+        prevSun.setDate(prevMon.getDate() + 6);
+        prevFromDate = prevMon.toISOString().split('T')[0];
+        prevToDate = prevSun.toISOString().split('T')[0];
+      } else if (periodParam === 'This Month') {
+        granularity = 'daily';
+        const y = todayDate.getFullYear();
+        const m = todayDate.getMonth();
+        fromDate = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+        const lastDay = new Date(y, m + 1, 0).getDate();
+        toDate = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+        const prevMonthDate = new Date(y, m - 1, 1);
+        const py = prevMonthDate.getFullYear();
+        const pm = prevMonthDate.getMonth();
+        prevFromDate = `${py}-${String(pm + 1).padStart(2, '0')}-01`;
+        const pLastDay = new Date(py, pm + 1, 0).getDate();
+        prevToDate = `${py}-${String(pm + 1).padStart(2, '0')}-${String(pLastDay).padStart(2, '0')}`;
+      } else if (periodParam === 'Previous Month') {
+        granularity = 'daily';
+        const y = todayDate.getFullYear();
+        const m = todayDate.getMonth();
+        const pMonthDate = new Date(y, m - 1, 1);
+        const py = pMonthDate.getFullYear();
+        const pm = pMonthDate.getMonth();
+        fromDate = `${py}-${String(pm + 1).padStart(2, '0')}-01`;
+        const pLastDay = new Date(py, pm + 1, 0).getDate();
+        toDate = `${py}-${String(pm + 1).padStart(2, '0')}-${String(pLastDay).padStart(2, '0')}`;
+
+        const ppMonthDate = new Date(y, m - 2, 1);
+        const ppy = ppMonthDate.getFullYear();
+        const ppm = ppMonthDate.getMonth();
+        prevFromDate = `${ppy}-${String(ppm + 1).padStart(2, '0')}-01`;
+        const ppLastDay = new Date(ppy, ppm + 1, 0).getDate();
+        prevToDate = `${ppy}-${String(ppm + 1).padStart(2, '0')}-${String(ppLastDay).padStart(2, '0')}`;
+      } else if (periodParam === 'This Quarter') {
+        granularity = 'weekly';
+        const fy = getCompanyFy();
+        fyStartYear = fy.startYear;
+        const m = todayDate.getMonth() + 1;
+        let qStartM: number, qEndM: number, qYear: number;
+        if (m >= 4 && m <= 6) { qStartM = 4; qEndM = 6; qYear = fyStartYear; }
+        else if (m >= 7 && m <= 9) { qStartM = 7; qEndM = 9; qYear = fyStartYear; }
+        else if (m >= 10 && m <= 12) { qStartM = 10; qEndM = 12; qYear = fyStartYear; }
+        else { qStartM = 1; qEndM = 3; qYear = fyStartYear + 1; }
+
+        fromDate = `${qYear}-${String(qStartM).padStart(2, '0')}-01`;
+        const qLastDay = new Date(qYear, qEndM, 0).getDate();
+        toDate = `${qYear}-${String(qEndM).padStart(2, '0')}-${String(qLastDay).padStart(2, '0')}`;
+
+        const pqStartM = qStartM === 1 ? 10 : qStartM - 3;
+        const pqYear = qStartM === 1 ? qYear - 1 : qYear;
+        prevFromDate = `${pqYear}-${String(pqStartM).padStart(2, '0')}-01`;
+        const pqLastDay = new Date(pqYear, pqStartM + 2, 0).getDate();
+        prevToDate = `${pqYear}-${String(pqStartM + 2).padStart(2, '0')}-${String(pqLastDay).padStart(2, '0')}`;
+      } else if (periodParam === 'Single Day') {
+        granularity = 'daily';
         const selectedDate = (req.query.date as string) || (req.query.fromDate as string) || today;
         fromDate = selectedDate;
         toDate = selectedDate;
         const fy = getCompanyFy();
         fyStartYear = fy.startYear;
+        const selD = new Date(selectedDate);
+        selD.setDate(selD.getDate() - 1);
+        prevFromDate = selD.toISOString().split('T')[0];
+        prevToDate = prevFromDate;
       } else if (periodParam === 'Custom Date Range' || periodParam === 'Custom') {
         fromDate = (req.query.fromDate as string) || today;
         toDate = (req.query.toDate as string) || today;
         const fy = getCompanyFy();
         fyStartYear = fy.startYear;
-      } else if (periodParam === 'Financial Year' || periodParam === 'This FY') {
-        isFyScope = true;
-        const fy = getCompanyFy();
-        fromDate = fy.startDate;
-        toDate = fy.endDate;
-        fyStartYear = fy.startYear;
-      } else if (periodParam === 'Last 12 Months') {
-        const d = new Date();
-        d.setFullYear(d.getFullYear() - 1);
-        d.setDate(1);
-        fromDate = d.toISOString().split('T')[0];
-      } else if (periodParam === 'Last 6 Months') {
-        const d = new Date();
-        d.setMonth(d.getMonth() - 5);
-        d.setDate(1);
-        fromDate = d.toISOString().split('T')[0];
-      } else if (req.query.fromDate) {
-        fromDate = req.query.fromDate as string;
+        const d1 = new Date(fromDate).getTime();
+        const d2 = new Date(toDate).getTime();
+        const diffDays = Math.max(1, Math.round(Math.abs(d2 - d1) / (1000 * 60 * 60 * 24)));
+        if (diffDays <= 31) granularity = 'daily';
+        else if (diffDays <= 92) granularity = 'weekly';
+        else granularity = 'monthly';
+
+        const pTo = new Date(d1 - (24 * 60 * 60 * 1000));
+        const pFrom = new Date(pTo.getTime() - (diffDays * 24 * 60 * 60 * 1000));
+        prevFromDate = pFrom.toISOString().split('T')[0];
+        prevToDate = pTo.toISOString().split('T')[0];
       } else {
-        // Default fallback: Financial Year
+        // Default: Financial Year
         isFyScope = true;
+        granularity = 'monthly';
         const fy = getCompanyFy();
         fromDate = fy.startDate;
         toDate = fy.endDate;
         fyStartYear = fy.startYear;
+        prevFromDate = `${fyStartYear - 1}-04-01`;
+        prevToDate = `${fyStartYear}-03-31`;
       }
 
-      // 2. Net Sales Turnover (Before Tax / Taxable Amount) for selected period & today
+      // 2. Net Sales Turnover (Before Tax / Taxable Amount) for selected period & previous period
       const periodSales = db.prepare(`
         SELECT COALESCE(
           (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
@@ -2060,6 +2133,14 @@ export function createApiRouter(db: DatabaseSync): Router {
           (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
         ) as total
       `).get(companyId, fromDate, toDate, companyId, fromDate, toDate) as { total: number };
+
+      const prevSales = db.prepare(`
+        SELECT COALESCE(
+          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+        ) - COALESCE(
+          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+        ) as total
+      `).get(companyId, prevFromDate, prevToDate, companyId, prevFromDate, prevToDate) as { total: number };
 
       const todaySales = db.prepare(`
         SELECT COALESCE(
@@ -2069,7 +2150,7 @@ export function createApiRouter(db: DatabaseSync): Router {
         ) as total
       `).get(companyId, today, companyId, today) as { total: number };
 
-      // 3. Net Purchases Turnover (Before Tax / Taxable Amount) for selected period & today
+      // 3. Net Purchases Turnover (Before Tax / Taxable Amount) for selected period & previous period
       const periodPurchases = db.prepare(`
         SELECT COALESCE(
           (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
@@ -2078,6 +2159,14 @@ export function createApiRouter(db: DatabaseSync): Router {
         ) as total
       `).get(companyId, fromDate, toDate, companyId, fromDate, toDate) as { total: number };
 
+      const prevPurchases = db.prepare(`
+        SELECT COALESCE(
+          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+        ) - COALESCE(
+          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+        ) as total
+      `).get(companyId, prevFromDate, prevToDate, companyId, prevFromDate, prevToDate) as { total: number };
+
       const todayPurchases = db.prepare(`
         SELECT COALESCE(
           (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE' AND status = 'POSTED' AND voucher_date = ?), 0
@@ -2085,6 +2174,17 @@ export function createApiRouter(db: DatabaseSync): Router {
           (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE_RETURN' AND status = 'POSTED' AND voucher_date = ?), 0
         ) as total
       `).get(companyId, today, companyId, today) as { total: number };
+
+      // Invoice Counts
+      const periodInvoices = db.prepare(`
+        SELECT COUNT(*) as count FROM vouchers
+        WHERE company_id = ? AND status = 'POSTED' AND voucher_type = 'SALES' AND voucher_date BETWEEN ? AND ?
+      `).get(companyId, fromDate, toDate) as { count: number };
+
+      const prevInvoices = db.prepare(`
+        SELECT COUNT(*) as count FROM vouchers
+        WHERE company_id = ? AND status = 'POSTED' AND voucher_type = 'SALES' AND voucher_date BETWEEN ? AND ?
+      `).get(companyId, prevFromDate, prevToDate) as { count: number };
 
       // 4. Receivables (Sundry Debtors) with opening balances
       const receivables = db.prepare(`
@@ -2161,28 +2261,70 @@ export function createApiRouter(db: DatabaseSync): Router {
           status: item.quantity <= 0 ? 'critical' : 'warning'
         }));
 
-      // 8. Monthly Trend Data strictly aggregated from saved posted transactions
-      // For Financial Year overview, query spans the whole financial year and includes all 12 months (even with 0 activity)
-      const trendQueryFrom = isFyScope ? fromDate : (periodParam === 'Single Day' ? `${fyStartYear}-04-01` : fromDate);
-      const trendQueryTo = isFyScope ? toDate : (periodParam === 'Single Day' ? `${fyStartYear + 1}-03-31` : toDate);
+      // 8. Adaptive Trend Data (UI-047 Phase 5: Daily / Weekly / Monthly)
+      let trendData: Array<{ month: string; salesPaise: number; purchasePaise: number; total: number; voucher_type: string }> = [];
 
-      const rawTrend = db.prepare(`
-        SELECT
-          substr(voucher_date, 1, 7) as month,
-          voucher_type,
-          COALESCE(SUM(taxable_amount_paise), 0) as total
-        FROM vouchers
-        WHERE company_id = ? AND status = 'POSTED'
-          AND voucher_type IN ('SALES', 'SALES_RETURN', 'PURCHASE', 'PURCHASE_RETURN')
-          AND voucher_date BETWEEN ? AND ?
-        GROUP BY substr(voucher_date, 1, 7), voucher_type
-        ORDER BY month ASC
-      `).all(companyId, trendQueryFrom, trendQueryTo) as { month: string; voucher_type: string; total: number }[];
+      if (granularity === 'daily') {
+        // Daily breakdown
+        const rawDaily = db.prepare(`
+          SELECT
+            voucher_date as day_key,
+            voucher_type,
+            COALESCE(SUM(taxable_amount_paise), 0) as total
+          FROM vouchers
+          WHERE company_id = ? AND status = 'POSTED'
+            AND voucher_type IN ('SALES', 'SALES_RETURN', 'PURCHASE', 'PURCHASE_RETURN')
+            AND voucher_date BETWEEN ? AND ?
+          GROUP BY voucher_date, voucher_type
+          ORDER BY voucher_date ASC
+        `).all(companyId, fromDate, toDate) as { day_key: string; voucher_type: string; total: number }[];
 
-      const trendMap = new Map<string, { salesPaise: number; purchasePaise: number }>();
+        const dailyMap = new Map<string, { salesPaise: number; purchasePaise: number }>();
+        // Seed each day from fromDate to toDate
+        const curDateIter = new Date(fromDate);
+        const stopDate = new Date(toDate);
+        while (curDateIter <= stopDate) {
+          const dStr = curDateIter.toISOString().split('T')[0];
+          dailyMap.set(dStr, { salesPaise: 0, purchasePaise: 0 });
+          curDateIter.setDate(curDateIter.getDate() + 1);
+        }
 
-      // Seed all 12 financial-year months (Apr-Mar) for FY / Single Day mode
-      if (isFyScope || periodParam === 'Financial Year' || periodParam === 'This FY' || periodParam === 'Single Day') {
+        for (const row of rawDaily) {
+          const cur = dailyMap.get(row.day_key) || { salesPaise: 0, purchasePaise: 0 };
+          if (row.voucher_type === 'SALES') cur.salesPaise += row.total;
+          if (row.voucher_type === 'SALES_RETURN') cur.salesPaise -= row.total;
+          if (row.voucher_type === 'PURCHASE') cur.purchasePaise += row.total;
+          if (row.voucher_type === 'PURCHASE_RETURN') cur.purchasePaise -= row.total;
+          dailyMap.set(row.day_key, cur);
+        }
+
+        trendData = Array.from(dailyMap.entries()).map(([day, vals]) => ({
+          month: day,
+          salesPaise: Math.max(0, vals.salesPaise),
+          purchasePaise: Math.max(0, vals.purchasePaise),
+          total: Math.max(0, vals.salesPaise),
+          voucher_type: 'SALES'
+        }));
+      } else {
+        // Monthly breakdown
+        const trendQueryFrom = isFyScope ? fromDate : `${fyStartYear}-04-01`;
+        const trendQueryTo = isFyScope ? toDate : `${fyStartYear + 1}-03-31`;
+
+        const rawTrend = db.prepare(`
+          SELECT
+            substr(voucher_date, 1, 7) as month,
+            voucher_type,
+            COALESCE(SUM(taxable_amount_paise), 0) as total
+          FROM vouchers
+          WHERE company_id = ? AND status = 'POSTED'
+            AND voucher_type IN ('SALES', 'SALES_RETURN', 'PURCHASE', 'PURCHASE_RETURN')
+            AND voucher_date BETWEEN ? AND ?
+          GROUP BY substr(voucher_date, 1, 7), voucher_type
+          ORDER BY month ASC
+        `).all(companyId, trendQueryFrom, trendQueryTo) as { month: string; voucher_type: string; total: number }[];
+
+        const trendMap = new Map<string, { salesPaise: number; purchasePaise: number }>();
+
         for (let m = 4; m <= 12; m++) {
           const mStr = `${fyStartYear}-${String(m).padStart(2, '0')}`;
           trendMap.set(mStr, { salesPaise: 0, purchasePaise: 0 });
@@ -2191,79 +2333,125 @@ export function createApiRouter(db: DatabaseSync): Router {
           const mStr = `${fyStartYear + 1}-${String(m).padStart(2, '0')}`;
           trendMap.set(mStr, { salesPaise: 0, purchasePaise: 0 });
         }
-      }
 
-      for (const row of rawTrend) {
-        const cur = trendMap.get(row.month) || { salesPaise: 0, purchasePaise: 0 };
-        if (row.voucher_type === 'SALES') cur.salesPaise += row.total;
-        if (row.voucher_type === 'SALES_RETURN') cur.salesPaise -= row.total;
-        if (row.voucher_type === 'PURCHASE') cur.purchasePaise += row.total;
-        if (row.voucher_type === 'PURCHASE_RETURN') cur.purchasePaise -= row.total;
-        trendMap.set(row.month, cur);
-      }
+        for (const row of rawTrend) {
+          const cur = trendMap.get(row.month) || { salesPaise: 0, purchasePaise: 0 };
+          if (row.voucher_type === 'SALES') cur.salesPaise += row.total;
+          if (row.voucher_type === 'SALES_RETURN') cur.salesPaise -= row.total;
+          if (row.voucher_type === 'PURCHASE') cur.purchasePaise += row.total;
+          if (row.voucher_type === 'PURCHASE_RETURN') cur.purchasePaise -= row.total;
+          trendMap.set(row.month, cur);
+        }
 
-      let trendEntries = Array.from(trendMap.entries());
-      if (isFyScope || periodParam === 'Financial Year' || periodParam === 'This FY' || periodParam === 'Single Day') {
         const fyOrder = [
           `${fyStartYear}-04`, `${fyStartYear}-05`, `${fyStartYear}-06`,
           `${fyStartYear}-07`, `${fyStartYear}-08`, `${fyStartYear}-09`,
           `${fyStartYear}-10`, `${fyStartYear}-11`, `${fyStartYear}-12`,
           `${fyStartYear + 1}-01`, `${fyStartYear + 1}-02`, `${fyStartYear + 1}-03`
         ];
-        trendEntries.sort((a, b) => fyOrder.indexOf(a[0]) - fyOrder.indexOf(b[0]));
-      } else {
-        trendEntries.sort((a, b) => a[0].localeCompare(b[0]));
+
+        const trendEntries = Array.from(trendMap.entries()).sort(
+          (a, b) => fyOrder.indexOf(a[0]) - fyOrder.indexOf(b[0])
+        );
+
+        trendData = trendEntries.map(([month, vals]) => ({
+          month,
+          salesPaise: Math.max(0, vals.salesPaise),
+          purchasePaise: Math.max(0, vals.purchasePaise),
+          total: Math.max(0, vals.salesPaise),
+          voucher_type: 'SALES'
+        }));
       }
 
-      const trendData = trendEntries.map(([month, vals]) => ({
-        month,
-        salesPaise: Math.max(0, vals.salesPaise),
-        purchasePaise: Math.max(0, vals.purchasePaise),
-        // For backwards compatibility with consumers expecting voucher_type / total rows
-        total: Math.max(0, vals.salesPaise),
-        voucher_type: 'SALES'
-      }));
-
-      // 9. Explainable Business Health metrics
+      // 9. Authoritative Multi-Factor Business Health Scoring Model (0-100 pts) (UI-047 Phase 4A)
       const recBal = Math.max(0, receivables.balance);
       const payBal = Math.max(0, payables.balance);
       const liquidFunds = cashBank.balance + recBal;
       const hasActivity = periodSales.total > 0 || periodPurchases.total > 0 || recBal > 0 || payBal > 0;
 
-      let healthScore: number | null = null;
+      const evaluateHealth = (sales: number, purchases: number, rec: number, pay: number, prevS: number) => {
+        if (sales === 0 && purchases === 0 && rec === 0 && pay === 0) {
+          return null;
+        }
+
+        // Factor 1: Gross Trading Margin (25 pts)
+        let f1 = 15;
+        const margin = sales > 0 ? (sales - purchases) / sales : 0;
+        if (margin >= 0.25) f1 = 25;
+        else if (margin >= 0.15) f1 = 20;
+        else if (margin >= 0.05) f1 = 15;
+        else if (margin >= 0) f1 = 10;
+        else f1 = 5;
+
+        // Factor 2: Liquidity & Solvency Coverage (25 pts)
+        let f2 = 20;
+        if (pay === 0) {
+          f2 = 25; // Debt-free
+        } else {
+          const qr = (cashBank.balance + rec) / pay;
+          if (qr >= 1.5) f2 = 25;
+          else if (qr >= 1.0) f2 = 20;
+          else if (qr >= 0.7) f2 = 15;
+          else if (qr >= 0.4) f2 = 10;
+          else f2 = 5;
+        }
+
+        // Factor 3: Receivables Discipline (25 pts)
+        let f3 = 20;
+        const recRatio = sales > 0 ? rec / sales : 0;
+        if (rec === 0 || recRatio <= 0.2) f3 = 25;
+        else if (recRatio <= 0.4) f3 = 20;
+        else if (recRatio <= 0.6) f3 = 15;
+        else f3 = 10;
+
+        // Factor 4: Sales Growth / Momentum (25 pts)
+        let f4 = 20;
+        if (prevS > 0) {
+          const growth = (sales - prevS) / prevS;
+          if (growth >= 0.1) f4 = 25;
+          else if (growth >= 0) f4 = 22;
+          else if (growth >= -0.15) f4 = 16;
+          else f4 = 10;
+        } else if (sales > 0) {
+          f4 = 20;
+        }
+
+        const score = Math.min(100, Math.max(0, f1 + f2 + f3 + f4));
+        return { score, f1, f2, f3, f4 };
+      };
+
+      const currHealth = evaluateHealth(periodSales.total, periodPurchases.total, recBal, payBal, prevSales.total);
+      const prevHealth = evaluateHealth(prevSales.total, prevPurchases.total, recBal, payBal, 0);
+
+      const healthScore = currHealth ? currHealth.score : null;
+      const prevScore = prevHealth ? prevHealth.score : null;
+      const healthTrend = (healthScore !== null && prevScore !== null) ? (healthScore - prevScore) : 0;
+
       let healthStatusText = 'No Activity';
       let healthDescText = 'No transactions recorded for the selected period.';
-
-      if (hasActivity) {
-        if (payBal === 0) {
-          healthScore = 100;
-          healthStatusText = 'Excellent (Debt Free)';
-          healthDescText = 'Zero outstanding payables. Business operating with positive cash flow.';
+      if (healthScore !== null) {
+        if (healthScore >= 90) {
+          healthStatusText = 'Excellent Operating Health';
+          healthDescText = 'High trading margins, robust working capital, and strong debt coverage.';
+        } else if (healthScore >= 75) {
+          healthStatusText = 'Strong Solvency';
+          healthDescText = 'Healthy trading operations with adequate liquidity and disciplined receivables.';
+        } else if (healthScore >= 60) {
+          healthStatusText = 'Moderate Health';
+          healthDescText = 'Balanced operations; maintain regular collection cycles and monitor payables.';
         } else {
-          const quickRatio = liquidFunds / payBal;
-          if (quickRatio >= 1.5) {
-            healthScore = 95;
-            healthStatusText = 'Strong Solvency';
-            healthDescText = `Liquid assets cover ${quickRatio.toFixed(1)}x current payables (benchmark >= 1.5x).`;
-          } else if (quickRatio >= 1.0) {
-            healthScore = 80;
-            healthStatusText = 'Adequate Liquidity';
-            healthDescText = `Liquid assets adequately match short-term obligations (${quickRatio.toFixed(1)}x coverage).`;
-          } else if (quickRatio >= 0.5) {
-            healthScore = 60;
-            healthStatusText = 'Moderate Working Capital';
-            healthDescText = `Payables exceed immediately available liquid funds (${quickRatio.toFixed(1)}x coverage).`;
-          } else {
-            healthScore = 40;
-            healthStatusText = 'Liquidity Attention Needed';
-            healthDescText = `Payables significantly exceed liquid reserves (${quickRatio.toFixed(1)}x coverage).`;
-          }
+          healthStatusText = 'Attention Recommended';
+          healthDescText = 'Working capital or margins require optimization to maintain strong liquidity.';
         }
       }
 
       res.json({
         totalSalesPaise: Math.max(0, periodSales.total),
         totalPurchasesPaise: Math.max(0, periodPurchases.total),
+        prevSalesPaise: Math.max(0, prevSales.total),
+        prevPurchasesPaise: Math.max(0, prevPurchases.total),
+        periodInvoicesCount: periodInvoices.count,
+        prevInvoicesCount: prevInvoices.count,
         todaySalesPaise: Math.max(0, todaySales.total),
         todayPurchasesPaise: Math.max(0, todayPurchases.total),
         receivablesPaise: recBal,
@@ -2271,15 +2459,24 @@ export function createApiRouter(db: DatabaseSync): Router {
         cashBankPaise: cashBank.balance,
         stockValuePaise: totalStockValPaise,
         stockAlerts,
+        granularity,
         trendData,
         recentVouchers,
         period: periodParam,
         fromDate,
         toDate,
+        prevFromDate,
+        prevToDate,
         businessHealth: {
           score: healthScore,
+          prevScore,
+          trend: healthTrend,
           statusText: healthStatusText,
           descText: healthDescText,
+          f1: currHealth?.f1 ?? null,
+          f2: currHealth?.f2 ?? null,
+          f3: currHealth?.f3 ?? null,
+          f4: currHealth?.f4 ?? null,
           quickRatio: payBal > 0 ? liquidFunds / payBal : null
         }
       });

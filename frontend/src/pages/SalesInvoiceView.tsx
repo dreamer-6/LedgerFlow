@@ -42,7 +42,8 @@ import {
   Truck,
   Barcode,
   CreditCard,
-  ShieldCheck
+  ShieldCheck,
+  FileText
 } from 'lucide-react';
 
 /* ─────────────────────────────────────────────
@@ -543,6 +544,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     return d.toISOString().split('T')[0];
   });
   const [voucherNumber, setVoucherNumber] = useState('');
+  const [editVoucherStatus, setEditVoucherStatus] = useState<string | null>(null);
   const [placeOfSupply, setPlaceOfSupply] = useState('33');
   const [salesLedger, setSalesLedger] = useState('Sales');
   const [paymentTerms, setPaymentTerms] = useState('30');
@@ -794,6 +796,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     api.getVoucherById(editVoucherId)
       .then(({ voucher, lines: vLines }) => {
         setVoucherNumber(voucher.voucher_number || '');
+        setEditVoucherStatus(voucher.status || null);
         setVoucherDate(voucher.voucher_date || '');
         if (voucher.due_date) setDueDate(voucher.due_date);
         setPartyId(voucher.party_id || '');
@@ -1174,7 +1177,7 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
       voucherType: 'SALES',
       allowNegativeStock: true,
       voucherDate,
-      voucherNumber: status === 'DRAFT' ? undefined : (voucherNumber || undefined),
+      voucherNumber: (editVoucherId || status !== 'DRAFT') ? (voucherNumber?.trim() || undefined) : undefined,
       partyId: partyId || undefined,
       placeOfSupply: `${placeOfSupply}`,
       paymentTerms: paymentTerms ? `${paymentTerms} Days` : undefined,
@@ -1217,8 +1220,8 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
     setIsSaving(true);
     try {
       if (editVoucherId) {
-        await api.updateVoucher(editVoucherId, payload);
-        showToast(`Draft ${voucherNumber || ''} updated successfully.`);
+        const res = await api.updateVoucher(editVoucherId, payload);
+        showToast(`Draft ${res?.voucherNumber || voucherNumber || ''} updated successfully.`);
       } else {
         const res = await api.postVoucher(payload);
         showToast(`Draft ${res.voucherNumber || ''} saved successfully.`);
@@ -1267,8 +1270,16 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
       let finalVchId = editVoucherId;
       if (editVoucherId) {
         const res = await api.updateVoucher(editVoucherId, payload);
-        showToast(`Sales Invoice ${voucherNumber || ''} updated successfully!`);
-        finalVchId = res.voucherId || editVoucherId;
+        if (editVoucherStatus === 'DRAFT') {
+          // Promote draft to POSTED atomically
+          const postRes = await api.postDraftVoucher(res?.voucherId || editVoucherId);
+          finalVchId = postRes?.voucherId || res?.voucherId || editVoucherId;
+          showToast(`Sales Invoice ${postRes?.voucherNumber || voucherNumber || ''} posted successfully!`);
+        } else {
+          // Posted voucher amendment
+          finalVchId = res.voucherId || editVoucherId;
+          showToast(`Sales Invoice ${res.voucherNumber || voucherNumber || ''} updated successfully!`);
+        }
       } else {
         const res = await api.postVoucher(payload);
         if (res.settlementVoucherNumber) {
@@ -1515,14 +1526,16 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
 
         {/* Top Header Action Buttons */}
         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-          <button
-            className="lf-btn lf-btn-secondary"
-            onClick={handleSaveDraft}
-            disabled={isSaving}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600 }}
-          >
-            <Save size={14} /> Save as Draft
-          </button>
+          {(!editVoucherId || editVoucherStatus === 'DRAFT') && (
+            <button
+              className="lf-btn lf-btn-secondary"
+              onClick={handleSaveDraft}
+              disabled={isSaving}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600 }}
+            >
+              <Save size={14} /> {editVoucherId ? 'Update Draft' : 'Save as Draft'}
+            </button>
+          )}
           <button
             id="btn-save-post-invoice"
             className="lf-btn lf-btn-primary"
@@ -1537,10 +1550,55 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
               boxShadow: '0 2px 8px rgba(255,107,43,0.25)'
             }}
           >
-            <Send size={14} /> {isSaving ? 'Posting…' : 'Save & Print'}
+            <Send size={14} /> {isSaving ? 'Processing…' : (editVoucherId ? (editVoucherStatus === 'POSTED' ? 'Amend & Re-post' : 'Update & Post Invoice') : 'Save & Print')}
           </button>
         </div>
       </div>
+
+      {/* Contextual Notice for Invoice Editing */}
+      {editVoucherId && editVoucherStatus === 'DRAFT' && (
+        <div
+          style={{
+            padding: '10px 16px',
+            backgroundColor: '#FFFBEB',
+            border: '1px solid #FDE68A',
+            borderRadius: '8px',
+            color: '#92400E',
+            fontSize: '12.5px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '16px'
+          }}
+        >
+          <FileText size={15} color="#D97706" />
+          <span>
+            <strong>Editing Draft Invoice:</strong> {voucherNumber || 'Draft'}. Changes will be saved directly to this draft voucher without altering its identifier.
+          </span>
+        </div>
+      )}
+
+      {editVoucherId && editVoucherStatus === 'POSTED' && (
+        <div
+          style={{
+            padding: '10px 16px',
+            backgroundColor: '#FEF2F2',
+            border: '1px solid #FECACA',
+            borderRadius: '8px',
+            color: '#991B1B',
+            fontSize: '12.5px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '16px'
+          }}
+        >
+          <AlertCircle size={15} color="#DC2626" />
+          <span>
+            <strong>Posted Invoice Notice:</strong> Invoice {voucherNumber} is an authoritative accounting record. In compliance with double-entry audit standards, saving modifications creates an audited statutory amendment referencing {voucherNumber}. To cancel without modifying, use Cancel Invoice from the Sales Register.
+          </span>
+        </div>
+      )}
 
       {/* Error Alert */}
       {error && (

@@ -56,6 +56,7 @@ export function getDatabase(customPath?: string): DatabaseSync {
   try { db.exec('ALTER TABLE voucher_lines ADD COLUMN serial_number TEXT;'); } catch { }
   try { db.exec('ALTER TABLE voucher_lines ADD COLUMN warranty_months INTEGER DEFAULT 0;'); } catch { }
   try { db.exec('ALTER TABLE stock_items ADD COLUMN warranty_months INTEGER DEFAULT 0;'); } catch { }
+  try { db.exec('ALTER TABLE stock_items ADD COLUMN category TEXT;'); } catch { }
   try {
     db.exec(`
       CREATE TABLE IF NOT EXISTS stock_item_serials (

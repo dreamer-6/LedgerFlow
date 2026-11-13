@@ -238,6 +238,7 @@ export interface StockSummaryItem {
   avg_rate_paise: number;
   totalValuePaise: number;
   total_value_paise: number;
+  category?: string;
 }
 
 export interface OutstandingPartyItem {

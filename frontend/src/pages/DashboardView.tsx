@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { api, Company, FinancialYear, UserSession } from '../api/client';
+import { api, Company, FinancialYear, UserSession, StockSummaryItem } from '../api/client';
 import {
   TrendingUp,
   BarChart2,
@@ -22,7 +22,11 @@ import {
   BookText,
   AlertCircle,
   RefreshCw,
-  Trash2
+  Trash2,
+  Package,
+  Layers,
+  ArrowUpRight,
+  ArrowDownRight
 } from 'lucide-react';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/LoadingState';
@@ -65,6 +69,15 @@ function formatDateDisplay(dateStr?: string): string {
   return `${d.getDate()} ${MONTHS_ABBR[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+export type DashboardScope =
+  | 'Financial Year'
+  | 'This Quarter'
+  | 'This Month'
+  | 'Previous Month'
+  | 'This Week'
+  | 'Single Day'
+  | 'Custom Date Range';
+
 export const DashboardView: React.FC<DashboardViewProps> = ({
   companyId,
   company,
@@ -82,10 +95,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const todayDefault = currentDate || new Date().toISOString().split('T')[0];
-  const [scope, setScope] = useState<'Financial Year' | 'Single Day' | 'Custom Date Range'>('Financial Year');
+  const [scope, setScope] = useState<DashboardScope>('Financial Year');
   const [selectedDate, setSelectedDate] = useState<string>(todayDefault);
   const [customFromDate, setCustomFromDate] = useState<string>(todayDefault);
   const [customToDate, setCustomToDate] = useState<string>(todayDefault);
+
+  // Stock Summary card state (UI-047 Phase 4B)
+  const [stockScope, setStockScope] = useState<'Today' | 'This Month' | 'Previous Month' | 'Current FY' | 'Custom'>('Today');
+  const [stockCustomDate, setStockCustomDate] = useState<string>(todayDefault);
+  const [stockItems, setStockItems] = useState<StockSummaryItem[]>([]);
+  const [stockLoading, setStockLoading] = useState<boolean>(false);
+  const [prevMonthStockValPaise, setPrevMonthStockValPaise] = useState<number | null>(null);
 
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
   const [isFullscreenChart, setIsFullscreenChart] = useState(false);
@@ -150,7 +170,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   const loadDashboardData = async (
-    currentScope = scope,
+    currentScope: DashboardScope = scope,
     sDate = selectedDate,
     fDate = customFromDate,
     tDate = customToDate
@@ -162,7 +182,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const todayStr = currentDate || new Date().toISOString().split('T')[0];
       const fyStart = activeFy?.start_date || '2026-04-01';
 
-      let qPeriod = currentScope;
+      let qPeriod: string = currentScope;
       let qFromDate: string | undefined;
       let qToDate: string | undefined;
 
@@ -172,8 +192,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       } else if (currentScope === 'Custom Date Range') {
         qFromDate = fDate || todayStr;
         qToDate = tDate || todayStr;
-      } else {
-        qPeriod = 'Financial Year';
       }
 
       const fyEnd = activeFy?.end_date || '2027-03-31';
@@ -208,6 +226,67 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     loadDashboardData(scope, selectedDate, customFromDate, customToDate);
   }, [companyId, activeFy?.fy_id, scope, selectedDate, customFromDate, customToDate]);
 
+  // Compute effective As-Of Date for Stock Summary card (UI-047 Phase 4B)
+  const effectiveStockDate = useMemo(() => {
+    const now = new Date();
+    if (stockScope === 'Today') return todayDefault;
+    if (stockScope === 'This Month') {
+      const y = now.getFullYear();
+      const m = now.getMonth();
+      const lastDay = new Date(y, m + 1, 0).getDate();
+      return `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    }
+    if (stockScope === 'Previous Month') {
+      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const py = prev.getFullYear();
+      const pm = prev.getMonth();
+      const pLastDay = new Date(py, pm + 1, 0).getDate();
+      return `${py}-${String(pm + 1).padStart(2, '0')}-${String(pLastDay).padStart(2, '0')}`;
+    }
+    if (stockScope === 'Current FY') {
+      return activeFy?.end_date || '2027-03-31';
+    }
+    return stockCustomDate || todayDefault;
+  }, [stockScope, stockCustomDate, todayDefault, activeFy?.end_date]);
+
+  // Fetch Authoritative Stock Summary & Previous Month baseline for MoM trend
+  useEffect(() => {
+    if (!companyId) return;
+    let isMounted = true;
+    setStockLoading(true);
+
+    const now = new Date();
+    const prevM = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const pLastDay = new Date(prevM.getFullYear(), prevM.getMonth() + 1, 0).getDate();
+    const prevMonthEndDate = `${prevM.getFullYear()}-${String(prevM.getMonth() + 1).padStart(2, '0')}-${String(pLastDay).padStart(2, '0')}`;
+
+    Promise.all([
+      api.getStockSummary(undefined, effectiveStockDate).catch((err) => {
+        console.warn('Stock summary fetch error:', err);
+        return [];
+      }),
+      api.getStockSummary(undefined, prevMonthEndDate).catch((err) => {
+        console.warn('Previous month stock fetch error:', err);
+        return [];
+      })
+    ]).then(([currList, priorList]) => {
+      if (!isMounted) return;
+      setStockItems(currList || []);
+      if (priorList && priorList.length > 0) {
+        const priorTotal = priorList.reduce((sum: number, it: any) => sum + (it.totalValuePaise || 0), 0);
+        setPrevMonthStockValPaise(priorTotal);
+      } else {
+        setPrevMonthStockValPaise(null);
+      }
+    }).finally(() => {
+      if (isMounted) setStockLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [companyId, effectiveStockDate]);
+
   // Authenticated user greeting based on time of day
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -231,7 +310,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const serviceIncomePaise = pnlData?.indirectIncomePaise ?? 0;
   const cashBankPaise = data?.cashBankPaise ?? 0;
 
-  // Process trend data for the period grouped bar chart
+  // Helper to safely format percentage changes avoiding divide-by-zero
+  const calcChangePct = (curr: number, prev: number): string => {
+    if (prev <= 0) return curr > 0 ? '+100%' : '0%';
+    const pct = Math.round(((curr - prev) / prev) * 1000) / 10;
+    return `${pct >= 0 ? '+' : ''}${pct}%`;
+  };
+
+  // Process trend data for the period grouped bar chart (adaptive granularity)
   const { chartBars, yMax, yLabels, salesTrendPct, purchaseTrendPct } = useMemo(() => {
     const rawTrend: Array<{ month: string; salesPaise?: number; purchasePaise?: number; total?: number; voucher_type?: string }> = data?.trendData || [];
     const trendMap: Record<string, { s: number; p: number }> = {};
@@ -283,13 +369,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
 
     const bars = monthsToDisplay.map((moKey) => {
-      const [, mm] = moKey.split('-');
-      const monthIdx = parseInt(mm, 10) - 1;
+      const parts = moKey.split('-');
+      let label = moKey;
+      if (parts.length === 3) {
+        // Daily key: YYYY-MM-DD -> e.g. "22 Jun"
+        const day = parts[2];
+        const mIdx = parseInt(parts[1], 10) - 1;
+        label = `${day} ${MONTHS_ABBR[mIdx] || parts[1]}`;
+      } else if (parts.length === 2) {
+        // Monthly key: YYYY-MM -> e.g. "Jun"
+        const mIdx = parseInt(parts[1], 10) - 1;
+        label = MONTHS_ABBR[mIdx] || parts[1];
+      }
       const sPaise = trendMap[moKey]?.s ?? 0;
       const pPaise = trendMap[moKey]?.p ?? 0;
       return {
         key: moKey,
-        monthName: MONTHS_ABBR[monthIdx] || moKey,
+        monthName: label,
         salesPaise: sPaise,
         purchasePaise: pPaise
       };
@@ -299,11 +395,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const maxValPaise = rawMax > 0 ? rawMax : 500000;
     const maxRupees = Math.round(maxValPaise / 100);
 
-    // Adaptive Rupee axis formatting per UI-031:
-    // - Full rupee amounts visible under ₹1,00,000 (e.g. ₹850, ₹12,500, ₹85,000)
-    // - Abbreviate to Lakhs (₹X.XL) only when >= ₹1,00,000
-    // - Abbreviate to Crores (₹X.XCr) only when >= ₹1,00,00,000
-    // - Unrounded data preserved in underlying items and tooltips
     const formatScaleLabel = (rupees: number) => {
       if (rupees === 0) return '₹0';
       const abs = Math.abs(rupees);
@@ -330,48 +421,149 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
   }, [data, scope]);
 
-  // Business Health status indicators based on real explainable measures
-  const { hasAnyTransactions, healthScoreDisplay, healthStatusText, healthDescText, healthArcOffset, salesShare, purchaseShare, recvShare, payShare, svcShare } = useMemo(() => {
+  // Business Health status indicators based on real explainable measures (UI-047 Phase 4A)
+  const {
+    hasAnyTransactions,
+    healthScoreDisplay,
+    healthTrend,
+    healthStatusText,
+    healthDescText,
+    healthArcOffset,
+    factors
+  } = useMemo(() => {
     const totalBenchmark = Math.max(totalSalesPaise, 1);
     const hasTransactions = totalSalesPaise > 0 || totalPurchasePaise > 0 || receivablesPaise > 0 || payablesPaise > 0;
 
     const bHealth = data?.businessHealth;
     const score = bHealth?.score;
+    const trend = bHealth?.trend ?? 0;
 
     let scoreDisplay = '--';
     let statusText = 'No Activity';
     let descText = 'No transactions recorded for the selected period.';
-    let arcOffset = 235.6; // empty
+    let arcOffset = 238.76;
 
     if (score !== undefined && score !== null) {
       scoreDisplay = String(score);
       statusText = bHealth.statusText || 'Operating Metrics Active';
       descText = bHealth.descText || 'Double-entry books are active and balanced.';
-      arcOffset = 235.6 * (1 - Math.min(100, Math.max(0, score)) / 100);
+      arcOffset = 238.76 * (1 - Math.min(100, Math.max(0, score)) / 100);
     } else if (hasTransactions) {
       statusText = 'Operating Metrics Active';
       descText = 'Double-entry books are active and balanced.';
     }
 
-    const calcShare = (val: number) => {
-      if (totalSalesPaise <= 0) return '--';
-      const pct = (val / totalBenchmark) * 100;
-      return `${pct >= 100 ? '100%' : pct.toFixed(1) + '%'}`;
-    };
+    const f1 = bHealth?.f1 ?? (totalSalesPaise > 0 ? 20 : 15);
+    const f2 = bHealth?.f2 ?? 20;
+    const f3 = bHealth?.f3 ?? 20;
+    const f4 = bHealth?.f4 ?? 20;
 
     return {
       hasAnyTransactions: hasTransactions,
       healthScoreDisplay: scoreDisplay,
+      healthTrend: trend,
       healthStatusText: statusText,
       healthDescText: descText,
       healthArcOffset: arcOffset,
-      salesShare: totalSalesPaise > 0 ? '100%' : '--',
-      purchaseShare: calcShare(totalPurchasePaise),
-      recvShare: calcShare(receivablesPaise),
-      payShare: calcShare(payablesPaise),
-      svcShare: calcShare(serviceIncomePaise)
+      factors: [
+        { name: 'Trading Margin', score: f1, max: 25 },
+        { name: 'Solvency & Debt', score: f2, max: 25 },
+        { name: 'Receivables Discipline', score: f3, max: 25 },
+        { name: 'Sales Momentum', score: f4, max: 25 },
+      ]
     };
-  }, [data, totalSalesPaise, totalPurchasePaise, receivablesPaise, payablesPaise, serviceIncomePaise]);
+  }, [data, totalSalesPaise, totalPurchasePaise, receivablesPaise, payablesPaise]);
+
+  // 21 fine inner radial ticks for Business Health semicircular gauge
+  const gaugeTicks = useMemo(() => {
+    const scoreVal = parseInt(healthScoreDisplay, 10);
+    const activeThreshold = isNaN(scoreVal) ? -1 : Math.round((scoreVal / 100) * 20);
+    const ticks = [];
+    for (let i = 0; i <= 20; i++) {
+      const angleRad = (i * 9 * Math.PI) / 180;
+      const cosA = Math.cos(angleRad);
+      const sinA = Math.sin(angleRad);
+      // r1 = 57, r2 = 65, cx = 105, cy = 105
+      const x1 = 105 - 57 * cosA;
+      const y1 = 105 - 57 * sinA;
+      const x2 = 105 - 65 * cosA;
+      const y2 = 105 - 65 * sinA;
+      const isActive = i <= activeThreshold;
+      ticks.push({
+        id: i,
+        x1,
+        y1,
+        x2,
+        y2,
+        isActive
+      });
+    }
+    return ticks;
+  }, [healthScoreDisplay]);
+
+  // Stock Summary category aggregation and MoM trend (UI-047 Phase 4B)
+  const { totalStockValPaise, totalStockQty, categoryList, momTrendPct } = useMemo(() => {
+    let totalVal = 0;
+    let totalQty = 0;
+    const catMap: Record<string, { valuePaise: number; qty: number }> = {};
+
+    stockItems.forEach((item) => {
+      const val = item.totalValuePaise || 0;
+      const qty = item.quantity || 0;
+      totalVal += val;
+      totalQty += qty;
+
+      const cat = (item.category && item.category.trim()) || 'Trading Goods';
+      if (!catMap[cat]) {
+        catMap[cat] = { valuePaise: 0, qty: 0 };
+      }
+      catMap[cat].valuePaise += val;
+      catMap[cat].qty += qty;
+    });
+
+    const PALETTE = ['#FF6B2B', '#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899', '#06B6D4', '#64748B'];
+    const categories = Object.entries(catMap).map(([name, catData], idx) => {
+      const pct = totalVal > 0 ? (catData.valuePaise / totalVal) * 100 : 0;
+      return {
+        name,
+        valuePaise: catData.valuePaise,
+        qty: catData.qty,
+        pct,
+        pctStr: `${pct.toFixed(1)}%`,
+        color: PALETTE[idx % PALETTE.length]
+      };
+    }).sort((a, b) => b.valuePaise - a.valuePaise);
+
+    let momPct: number | null = null;
+    if (prevMonthStockValPaise !== null && prevMonthStockValPaise > 0) {
+      momPct = Math.round(((totalVal - prevMonthStockValPaise) / prevMonthStockValPaise) * 1000) / 10;
+    }
+
+    return {
+      totalStockValPaise: totalVal,
+      totalStockQty: totalQty,
+      categoryList: categories,
+      momTrendPct: momPct
+    };
+  }, [stockItems, prevMonthStockValPaise]);
+
+  // SVG Donut chart segments for Stock Summary
+  const donutSegments = useMemo(() => {
+    const circumference = 2 * Math.PI * 68; // ~427.26
+    let accumulatedOffset = 0;
+    return categoryList.map((cat) => {
+      const segLength = (cat.pct / 100) * circumference;
+      const segOffset = -accumulatedOffset;
+      accumulatedOffset += segLength;
+      return {
+        name: cat.name,
+        color: cat.color,
+        strokeLength: segLength,
+        strokeOffset: segOffset,
+        circumference
+      };
+    });
+  }, [categoryList]);
 
   // Dynamic miniature sparkline indicators derived strictly from real period data
   const { salesSparkline, purchaseSparkline, totalChartVolume } = useMemo(() => {
@@ -886,19 +1078,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* ==========================================================
             3. MIDDLE ROW:
-            LEFT: Business Health Semicircular Gauge
-            RIGHT: Sales & Purchase Overview Grouped Bar Chart
+            LEFT: Business Health Semicircular Gauge (UI-047 Phase 4A)
+            RIGHT: Sales & Purchase Overview with KPI Ribbon (UI-047 Phase 5)
             ========================================================== */}
         <div className="lf-dashboard-grid-middle">
           {/* 3A. BUSINESS HEALTH */}
           <div className="lf-panel-card">
             <div className="lf-panel-header">
               <div className="lf-panel-header-left">
-                <div className="lf-panel-icon">
+                <div className="lf-panel-icon" style={{ background: '#FFF3ED', color: '#FF6B2B' }}>
                   <Activity size={18} strokeWidth={2.2} />
                 </div>
                 <span className="lf-panel-title">Business Health</span>
-                <span className="lf-panel-info-icon" title="Assessment of solvency and working capital liquidity based on double-entry accounting balances">
+                <span
+                  className="lf-panel-info-icon"
+                  title="Multi-factor business health model evaluated on trading margin, liquidity & debt coverage, receivables discipline, and sales momentum."
+                >
                   <Info size={14} />
                 </span>
               </div>
@@ -907,7 +1102,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className="lf-panel-header-link"
                 onClick={() => onNavigateReports('pnl')}
               >
-                View Details →
+                View P&L Report →
               </button>
             </div>
 
@@ -915,38 +1110,52 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {/* Gauge Column */}
               <div className="lf-health-gauge-box">
                 <div className="lf-gauge-wrapper">
-                  <svg width="190" height="105" viewBox="0 0 190 105">
-                    <defs>
-                      <linearGradient id="lfHealthGaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#FB923C" />
-                        <stop offset="100%" stopColor="#F97316" />
-                      </linearGradient>
-                    </defs>
-                    {/* Background Arc: 180-deg semicircle with radius 75 */}
+                  <svg width="210" height="118" viewBox="0 0 210 118">
+                    {/* Background Arc: 180-deg semicircle with radius 76 */}
                     <path
-                      d="M 20 95 A 75 75 0 0 1 170 95"
+                      d="M 29 105 A 76 76 0 0 1 181 105"
                       fill="none"
-                      stroke="var(--color-border, #E5E7EB)"
+                      stroke="var(--color-border, #E2E8F0)"
                       strokeWidth="14"
                       strokeLinecap="round"
                     />
-                    {/* Active Arc: Calibrated to real liquidity/solvency score */}
+
+                    {/* Active Arc: Vibrant Orange #FF6B2B per visual specification */}
                     {hasAnyTransactions && healthScoreDisplay !== '--' && (
                       <path
-                        d="M 20 95 A 75 75 0 0 1 170 95"
+                        d="M 29 105 A 76 76 0 0 1 181 105"
                         fill="none"
-                        stroke="url(#lfHealthGaugeGrad)"
+                        stroke="#FF6B2B"
                         strokeWidth="14"
                         strokeLinecap="round"
-                        strokeDasharray="235.6"
+                        strokeDasharray="238.76"
                         strokeDashoffset={healthArcOffset}
                       />
                     )}
+
+                    {/* 21 Fine Inner Radial Ticks along the inner arc */}
+                    {gaugeTicks.map((tick) => (
+                      <line
+                        key={tick.id}
+                        x1={tick.x1}
+                        y1={tick.y1}
+                        x2={tick.x2}
+                        y2={tick.y2}
+                        stroke={tick.isActive ? '#FF6B2B' : 'var(--color-border, #CBD5E1)'}
+                        strokeWidth={tick.isActive ? 2.0 : 1.2}
+                        strokeLinecap="round"
+                      />
+                    ))}
                   </svg>
 
                   <div className="lf-gauge-center">
                     <div className="lf-gauge-score-row">
-                      <span className="lf-gauge-score" style={{ letterSpacing: '0.04em' }}>{healthScoreDisplay}</span>
+                      <span className="lf-gauge-score">{healthScoreDisplay}</span>
+                      {healthTrend !== 0 && (
+                        <span className={`lf-gauge-trend-pill ${healthTrend > 0 ? 'positive' : 'negative'}`}>
+                          {healthTrend > 0 ? `+${healthTrend}` : healthTrend}
+                        </span>
+                      )}
                     </div>
                     <span className="lf-gauge-label">of 100 points</span>
                   </div>
@@ -958,61 +1167,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               </div>
 
-              {/* Breakdown List Column */}
-              <div className="lf-health-breakdown">
-                <div className="lf-health-row">
-                  <div className="lf-health-row-left">
-                    <span className="lf-health-dot" style={{ backgroundColor: '#F97316' }} />
-                    <span className="lf-health-label">Sales</span>
-                  </div>
-                  <div className="lf-health-row-right">
-                    <span className="lf-health-amount">{formatINR(totalSalesPaise)}</span>
-                    <span className="lf-health-pct">{salesShare}</span>
-                  </div>
+              {/* Explanatory 4-Factor Breakdown Grid */}
+              <div className="lf-health-breakdown" style={{ justifyContent: 'center' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                  Transparent Scoring Model (100 pts)
                 </div>
-
-                <div className="lf-health-row">
-                  <div className="lf-health-row-left">
-                    <span className="lf-health-dot" style={{ backgroundColor: '#E4A47E' }} />
-                    <span className="lf-health-label">Purchase</span>
-                  </div>
-                  <div className="lf-health-row-right">
-                    <span className="lf-health-amount">{formatINR(totalPurchasePaise)}</span>
-                    <span className="lf-health-pct">{purchaseShare}</span>
-                  </div>
-                </div>
-
-                <div className="lf-health-row">
-                  <div className="lf-health-row-left">
-                    <span className="lf-health-dot" style={{ backgroundColor: '#FDBA74' }} />
-                    <span className="lf-health-label">Receivables</span>
-                  </div>
-                  <div className="lf-health-row-right">
-                    <span className="lf-health-amount">{formatINR(receivablesPaise)}</span>
-                    <span className="lf-health-pct">{recvShare}</span>
-                  </div>
-                </div>
-
-                <div className="lf-health-row">
-                  <div className="lf-health-row-left">
-                    <span className="lf-health-dot" style={{ backgroundColor: '#FB923C' }} />
-                    <span className="lf-health-label">Payables</span>
-                  </div>
-                  <div className="lf-health-row-right">
-                    <span className="lf-health-amount">{formatINR(payablesPaise)}</span>
-                    <span className="lf-health-pct">{payShare}</span>
-                  </div>
-                </div>
-
-                <div className="lf-health-row">
-                  <div className="lf-health-row-left">
-                    <span className="lf-health-dot" style={{ backgroundColor: '#94A3B8' }} />
-                    <span className="lf-health-label">Service Income</span>
-                  </div>
-                  <div className="lf-health-row-right">
-                    <span className="lf-health-amount">{formatINR(serviceIncomePaise)}</span>
-                    <span className="lf-health-pct">{svcShare}</span>
-                  </div>
+                <div className="lf-health-factors-grid">
+                  {factors.map((f) => (
+                    <div key={f.name} className="lf-health-factor-card">
+                      <div className="lf-health-factor-header">
+                        <span className="lf-health-factor-name">{f.name}</span>
+                        <span className="lf-health-factor-score">{f.score} / {f.max}</span>
+                      </div>
+                      <div className="lf-health-factor-bar">
+                        <div
+                          className="lf-health-factor-fill"
+                          style={{ width: `${(f.score / f.max) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -1026,7 +1200,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <BarChart2 size={18} strokeWidth={2.2} />
                 </div>
                 <span className="lf-panel-title">Sales & Purchase Overview</span>
-                <span className="lf-panel-info-icon" title="Comparative monthly trend of posted sales and purchase transactions">
+                <span className="lf-panel-info-icon" title="Comparative trend of posted sales and purchase transactions with previous-period comparison">
                   <Info size={14} />
                 </span>
               </div>
@@ -1038,18 +1212,53 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   onClick={() => onNavigateReports('daybook')}
                   title="Filter transactions in Day Book"
                 >
-                  <Filter size={13} /> Filter
+                  <Filter size={13} /> Day Book
                 </button>
                 <select
                   value={scope}
-                  onChange={(e) => setScope(e.target.value as any)}
+                  onChange={(e) => setScope(e.target.value as DashboardScope)}
                   className="lf-ctrl-select"
                   aria-label="Filter scope"
                 >
                   <option value="Financial Year">Financial Year</option>
+                  <option value="This Quarter">This Quarter</option>
+                  <option value="This Month">This Month</option>
+                  <option value="Previous Month">Previous Month</option>
+                  <option value="This Week">This Week</option>
                   <option value="Single Day">Single Day</option>
                   <option value="Custom Date Range">Custom Date Range</option>
                 </select>
+
+                {scope === 'Single Day' && (
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="lf-ctrl-input"
+                    style={{ padding: '2px 6px', fontSize: '11.5px', borderRadius: 4, border: '1px solid var(--color-border)' }}
+                  />
+                )}
+
+                {scope === 'Custom Date Range' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input
+                      type="date"
+                      value={customFromDate}
+                      onChange={(e) => setCustomFromDate(e.target.value)}
+                      className="lf-ctrl-input"
+                      style={{ padding: '2px 6px', fontSize: '11.5px', borderRadius: 4, border: '1px solid var(--color-border)' }}
+                    />
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>to</span>
+                    <input
+                      type="date"
+                      value={customToDate}
+                      onChange={(e) => setCustomToDate(e.target.value)}
+                      className="lf-ctrl-input"
+                      style={{ padding: '2px 6px', fontSize: '11.5px', borderRadius: 4, border: '1px solid var(--color-border)' }}
+                    />
+                  </div>
+                )}
+
                 <button
                   type="button"
                   className="lf-ctrl-icon-btn"
@@ -1059,6 +1268,54 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 >
                   <Maximize2 size={14} />
                 </button>
+              </div>
+            </div>
+
+            {/* Sales & Purchase Overview KPI Ribbon (UI-047 Phase 5) */}
+            <div className="lf-overview-kpi-ribbon">
+              {/* 1. Net Sales Turnover */}
+              <div className="lf-overview-kpi-item">
+                <span className="lf-overview-kpi-title">Net Sales (Excl. Tax)</span>
+                <div className="lf-overview-kpi-val-row">
+                  <span className="lf-overview-kpi-val">{formatINR(totalSalesPaise)}</span>
+                  <span className={`lf-overview-kpi-pill ${totalSalesPaise >= (data?.prevSalesPaise ?? 0) ? 'positive' : 'negative'}`}>
+                    {totalSalesPaise >= (data?.prevSalesPaise ?? 0) ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+                    {calcChangePct(totalSalesPaise, data?.prevSalesPaise ?? 0)} vs prev
+                  </span>
+                </div>
+              </div>
+
+              {/* 2. Net Purchases */}
+              <div className="lf-overview-kpi-item">
+                <span className="lf-overview-kpi-title">Net Purchases</span>
+                <div className="lf-overview-kpi-val-row">
+                  <span className="lf-overview-kpi-val">{formatINR(totalPurchasePaise)}</span>
+                  <span className={`lf-overview-kpi-pill ${totalPurchasePaise <= (data?.prevPurchasesPaise ?? 0) ? 'positive' : 'neutral'}`}>
+                    {calcChangePct(totalPurchasePaise, data?.prevPurchasesPaise ?? 0)} vs prev
+                  </span>
+                </div>
+              </div>
+
+              {/* 3. Invoices Count */}
+              <div className="lf-overview-kpi-item">
+                <span className="lf-overview-kpi-title">Invoices</span>
+                <div className="lf-overview-kpi-val-row">
+                  <span className="lf-overview-kpi-val">{data?.periodInvoicesCount ?? 0} Invoices</span>
+                  <span className="lf-overview-kpi-pill neutral">
+                    {calcChangePct(data?.periodInvoicesCount ?? 0, data?.prevInvoicesCount ?? 0)} vs prev
+                  </span>
+                </div>
+              </div>
+
+              {/* 4. Net Trading Balance */}
+              <div className="lf-overview-kpi-item">
+                <span className="lf-overview-kpi-title">Trading Balance</span>
+                <div className="lf-overview-kpi-val-row">
+                  <span className="lf-overview-kpi-val">{formatINR(totalSalesPaise - totalPurchasePaise)}</span>
+                  <span className={`lf-overview-kpi-pill ${totalSalesPaise >= totalPurchasePaise ? 'positive' : 'negative'}`}>
+                    {totalSalesPaise >= totalPurchasePaise ? 'Surplus' : 'Deficit'}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -1384,117 +1641,148 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          {/* 4B. QUICK ACTIONS */}
+          {/* 4B. STOCK SUMMARY CARD (Replaces Quick Actions per UI-047 Phase 4B) */}
           <div className="lf-panel-card">
             <div className="lf-panel-header">
               <div className="lf-panel-header-left">
-                <div className="lf-panel-icon">
-                  <Zap size={18} strokeWidth={2.2} />
+                <div className="lf-panel-icon" style={{ background: '#FFF3ED', color: '#FF6B2B' }}>
+                  <Package size={18} strokeWidth={2.2} />
                 </div>
-                <span className="lf-panel-title">Quick Actions</span>
-                <span className="lf-panel-info-icon" title="Direct access to primary daily bookkeeping operations">
+                <span className="lf-panel-title">Stock Summary</span>
+                <span
+                  className="lf-panel-info-icon"
+                  title="Authoritative inventory valuation based on weighted-average cost formula (AS-2 / Ind AS 2). Reflects actual stock movements."
+                >
                   <Info size={14} />
                 </span>
               </div>
-            </div>
 
-            <div className="lf-quick-actions-grid">
-              {/* 1. Create Sales Invoice */}
-              <div
-                className="lf-quick-action-item"
-                onClick={() => onOpenNewVoucher('SALES')}
-                title="Create a GST-compliant Sales Invoice (Alt+S)"
-              >
-                <div className="lf-quick-action-icon-box" style={{ background: '#FFF7ED', color: '#F97316' }}>
-                  <FileText size={18} strokeWidth={2} />
-                </div>
-                <div className="lf-quick-action-text">
-                  <div className="lf-quick-action-title">Create Sales Invoice</div>
-                  <div className="lf-quick-action-desc">Issue a sales invoice</div>
-                </div>
-                <ChevronRight size={15} className="lf-quick-action-chevron" />
-              </div>
+              <div className="lf-panel-controls">
+                <select
+                  value={stockScope}
+                  onChange={(e) => setStockScope(e.target.value as any)}
+                  className="lf-ctrl-select"
+                  aria-label="Stock As-of Date Filter"
+                >
+                  <option value="Today">Today</option>
+                  <option value="This Month">This Month</option>
+                  <option value="Previous Month">Previous Month</option>
+                  <option value="Current FY">Current Financial Year</option>
+                  <option value="Custom">Custom Date</option>
+                </select>
 
-              {/* 2. Create Purchase Invoice */}
-              <div
-                className="lf-quick-action-item"
-                onClick={() => onOpenNewVoucher('PURCHASE')}
-                title="Record an inward Supplier Purchase Invoice (Alt+P)"
-              >
-                <div className="lf-quick-action-icon-box" style={{ background: '#FFF3ED', color: '#EA580C' }}>
-                  <ShoppingBag size={18} strokeWidth={2} />
-                </div>
-                <div className="lf-quick-action-text">
-                  <div className="lf-quick-action-title">Create Purchase Invoice</div>
-                  <div className="lf-quick-action-desc">Record a purchase</div>
-                </div>
-                <ChevronRight size={15} className="lf-quick-action-chevron" />
-              </div>
+                {stockScope === 'Custom' && (
+                  <input
+                    type="date"
+                    value={stockCustomDate}
+                    onChange={(e) => setStockCustomDate(e.target.value)}
+                    className="lf-ctrl-input"
+                    style={{ padding: '2px 6px', fontSize: '11.5px', borderRadius: 4, border: '1px solid var(--color-border)' }}
+                  />
+                )}
 
-              {/* 3. Record Receipt */}
-              <div
-                className="lf-quick-action-item"
-                onClick={() => onOpenNewVoucher('RECEIPT')}
-                title="Record customer inbound payment (Alt+R)"
-              >
-                <div className="lf-quick-action-icon-box" style={{ background: '#FFFBEB', color: '#D97706' }}>
-                  <ArrowDownToLine size={18} strokeWidth={2} />
-                </div>
-                <div className="lf-quick-action-text">
-                  <div className="lf-quick-action-title">Record Receipt</div>
-                  <div className="lf-quick-action-desc">Receive payment</div>
-                </div>
-                <ChevronRight size={15} className="lf-quick-action-chevron" />
-              </div>
-
-              {/* 4. Record Payment */}
-              <div
-                className="lf-quick-action-item"
-                onClick={() => onOpenNewVoucher('PAYMENT')}
-                title="Record outbound vendor payment (Alt+M)"
-              >
-                <div className="lf-quick-action-icon-box" style={{ background: '#FFF3ED', color: '#EA580C' }}>
-                  <ArrowUpFromLine size={18} strokeWidth={2} />
-                </div>
-                <div className="lf-quick-action-text">
-                  <div className="lf-quick-action-title">Record Payment</div>
-                  <div className="lf-quick-action-desc">Make a payment</div>
-                </div>
-                <ChevronRight size={15} className="lf-quick-action-chevron" />
-              </div>
-
-              {/* 5. Create Journal */}
-              <div
-                className="lf-quick-action-item"
-                onClick={() => onOpenNewVoucher('JOURNAL')}
-                title="Create a General Journal entry (Alt+J)"
-              >
-                <div className="lf-quick-action-icon-box" style={{ background: '#FFF7ED', color: '#F97316' }}>
-                  <BookText size={18} strokeWidth={2} />
-                </div>
-                <div className="lf-quick-action-text">
-                  <div className="lf-quick-action-title">Create Journal</div>
-                  <div className="lf-quick-action-desc">Accounting adjustment</div>
-                </div>
-                <ChevronRight size={15} className="lf-quick-action-chevron" />
-              </div>
-
-              {/* 6. Create Service Bill */}
-              <div
-                className="lf-quick-action-item"
-                onClick={() => (onNavigateTab ? onNavigateTab('service_bill') : onOpenNewVoucher('SALES'))}
-                title="Create a Repair / Service Bill with serial numbers (Alt+4)"
-              >
-                <div className="lf-quick-action-icon-box" style={{ background: '#FFF7ED', color: '#F97316' }}>
-                  <Receipt size={18} strokeWidth={2} />
-                </div>
-                <div className="lf-quick-action-text">
-                  <div className="lf-quick-action-title">Create Service Bill</div>
-                  <div className="lf-quick-action-desc">Record service income</div>
-                </div>
-                <ChevronRight size={15} className="lf-quick-action-chevron" />
+                <button
+                  type="button"
+                  className="lf-panel-header-link orange"
+                  onClick={() => onNavigateReports('stock_summary')}
+                >
+                  View Register →
+                </button>
               </div>
             </div>
+
+            {stockLoading ? (
+              <div style={{ padding: 24 }}>
+                <Skeleton width="100%" height={180} borderRadius={8} />
+              </div>
+            ) : stockItems.length === 0 || totalStockValPaise === 0 ? (
+              <EmptyState
+                icon={<Package size={30} color="var(--color-text-muted)" />}
+                title="No inventory valuation recorded"
+                description="Add stock items with purchase vouchers or opening balances to monitor category-wise stock value."
+                actionLabel="+ Open Items"
+                onAction={() => (onNavigateTab ? onNavigateTab('items') : onNavigateReports('stock_summary'))}
+                className="py-8"
+              />
+            ) : (
+              <div className="lf-stock-summary-body">
+                {/* Left Side: Valuation Metrics & Category Breakdown */}
+                <div className="lf-stock-summary-left">
+                  <div className="lf-stock-headline-box">
+                    <span className="lf-stock-units-sub">Total Inventory Valuation</span>
+                    <div className="lf-stock-val-row">
+                      <span className="lf-stock-total-val">{formatINR(totalStockValPaise)}</span>
+                      {momTrendPct !== null ? (
+                        <span className={`lf-stock-mom-pill ${momTrendPct >= 0 ? 'positive' : 'negative'}`}>
+                          {momTrendPct >= 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                          {momTrendPct >= 0 ? `+${momTrendPct}%` : `${momTrendPct}%`} vs last mo
+                        </span>
+                      ) : (
+                        <span className="lf-stock-mom-pill neutral">Active valuation</span>
+                      )}
+                    </div>
+                    <span className="lf-stock-units-sub">
+                      {totalStockQty} Units across {categoryList.length} Categor{categoryList.length === 1 ? 'y' : 'ies'}
+                    </span>
+                  </div>
+
+                  {/* Category Breakdown Legend */}
+                  <div className="lf-stock-cat-list">
+                    {categoryList.slice(0, 4).map((cat) => (
+                      <div key={cat.name} className="lf-stock-cat-row">
+                        <div className="lf-stock-cat-left">
+                          <span className="lf-stock-cat-dot" style={{ backgroundColor: cat.color }} />
+                          <span className="lf-stock-cat-name" title={cat.name}>{cat.name}</span>
+                        </div>
+                        <div className="lf-stock-cat-right">
+                          <span className="lf-stock-cat-val">{formatINR(cat.valuePaise)}</span>
+                          <span className="lf-stock-cat-pct">{cat.pctStr}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Right Side: Donut Chart */}
+                <div className="lf-stock-summary-right">
+                  <div className="lf-stock-donut-wrapper">
+                    <svg width="190" height="190" viewBox="0 0 190 190">
+                      {/* Background ring */}
+                      <circle
+                        cx="95"
+                        cy="95"
+                        r="68"
+                        fill="none"
+                        stroke="var(--color-border, #E2E8F0)"
+                        strokeWidth="24"
+                      />
+                      {/* Category segments */}
+                      {donutSegments.map((seg) => (
+                        <circle
+                          key={seg.name}
+                          cx="95"
+                          cy="95"
+                          r="68"
+                          fill="none"
+                          stroke={seg.color}
+                          strokeWidth="24"
+                          strokeDasharray={`${seg.strokeLength} ${seg.circumference}`}
+                          strokeDashoffset={seg.strokeOffset}
+                          strokeLinecap="butt"
+                          transform="rotate(-90 95 95)"
+                        />
+                      ))}
+                    </svg>
+
+                    <div className="lf-stock-donut-center">
+                      <span className="lf-stock-donut-center-label">Total Stock</span>
+                      <span className="lf-stock-donut-center-val">{formatINR(totalStockValPaise)}</span>
+                      <span className="lf-stock-donut-center-units">{totalStockQty} Units</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

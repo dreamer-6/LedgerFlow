@@ -26,6 +26,7 @@ import {
   Users,
   CheckCircle2,
   Clock,
+  ChevronLeft,
   ChevronRight,
   ChevronDown,
   MoreVertical,
@@ -39,7 +40,9 @@ import {
   BookOpen,
   Receipt,
   FileSpreadsheet,
-  RotateCcw
+  RotateCcw,
+  Info,
+  Percent
 } from 'lucide-react';
 
 /* ─────────────────────────────────────────────
@@ -413,6 +416,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
 }) => {
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [dashData, setDashData] = useState<any>(null);
+  const [pnlData, setPnlData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -432,6 +436,13 @@ export const SalesView: React.FC<SalesViewProps> = ({
   const [permanentDeleteError, setPermanentDeleteError] = useState<string | null>(null);
   const [deleteModalVoucher, setDeleteModalVoucher] = useState<any | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 6;
+
+  // Reset pagination on filter or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, searchQuery, fromDate, toDate, showCancelled, includeHidden]);
 
   // Dismiss dropdown on outer click
   useEffect(() => {
@@ -453,15 +464,21 @@ export const SalesView: React.FC<SalesViewProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const [vchList, dash] = await Promise.all([
+      const [vchList, dash, pnl] = await Promise.all([
         api.getSalesVouchers(fromDate || undefined, toDate || undefined, {
           showCancelled: showCancelled || statusFilter === 'CANCELLED',
           includeHidden
         }),
-        api.getDashboard()
+        api.getDashboard(),
+        company?.company_id ? api.getProfitAndLoss(
+          company.company_id,
+          fromDate || activeFy?.start_date || '2026-04-01',
+          toDate || activeFy?.end_date || '2027-03-31'
+        ).catch(() => null) : Promise.resolve(null)
       ]);
       setVouchers(vchList || []);
       setDashData(dash || null);
+      setPnlData(pnl || null);
     } catch (err: any) {
       setError(err.message || 'Failed to load sales data');
     } finally {
@@ -596,6 +613,36 @@ export const SalesView: React.FC<SalesViewProps> = ({
     }
     return list;
   }, [vouchers, statusFilter, searchQuery, showCancelled, includeHidden]);
+
+  /* Authoritative Profitability calculations (UI-047 Phase 3B) */
+  const profitability = useMemo(() => {
+    const netSalesPaise = pnlData?.tradingIncomePaise ?? 0;
+    const cogsPaise = pnlData?.tradingExpensePaise ?? 0;
+    const grossProfitPaise = pnlData?.grossProfitPaise ?? (netSalesPaise - cogsPaise);
+    const gpMarginPct = netSalesPaise > 0 ? Math.round((grossProfitPaise / netSalesPaise) * 1000) / 10 : 0;
+    const hasIndirect = (pnlData?.indirectExpensePaise ?? 0) > 0 || (pnlData?.indirectIncomePaise ?? 0) > 0;
+    const netProfitPaise = hasIndirect ? pnlData?.netProfitPaise : null;
+    const npMarginPct = (hasIndirect && netSalesPaise > 0 && netProfitPaise !== null)
+      ? Math.round((netProfitPaise / netSalesPaise) * 1000) / 10
+      : null;
+
+    return {
+      netSalesPaise,
+      cogsPaise,
+      grossProfitPaise,
+      gpMarginPct,
+      hasIndirect,
+      netProfitPaise,
+      npMarginPct
+    };
+  }, [pnlData]);
+
+  /* Pagination for Recent Sales Invoices (UI-047 Phase 3A) */
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginatedInvoices = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, currentPage, pageSize]);
 
   const handleCancelVoucher = async () => {
     if (!cancelDialog) return;
@@ -964,6 +1011,116 @@ export const SalesView: React.FC<SalesViewProps> = ({
         </div>
       </div>
 
+      {/* Sales Profitability & Trading Intelligence (UI-047 Phase 3B) */}
+      <div
+        className="ledger-card"
+        style={{
+          padding: '16px 20px',
+          marginBottom: '22px',
+          borderLeft: '4px solid #10B981',
+          background: 'var(--bg-card, #FFFFFF)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10B981' }}>
+              <TrendingUp size={16} />
+            </div>
+            <div>
+              <div style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary, #0F172A)' }}>
+                Sales Profitability &amp; Margins
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted, #64748B)' }}>
+                Authoritative inventory cost &amp; gross margin (excluding GST collections from revenue)
+              </div>
+            </div>
+          </div>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted, #64748B)', backgroundColor: 'var(--bg-subtle, #F8FAFC)', padding: '4px 10px', borderRadius: '12px', border: '1px solid var(--border-subtle, #E2E8F0)' }}>
+            Period: {fromDate && toDate ? `${fromDate} to ${toDate}` : (activeFy?.name || 'Current FY')}
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '14px' }}>
+          {/* 1. Net Sales Turnover */}
+          <div style={{ padding: '12px 14px', borderRadius: '8px', backgroundColor: 'var(--bg-subtle, #F8FAFC)', border: '1px solid var(--border-subtle, #E2E8F0)' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted, #64748B)', marginBottom: '4px' }}>
+              Net Sales (Excl. Tax)
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-primary, #0F172A)' }}>
+              {loading ? '…' : formatINR(profitability.netSalesPaise)}
+            </div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-muted, #94A3B8)', marginTop: '2px' }}>
+              Taxable turnover
+            </div>
+          </div>
+
+          {/* 2. Cost of Goods Sold */}
+          <div style={{ padding: '12px 14px', borderRadius: '8px', backgroundColor: 'var(--bg-subtle, #F8FAFC)', border: '1px solid var(--border-subtle, #E2E8F0)' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted, #64748B)', marginBottom: '4px' }}>
+              Cost of Goods Sold (COGS)
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--text-primary, #0F172A)' }}>
+              {loading ? '…' : formatINR(profitability.cogsPaise)}
+            </div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-muted, #94A3B8)', marginTop: '2px' }}>
+              Authoritative inventory cost
+            </div>
+          </div>
+
+          {/* 3. Gross Profit */}
+          <div style={{ padding: '12px 14px', borderRadius: '8px', backgroundColor: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.2)' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: '#059669', marginBottom: '4px' }}>
+              Gross Profit
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#059669' }}>
+              {loading ? '…' : formatINR(profitability.grossProfitPaise)}
+            </div>
+            <div style={{ fontSize: '10.5px', color: '#059669', marginTop: '2px' }}>
+              Net Sales − COGS
+            </div>
+          </div>
+
+          {/* 4. Gross Profit Margin */}
+          <div style={{ padding: '12px 14px', borderRadius: '8px', backgroundColor: 'rgba(255,107,43,0.05)', border: '1px solid rgba(255,107,43,0.2)' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: '#EA580C', marginBottom: '4px' }}>
+              Gross Profit Margin
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#EA580C' }}>
+              {loading ? '…' : `${profitability.gpMarginPct}%`}
+            </div>
+            <div style={{ fontSize: '10.5px', color: '#EA580C', marginTop: '2px' }}>
+              (Gross Profit / Net Sales) × 100
+            </div>
+          </div>
+
+          {/* 5. Net Profit Status */}
+          <div style={{ padding: '12px 14px', borderRadius: '8px', backgroundColor: 'var(--bg-subtle, #F8FAFC)', border: '1px solid var(--border-subtle, #E2E8F0)' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted, #64748B)', marginBottom: '4px' }}>
+              Net Profit
+            </div>
+            {profitability.hasIndirect && profitability.netProfitPaise !== null ? (
+              <>
+                <div style={{ fontSize: '18px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: profitability.netProfitPaise >= 0 ? '#059669' : '#DC2626' }}>
+                  {loading ? '…' : formatINR(profitability.netProfitPaise)}
+                </div>
+                <div style={{ fontSize: '10.5px', color: 'var(--text-muted, #94A3B8)', marginTop: '2px' }}>
+                  {profitability.npMarginPct}% Net Margin
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted, #64748B)', marginTop: '2px' }}>
+                  Operating Expenses
+                </div>
+                <div style={{ fontSize: '10.5px', color: 'var(--text-muted, #94A3B8)', marginTop: '2px' }}>
+                  Awaiting indirect expense postings
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Main Grid: Left 2/3 (Trends + Invoices) | Right 1/3 (Top Customers + Status + Quick Actions) */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 310px', gap: '18px', alignItems: 'stretch' }}>
 
@@ -1020,8 +1177,8 @@ export const SalesView: React.FC<SalesViewProps> = ({
             )}
           </div>
 
-          {/* Recent Sales Invoices Table Card */}
-          <div className="ledger-card" style={{ padding: 0, overflow: 'visible', minHeight: '420px', display: 'flex', flexDirection: 'column' }}>
+          {/* Recent Sales Invoices Table Card (Fixed Height & Paginated - UI-047 Phase 3A) */}
+          <div className="ledger-card" style={{ padding: 0, overflow: 'hidden', height: '520px', display: 'flex', flexDirection: 'column' }}>
             {/* Header Toolbar */}
             <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1146,7 +1303,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
                         ))}
                       </tr>
                     ))
-                  ) : filtered.length === 0 ? (
+                  ) : paginatedInvoices.length === 0 ? (
                     <tr>
                       <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
                         <ShoppingCart size={28} style={{ opacity: 0.3, margin: '0 auto 8px', display: 'block' }} />
@@ -1157,7 +1314,7 @@ export const SalesView: React.FC<SalesViewProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((v, idx) => {
+                    paginatedInvoices.map((v, idx) => {
                       const isMenuOpen = actionMenuId === v.voucher_id;
                       const isNearBottom = idx >= filtered.length - 2;
                       const status = v.status?.toUpperCase() || 'DRAFT';
@@ -1309,6 +1466,75 @@ export const SalesView: React.FC<SalesViewProps> = ({
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Stable Pagination Controls Footer (UI-047 Phase 3A) */}
+            <div
+              style={{
+                padding: '10px 18px',
+                borderTop: '1px solid var(--border-subtle, #E2E8F0)',
+                backgroundColor: 'var(--bg-subtle, #F8FAFC)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '12px',
+                color: 'var(--text-muted, #64748B)',
+                flexShrink: 0
+              }}
+            >
+              <div>
+                Showing{' '}
+                <span style={{ fontWeight: 600, color: 'var(--text-primary, #0F172A)' }}>
+                  {filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+                </span>{' '}
+                to{' '}
+                <span style={{ fontWeight: 600, color: 'var(--text-primary, #0F172A)' }}>
+                  {Math.min(currentPage * pageSize, filtered.length)}
+                </span>{' '}
+                of{' '}
+                <span style={{ fontWeight: 600, color: 'var(--text-primary, #0F172A)' }}>
+                  {filtered.length}
+                </span>{' '}
+                invoices
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  className="lf-btn lf-btn-secondary"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1 || loading}
+                  style={{
+                    padding: '5px 10px',
+                    fontSize: '11.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    opacity: (currentPage <= 1 || loading) ? 0.5 : 1,
+                    cursor: (currentPage <= 1 || loading) ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <ChevronLeft size={13} /> Prev
+                </button>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary, #0F172A)', padding: '0 4px' }}>
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  className="lf-btn lf-btn-secondary"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages || loading}
+                  style={{
+                    padding: '5px 10px',
+                    fontSize: '11.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    opacity: (currentPage >= totalPages || loading) ? 0.5 : 1,
+                    cursor: (currentPage >= totalPages || loading) ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  Next <ChevronRight size={13} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
