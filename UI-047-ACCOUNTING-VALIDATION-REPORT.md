@@ -88,3 +88,4 @@ When a company has zero recorded transactions for the selected scope:
 ## 6. Audit Sign-off
 
 The accounting logic and double-entry controls implemented in **UI-047** are certified fully compliant with double-entry integrity, AS-2 inventory valuation standards, and GST revenue recognition requirements.
+

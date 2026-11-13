@@ -421,85 +421,48 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
   }, [data, scope]);
 
-  // Business Health status indicators based on real explainable measures (UI-047 Phase 4A)
-  const {
-    hasAnyTransactions,
-    healthScoreDisplay,
-    healthTrend,
-    healthStatusText,
-    healthDescText,
-    healthArcOffset,
-    factors
-  } = useMemo(() => {
+  // Business Health status indicators based on real explainable measures
+  const { hasAnyTransactions, healthScoreDisplay, healthStatusText, healthDescText, healthArcOffset, salesShare, purchaseShare, recvShare, payShare, svcShare } = useMemo(() => {
     const totalBenchmark = Math.max(totalSalesPaise, 1);
     const hasTransactions = totalSalesPaise > 0 || totalPurchasePaise > 0 || receivablesPaise > 0 || payablesPaise > 0;
 
     const bHealth = data?.businessHealth;
     const score = bHealth?.score;
-    const trend = bHealth?.trend ?? 0;
 
     let scoreDisplay = '--';
     let statusText = 'No Activity';
     let descText = 'No transactions recorded for the selected period.';
-    let arcOffset = 238.76;
+    let arcOffset = 235.6; // empty
 
     if (score !== undefined && score !== null) {
       scoreDisplay = String(score);
       statusText = bHealth.statusText || 'Operating Metrics Active';
       descText = bHealth.descText || 'Double-entry books are active and balanced.';
-      arcOffset = 238.76 * (1 - Math.min(100, Math.max(0, score)) / 100);
+      arcOffset = 235.6 * (1 - Math.min(100, Math.max(0, score)) / 100);
     } else if (hasTransactions) {
       statusText = 'Operating Metrics Active';
       descText = 'Double-entry books are active and balanced.';
     }
 
-    const f1 = bHealth?.f1 ?? (totalSalesPaise > 0 ? 20 : 15);
-    const f2 = bHealth?.f2 ?? 20;
-    const f3 = bHealth?.f3 ?? 20;
-    const f4 = bHealth?.f4 ?? 20;
+    const calcShare = (val: number) => {
+      if (totalSalesPaise <= 0) return '--';
+      const pct = (val / totalBenchmark) * 100;
+      return `${pct >= 100 ? '100%' : pct.toFixed(1) + '%'}`;
+    };
 
     return {
       hasAnyTransactions: hasTransactions,
       healthScoreDisplay: scoreDisplay,
-      healthTrend: trend,
       healthStatusText: statusText,
       healthDescText: descText,
       healthArcOffset: arcOffset,
-      factors: [
-        { name: 'Trading Margin', score: f1, max: 25 },
-        { name: 'Solvency & Debt', score: f2, max: 25 },
-        { name: 'Receivables Discipline', score: f3, max: 25 },
-        { name: 'Sales Momentum', score: f4, max: 25 },
-      ]
+      salesShare: totalSalesPaise > 0 ? '100%' : '--',
+      purchaseShare: calcShare(totalPurchasePaise),
+      recvShare: calcShare(receivablesPaise),
+      payShare: calcShare(payablesPaise),
+      svcShare: calcShare(serviceIncomePaise)
     };
-  }, [data, totalSalesPaise, totalPurchasePaise, receivablesPaise, payablesPaise]);
-
-  // 21 fine inner radial ticks for Business Health semicircular gauge
-  const gaugeTicks = useMemo(() => {
-    const scoreVal = parseInt(healthScoreDisplay, 10);
-    const activeThreshold = isNaN(scoreVal) ? -1 : Math.round((scoreVal / 100) * 20);
-    const ticks = [];
-    for (let i = 0; i <= 20; i++) {
-      const angleRad = (i * 9 * Math.PI) / 180;
-      const cosA = Math.cos(angleRad);
-      const sinA = Math.sin(angleRad);
-      // r1 = 57, r2 = 65, cx = 105, cy = 105
-      const x1 = 105 - 57 * cosA;
-      const y1 = 105 - 57 * sinA;
-      const x2 = 105 - 65 * cosA;
-      const y2 = 105 - 65 * sinA;
-      const isActive = i <= activeThreshold;
-      ticks.push({
-        id: i,
-        x1,
-        y1,
-        x2,
-        y2,
-        isActive
-      });
-    }
-    return ticks;
-  }, [healthScoreDisplay]);
+  }, [data, totalSalesPaise, totalPurchasePaise, receivablesPaise, payablesPaise, serviceIncomePaise]);
 
   // Stock Summary category aggregation and MoM trend (UI-047 Phase 4B)
   const { totalStockValPaise, totalStockQty, categoryList, momTrendPct } = useMemo(() => {
@@ -1086,14 +1049,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="lf-panel-card">
             <div className="lf-panel-header">
               <div className="lf-panel-header-left">
-                <div className="lf-panel-icon" style={{ background: '#FFF3ED', color: '#FF6B2B' }}>
+                <div className="lf-panel-icon">
                   <Activity size={18} strokeWidth={2.2} />
                 </div>
                 <span className="lf-panel-title">Business Health</span>
-                <span
-                  className="lf-panel-info-icon"
-                  title="Multi-factor business health model evaluated on trading margin, liquidity & debt coverage, receivables discipline, and sales momentum."
-                >
+                <span className="lf-panel-info-icon" title="Assessment of solvency and working capital liquidity based on double-entry accounting balances">
                   <Info size={14} />
                 </span>
               </div>
@@ -1102,7 +1062,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className="lf-panel-header-link"
                 onClick={() => onNavigateReports('pnl')}
               >
-                View P&L Report →
+                View Details →
               </button>
             </div>
 
@@ -1110,52 +1070,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {/* Gauge Column */}
               <div className="lf-health-gauge-box">
                 <div className="lf-gauge-wrapper">
-                  <svg width="210" height="118" viewBox="0 0 210 118">
-                    {/* Background Arc: 180-deg semicircle with radius 76 */}
+                  <svg width="190" height="105" viewBox="0 0 190 105">
+                    <defs>
+                      <linearGradient id="lfHealthGaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#FB923C" />
+                        <stop offset="100%" stopColor="#F97316" />
+                      </linearGradient>
+                    </defs>
+                    {/* Background Arc: 180-deg semicircle with radius 75 */}
                     <path
-                      d="M 29 105 A 76 76 0 0 1 181 105"
+                      d="M 20 95 A 75 75 0 0 1 170 95"
                       fill="none"
-                      stroke="var(--color-border, #E2E8F0)"
+                      stroke="var(--color-border, #E5E7EB)"
                       strokeWidth="14"
                       strokeLinecap="round"
                     />
-
-                    {/* Active Arc: Vibrant Orange #FF6B2B per visual specification */}
+                    {/* Active Arc: Calibrated to real liquidity/solvency score */}
                     {hasAnyTransactions && healthScoreDisplay !== '--' && (
                       <path
-                        d="M 29 105 A 76 76 0 0 1 181 105"
+                        d="M 20 95 A 75 75 0 0 1 170 95"
                         fill="none"
-                        stroke="#FF6B2B"
+                        stroke="url(#lfHealthGaugeGrad)"
                         strokeWidth="14"
                         strokeLinecap="round"
-                        strokeDasharray="238.76"
+                        strokeDasharray="235.6"
                         strokeDashoffset={healthArcOffset}
                       />
                     )}
-
-                    {/* 21 Fine Inner Radial Ticks along the inner arc */}
-                    {gaugeTicks.map((tick) => (
-                      <line
-                        key={tick.id}
-                        x1={tick.x1}
-                        y1={tick.y1}
-                        x2={tick.x2}
-                        y2={tick.y2}
-                        stroke={tick.isActive ? '#FF6B2B' : 'var(--color-border, #CBD5E1)'}
-                        strokeWidth={tick.isActive ? 2.0 : 1.2}
-                        strokeLinecap="round"
-                      />
-                    ))}
                   </svg>
 
                   <div className="lf-gauge-center">
                     <div className="lf-gauge-score-row">
-                      <span className="lf-gauge-score">{healthScoreDisplay}</span>
-                      {healthTrend !== 0 && (
-                        <span className={`lf-gauge-trend-pill ${healthTrend > 0 ? 'positive' : 'negative'}`}>
-                          {healthTrend > 0 ? `+${healthTrend}` : healthTrend}
-                        </span>
-                      )}
+                      <span className="lf-gauge-score" style={{ letterSpacing: '0.04em' }}>{healthScoreDisplay}</span>
                     </div>
                     <span className="lf-gauge-label">of 100 points</span>
                   </div>
@@ -1167,26 +1113,61 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
               </div>
 
-              {/* Explanatory 4-Factor Breakdown Grid */}
-              <div className="lf-health-breakdown" style={{ justifyContent: 'center' }}>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
-                  Transparent Scoring Model (100 pts)
+              {/* Breakdown List Column */}
+              <div className="lf-health-breakdown">
+                <div className="lf-health-row">
+                  <div className="lf-health-row-left">
+                    <span className="lf-health-dot" style={{ backgroundColor: '#F97316' }} />
+                    <span className="lf-health-label">Sales</span>
+                  </div>
+                  <div className="lf-health-row-right">
+                    <span className="lf-health-amount">{formatINR(totalSalesPaise)}</span>
+                    <span className="lf-health-pct">{salesShare}</span>
+                  </div>
                 </div>
-                <div className="lf-health-factors-grid">
-                  {factors.map((f) => (
-                    <div key={f.name} className="lf-health-factor-card">
-                      <div className="lf-health-factor-header">
-                        <span className="lf-health-factor-name">{f.name}</span>
-                        <span className="lf-health-factor-score">{f.score} / {f.max}</span>
-                      </div>
-                      <div className="lf-health-factor-bar">
-                        <div
-                          className="lf-health-factor-fill"
-                          style={{ width: `${(f.score / f.max) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+
+                <div className="lf-health-row">
+                  <div className="lf-health-row-left">
+                    <span className="lf-health-dot" style={{ backgroundColor: '#E4A47E' }} />
+                    <span className="lf-health-label">Purchase</span>
+                  </div>
+                  <div className="lf-health-row-right">
+                    <span className="lf-health-amount">{formatINR(totalPurchasePaise)}</span>
+                    <span className="lf-health-pct">{purchaseShare}</span>
+                  </div>
+                </div>
+
+                <div className="lf-health-row">
+                  <div className="lf-health-row-left">
+                    <span className="lf-health-dot" style={{ backgroundColor: '#FDBA74' }} />
+                    <span className="lf-health-label">Receivables</span>
+                  </div>
+                  <div className="lf-health-row-right">
+                    <span className="lf-health-amount">{formatINR(receivablesPaise)}</span>
+                    <span className="lf-health-pct">{recvShare}</span>
+                  </div>
+                </div>
+
+                <div className="lf-health-row">
+                  <div className="lf-health-row-left">
+                    <span className="lf-health-dot" style={{ backgroundColor: '#FB923C' }} />
+                    <span className="lf-health-label">Payables</span>
+                  </div>
+                  <div className="lf-health-row-right">
+                    <span className="lf-health-amount">{formatINR(payablesPaise)}</span>
+                    <span className="lf-health-pct">{payShare}</span>
+                  </div>
+                </div>
+
+                <div className="lf-health-row">
+                  <div className="lf-health-row-left">
+                    <span className="lf-health-dot" style={{ backgroundColor: '#94A3B8' }} />
+                    <span className="lf-health-label">Service Income</span>
+                  </div>
+                  <div className="lf-health-row-right">
+                    <span className="lf-health-amount">{formatINR(serviceIncomePaise)}</span>
+                    <span className="lf-health-pct">{svcShare}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1268,54 +1249,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 >
                   <Maximize2 size={14} />
                 </button>
-              </div>
-            </div>
-
-            {/* Sales & Purchase Overview KPI Ribbon (UI-047 Phase 5) */}
-            <div className="lf-overview-kpi-ribbon">
-              {/* 1. Net Sales Turnover */}
-              <div className="lf-overview-kpi-item">
-                <span className="lf-overview-kpi-title">Net Sales (Excl. Tax)</span>
-                <div className="lf-overview-kpi-val-row">
-                  <span className="lf-overview-kpi-val">{formatINR(totalSalesPaise)}</span>
-                  <span className={`lf-overview-kpi-pill ${totalSalesPaise >= (data?.prevSalesPaise ?? 0) ? 'positive' : 'negative'}`}>
-                    {totalSalesPaise >= (data?.prevSalesPaise ?? 0) ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
-                    {calcChangePct(totalSalesPaise, data?.prevSalesPaise ?? 0)} vs prev
-                  </span>
-                </div>
-              </div>
-
-              {/* 2. Net Purchases */}
-              <div className="lf-overview-kpi-item">
-                <span className="lf-overview-kpi-title">Net Purchases</span>
-                <div className="lf-overview-kpi-val-row">
-                  <span className="lf-overview-kpi-val">{formatINR(totalPurchasePaise)}</span>
-                  <span className={`lf-overview-kpi-pill ${totalPurchasePaise <= (data?.prevPurchasesPaise ?? 0) ? 'positive' : 'neutral'}`}>
-                    {calcChangePct(totalPurchasePaise, data?.prevPurchasesPaise ?? 0)} vs prev
-                  </span>
-                </div>
-              </div>
-
-              {/* 3. Invoices Count */}
-              <div className="lf-overview-kpi-item">
-                <span className="lf-overview-kpi-title">Invoices</span>
-                <div className="lf-overview-kpi-val-row">
-                  <span className="lf-overview-kpi-val">{data?.periodInvoicesCount ?? 0} Invoices</span>
-                  <span className="lf-overview-kpi-pill neutral">
-                    {calcChangePct(data?.periodInvoicesCount ?? 0, data?.prevInvoicesCount ?? 0)} vs prev
-                  </span>
-                </div>
-              </div>
-
-              {/* 4. Net Trading Balance */}
-              <div className="lf-overview-kpi-item">
-                <span className="lf-overview-kpi-title">Trading Balance</span>
-                <div className="lf-overview-kpi-val-row">
-                  <span className="lf-overview-kpi-val">{formatINR(totalSalesPaise - totalPurchasePaise)}</span>
-                  <span className={`lf-overview-kpi-pill ${totalSalesPaise >= totalPurchasePaise ? 'positive' : 'negative'}`}>
-                    {totalSalesPaise >= totalPurchasePaise ? 'Surplus' : 'Deficit'}
-                  </span>
-                </div>
               </div>
             </div>
 

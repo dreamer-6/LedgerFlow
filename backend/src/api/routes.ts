@@ -2125,53 +2125,53 @@ export function createApiRouter(db: DatabaseSync): Router {
         prevToDate = `${fyStartYear}-03-31`;
       }
 
-      // 2. Net Sales Turnover (Before Tax / Taxable Amount) for selected period & previous period
+      // 2. Total Sales Turnover (Gross Invoice Amount) for selected period & previous period
       const periodSales = db.prepare(`
         SELECT COALESCE(
-          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+          (SELECT SUM(total_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
         ) - COALESCE(
-          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+          (SELECT SUM(total_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
         ) as total
       `).get(companyId, fromDate, toDate, companyId, fromDate, toDate) as { total: number };
 
       const prevSales = db.prepare(`
         SELECT COALESCE(
-          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+          (SELECT SUM(total_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
         ) - COALESCE(
-          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+          (SELECT SUM(total_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
         ) as total
       `).get(companyId, prevFromDate, prevToDate, companyId, prevFromDate, prevToDate) as { total: number };
 
       const todaySales = db.prepare(`
         SELECT COALESCE(
-          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES' AND status = 'POSTED' AND voucher_date = ?), 0
+          (SELECT SUM(total_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES' AND status = 'POSTED' AND voucher_date = ?), 0
         ) - COALESCE(
-          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES_RETURN' AND status = 'POSTED' AND voucher_date = ?), 0
+          (SELECT SUM(total_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'SALES_RETURN' AND status = 'POSTED' AND voucher_date = ?), 0
         ) as total
       `).get(companyId, today, companyId, today) as { total: number };
 
-      // 3. Net Purchases Turnover (Before Tax / Taxable Amount) for selected period & previous period
+      // 3. Total Purchases Turnover (Gross Invoice Amount) for selected period & previous period
       const periodPurchases = db.prepare(`
         SELECT COALESCE(
-          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+          (SELECT SUM(total_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
         ) - COALESCE(
-          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+          (SELECT SUM(total_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
         ) as total
       `).get(companyId, fromDate, toDate, companyId, fromDate, toDate) as { total: number };
 
       const prevPurchases = db.prepare(`
         SELECT COALESCE(
-          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+          (SELECT SUM(total_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
         ) - COALESCE(
-          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
+          (SELECT SUM(total_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE_RETURN' AND status = 'POSTED' AND voucher_date BETWEEN ? AND ?), 0
         ) as total
       `).get(companyId, prevFromDate, prevToDate, companyId, prevFromDate, prevToDate) as { total: number };
 
       const todayPurchases = db.prepare(`
         SELECT COALESCE(
-          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE' AND status = 'POSTED' AND voucher_date = ?), 0
+          (SELECT SUM(total_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE' AND status = 'POSTED' AND voucher_date = ?), 0
         ) - COALESCE(
-          (SELECT SUM(taxable_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE_RETURN' AND status = 'POSTED' AND voucher_date = ?), 0
+          (SELECT SUM(total_amount_paise) FROM vouchers WHERE company_id = ? AND voucher_type = 'PURCHASE_RETURN' AND status = 'POSTED' AND voucher_date = ?), 0
         ) as total
       `).get(companyId, today, companyId, today) as { total: number };
 
@@ -2270,7 +2270,7 @@ export function createApiRouter(db: DatabaseSync): Router {
           SELECT
             voucher_date as day_key,
             voucher_type,
-            COALESCE(SUM(taxable_amount_paise), 0) as total
+            COALESCE(SUM(total_amount_paise), 0) as total
           FROM vouchers
           WHERE company_id = ? AND status = 'POSTED'
             AND voucher_type IN ('SALES', 'SALES_RETURN', 'PURCHASE', 'PURCHASE_RETURN')
@@ -2314,7 +2314,7 @@ export function createApiRouter(db: DatabaseSync): Router {
           SELECT
             substr(voucher_date, 1, 7) as month,
             voucher_type,
-            COALESCE(SUM(taxable_amount_paise), 0) as total
+            COALESCE(SUM(total_amount_paise), 0) as total
           FROM vouchers
           WHERE company_id = ? AND status = 'POSTED'
             AND voucher_type IN ('SALES', 'SALES_RETURN', 'PURCHASE', 'PURCHASE_RETURN')
