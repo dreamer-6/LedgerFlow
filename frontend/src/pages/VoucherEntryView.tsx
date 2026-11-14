@@ -1826,7 +1826,13 @@ export const VoucherEntryView: React.FC<VoucherEntryViewProps> = ({
                         <div className="vev2-party-name">{selectedParty.party_name}</div>
                         {(selectedParty.address_line1 || selectedParty.city) && (
                           <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            {[selectedParty.address_line1, selectedParty.city, selectedParty.state].filter(Boolean).join(', ')}
+                            {(() => {
+                              const hasStreet = selectedParty.address_line1 && selectedParty.address_line1 !== 'Main Business Address';
+                              if (hasStreet) {
+                                return [selectedParty.address_line1, selectedParty.city, selectedParty.state].filter(Boolean).join(', ');
+                              }
+                              return selectedParty.city || '';
+                            })()}
                           </div>
                         )}
                       </div>

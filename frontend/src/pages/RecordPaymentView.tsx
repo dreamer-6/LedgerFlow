@@ -872,11 +872,24 @@ export const RecordPaymentView: React.FC<RecordPaymentViewProps> = ({
                   <div style={{ fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>
                     {selectedSupplier.party_name}
                   </div>
-                  {selectedSupplier.address_line1 && (
-                    <div style={{ color: 'var(--color-text-secondary, #64748B)' }}>
-                      {selectedSupplier.address_line1}, {selectedSupplier.city} {selectedSupplier.state}
-                    </div>
-                  )}
+                  {(() => {
+                    const hasStreet = selectedSupplier.address_line1 && selectedSupplier.address_line1 !== 'Main Business Address';
+                    if (hasStreet) {
+                      return (
+                        <div style={{ color: 'var(--color-text-secondary, #64748B)' }}>
+                          {[selectedSupplier.address_line1, selectedSupplier.city, selectedSupplier.state].filter(Boolean).join(', ')}
+                        </div>
+                      );
+                    }
+                    if (selectedSupplier.city) {
+                      return (
+                        <div style={{ color: 'var(--color-text-secondary, #64748B)' }}>
+                          {selectedSupplier.city}{selectedSupplier.state ? `, ${selectedSupplier.state}` : ''}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                   {selectedSupplier.gstin && (
                     <div style={{ color: 'var(--color-text-secondary, #64748B)' }}>
                       GSTIN: <span style={{ fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{selectedSupplier.gstin}</span>

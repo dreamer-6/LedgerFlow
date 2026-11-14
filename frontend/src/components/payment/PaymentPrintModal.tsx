@@ -355,11 +355,26 @@ export const PaymentPrintModal: React.FC<PaymentPrintModalProps> = ({
                 <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>
                   {paymentData?.recipientName}
                 </div>
-                {paymentData?.supplier?.address_line1 && (
-                  <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '4px' }}>
-                    {paymentData.supplier.address_line1}, {paymentData.supplier.city} {paymentData.supplier.state}
-                  </div>
-                )}
+                {(() => {
+                  const s = paymentData?.supplier;
+                  if (!s) return null;
+                  const hasStreet = s.address_line1 && s.address_line1 !== 'Main Business Address';
+                  if (hasStreet) {
+                    return (
+                      <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '4px' }}>
+                        {[s.address_line1, s.address_line2].filter(Boolean).join(', ')}, {s.city} {s.state}
+                      </div>
+                    );
+                  }
+                  if (s.city) {
+                    return (
+                      <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '4px' }}>
+                        {s.city}{s.state ? `, ${s.state}` : ''}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 {paymentData?.supplier?.gstin && (
                   <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px' }}>
                     GSTIN: {paymentData.supplier.gstin}

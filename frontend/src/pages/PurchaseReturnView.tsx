@@ -766,7 +766,13 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
                       {selectedSupplier.party_name}
                     </div>
                     <div style={{ color: 'var(--color-text-secondary, #64748B)' }}>
-                      {selectedSupplier.address_line1 || selectedSupplier.city || 'No address registered'}
+                      {(() => {
+                        const hasStreet = selectedSupplier.address_line1 && selectedSupplier.address_line1 !== 'Main Business Address';
+                        if (hasStreet) {
+                          return [selectedSupplier.address_line1, selectedSupplier.city].filter(Boolean).join(', ');
+                        }
+                        return selectedSupplier.city || 'No address registered';
+                      })()}
                     </div>
                   </div>
                   <div>

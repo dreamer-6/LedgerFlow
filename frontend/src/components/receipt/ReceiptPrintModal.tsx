@@ -333,7 +333,24 @@ export const ReceiptPrintModal: React.FC<ReceiptPrintModalProps> = ({
                 {receiptData.customer?.party_name || 'KB Enterprises'}
               </div>
               <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '4px', lineHeight: 1.4 }}>
-                {receiptData.customer?.billing_address || receiptData.customer?.shipping_address || '34, MG Road, Ernakulam, Kerala - 682016'}<br />
+                {(() => {
+                  const cust = receiptData.customer;
+                  if (!cust) return null;
+                  const rawStreet = cust.address_line1 || cust.billing_address || cust.shipping_address;
+                  const hasStreet = rawStreet && rawStreet !== 'Main Business Address' && !rawStreet.includes('Ernakulam');
+                  if (hasStreet) {
+                    return (
+                      <>
+                        {[rawStreet, cust.address_line2].filter(Boolean).join(', ')}<br />
+                        {[cust.city, cust.state].filter(Boolean).join(', ')}{cust.pincode ? ` - ${cust.pincode}` : ''}<br />
+                      </>
+                    );
+                  }
+                  if (cust.city) {
+                    return <>{cust.city}{cust.state ? `, ${cust.state}` : ''}<br /></>;
+                  }
+                  return null;
+                })()}
                 GSTIN: <span style={{ fontWeight: 600 }}>{receiptData.customer?.gstin || '32ABCDE1234F1Z5'}</span><br />
                 Phone: {receiptData.customer?.phone || '+91 98470 12345'}
               </div>

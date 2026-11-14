@@ -303,8 +303,8 @@ export function createApiRouter(db: DatabaseSync): Router {
       `).run(
         'addr_' + Date.now().toString(36),
         partyId,
-        addressLine1 || 'Main Business Address',
-        addressLine2 || null,
+        addressLine1 ? addressLine1.trim() : null,
+        addressLine2 ? addressLine2.trim() : null,
         city || '',
         state || 'Tamil Nadu',
         stateCode || '33',
@@ -410,11 +410,13 @@ export function createApiRouter(db: DatabaseSync): Router {
         `).run(partyName.trim(), openingBalancePaise ?? null, party.ledger_id);
       }
 
-      const existingAddr = db.prepare('SELECT address_id FROM party_addresses WHERE party_id = ? LIMIT 1').get(partyId) as any;
+      const existingAddr = db.prepare('SELECT address_id, address_line1, address_line2, city, state, state_code, pincode FROM party_addresses WHERE party_id = ? LIMIT 1').get(partyId) as any;
       if (existingAddr) {
+        const updatedLine1 = addressLine1 !== undefined ? (addressLine1 ? addressLine1.trim() : null) : (existingAddr.address_line1 === 'Main Business Address' ? null : existingAddr.address_line1);
+        const updatedLine2 = addressLine2 !== undefined ? (addressLine2 ? addressLine2.trim() : null) : existingAddr.address_line2;
         db.prepare(`
           UPDATE party_addresses SET
-            address_line1 = COALESCE(?, address_line1),
+            address_line1 = ?,
             address_line2 = ?,
             city = COALESCE(?, city),
             state = COALESCE(?, state),
@@ -422,9 +424,9 @@ export function createApiRouter(db: DatabaseSync): Router {
             pincode = COALESCE(?, pincode)
           WHERE address_id = ?
         `).run(
-          addressLine1 || null,
-          addressLine2 || null,
-          city || null,
+          updatedLine1,
+          updatedLine2,
+          city ? city.trim() : null,
           state || null,
           stateCode || null,
           pincode || null,
@@ -437,8 +439,8 @@ export function createApiRouter(db: DatabaseSync): Router {
         `).run(
           'addr_' + Date.now().toString(36),
           partyId,
-          addressLine1 || 'Main Business Address',
-          addressLine2 || null,
+          addressLine1 ? addressLine1.trim() : null,
+          addressLine2 ? addressLine2.trim() : null,
           city || '',
           state || 'Tamil Nadu',
           stateCode || '33',

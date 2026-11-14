@@ -213,12 +213,15 @@ export const ServiceBillView: React.FC<ServiceBillViewProps> = ({
     if (found) {
       setCustomerName(found.party_name);
       setCustomerPhone(found.phone || '');
-      const addrLines = [
-        found.address_line1,
-        found.address_line2,
-        found.city ? `${found.city}${found.pincode ? ' - ' + found.pincode : ''}` : '',
-        found.state ? `${found.state}, India` : ''
-      ].filter(Boolean);
+      const hasStreet = found.address_line1 && found.address_line1 !== 'Main Business Address';
+      const addrLines = hasStreet
+        ? [
+            found.address_line1,
+            found.address_line2,
+            found.city ? `${found.city}${found.pincode ? ' - ' + found.pincode : ''}` : '',
+            found.state ? `${found.state}, India` : ''
+          ].filter(Boolean)
+        : [found.city].filter(Boolean);
       setBillingAddress(addrLines.join('\n') || '');
     }
   };

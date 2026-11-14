@@ -318,9 +318,14 @@ class ReportEngine {
      * DEF-REP-09: Expose reorderLevel for dashboard alerts
      */
     static getStockSummary(db, companyId, asOfDate) {
+        try {
+            db.exec('ALTER TABLE stock_items ADD COLUMN category TEXT;');
+        }
+        catch { }
         const items = db.prepare(`
       SELECT 
-        si.item_id, si.item_name, si.sku, si.hsn_sac, si.reorder_level, COALESCE(u.symbol, 'Nos') as unit_symbol, si.purchase_rate_paise
+        si.item_id, si.item_name, si.sku, si.hsn_sac, si.reorder_level, COALESCE(u.symbol, 'Nos') as unit_symbol, si.purchase_rate_paise,
+        COALESCE(si.category, '') as category
       FROM stock_items si
       LEFT JOIN units u ON si.unit_id = u.unit_id
       WHERE si.company_id = ? AND si.is_active = 1
@@ -336,6 +341,20 @@ class ReportEngine {
                 ? summary.totalValuePaise
                 : Math.round(qty * rate);
             const reorderLvl = Number(i.reorder_level) || 0;
+            let category = (i.category || '').trim();
+            if (!category) {
+                const hsn = (i.hsn_sac || '').trim();
+                if (hsn.startsWith('99'))
+                    category = 'Services';
+                else if (hsn.startsWith('8504'))
+                    category = 'Power & Adapters';
+                else if (hsn.startsWith('8471') || hsn.startsWith('8473'))
+                    category = 'Hardware & Storage';
+                else if (hsn.startsWith('8524') || hsn.startsWith('8523'))
+                    category = 'Software & Media';
+                else
+                    category = 'Trading Goods';
+            }
             return {
                 itemId: i.item_id,
                 item_id: i.item_id,
@@ -346,6 +365,7 @@ class ReportEngine {
                 hsn_sac: i.hsn_sac || '',
                 unit: i.unit_symbol || 'Nos',
                 unit_symbol: i.unit_symbol || 'Nos',
+                category,
                 quantity: qty,
                 closing_qty: qty,
                 currentStock: qty,

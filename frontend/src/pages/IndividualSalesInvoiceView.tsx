@@ -464,8 +464,25 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
                 {v.party_name || 'Cash Customer'}
               </div>
               <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary, #475569)', marginTop: '2px', lineHeight: 1.4 }}>
-                <div>{v.address_line1 || 'TS No 1060, North 4th Street,'}</div>
-                <div>{v.city ? `${v.city}, ` : 'Pudukkottai, '}{v.state || 'Tamil Nadu'}{v.pincode ? ` - ${v.pincode}` : ' - 622001'}, India</div>
+                {(() => {
+                  const hasStreet = v.address_line1 && v.address_line1.trim() !== '' && v.address_line1 !== 'Main Business Address';
+                  if (hasStreet) {
+                    return (
+                      <>
+                        <div>{v.address_line1}</div>
+                        {v.address_line2 && <div>{v.address_line2}</div>}
+                        <div>
+                          {[v.city, v.state].filter(Boolean).join(', ')}
+                          {v.pincode ? ` - ${v.pincode}` : ''}
+                        </div>
+                      </>
+                    );
+                  }
+                  if (v.city) {
+                    return <div>{v.city}</div>;
+                  }
+                  return null;
+                })()}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px', marginTop: '8px', fontSize: '11px' }}>
@@ -508,8 +525,39 @@ export const IndividualSalesInvoiceView: React.FC<IndividualSalesInvoiceViewProp
                 {v.party_name || 'Cash Customer'}
               </div>
               <div style={{ fontSize: '11.5px', color: 'var(--color-text-secondary, #475569)', marginTop: '2px', lineHeight: 1.4 }}>
-                <div>{v.address_line1 || 'TS No 1060, North 4th Street,'}</div>
-                <div>{v.city ? `${v.city}, ` : 'Pudukkottai, '}{v.state || 'Tamil Nadu'}{v.pincode ? ` - ${v.pincode}` : ' - 622001'}, India</div>
+                {(() => {
+                  const rawShip = v.shipping_address_line1 || v.shipping_address;
+                  const hasShipStreet = rawShip && rawShip.trim() !== '' && rawShip !== 'Main Business Address';
+                  if (hasShipStreet) {
+                    return (
+                      <>
+                        <div>{rawShip}</div>
+                        {v.shipping_address_line2 && <div>{v.shipping_address_line2}</div>}
+                        <div>
+                          {[v.shipping_city || v.city, v.shipping_state || v.state].filter(Boolean).join(', ')}
+                          {(v.shipping_pincode || v.pincode) ? ` - ${v.shipping_pincode || v.pincode}` : ''}
+                        </div>
+                      </>
+                    );
+                  }
+                  const hasStreet = v.address_line1 && v.address_line1.trim() !== '' && v.address_line1 !== 'Main Business Address';
+                  if (hasStreet) {
+                    return (
+                      <>
+                        <div>{v.address_line1}</div>
+                        {v.address_line2 && <div>{v.address_line2}</div>}
+                        <div>
+                          {[v.city, v.state].filter(Boolean).join(', ')}
+                          {v.pincode ? ` - ${v.pincode}` : ''}
+                        </div>
+                      </>
+                    );
+                  }
+                  if (v.shipping_city || v.city) {
+                    return <div>{v.shipping_city || v.city}</div>;
+                  }
+                  return null;
+                })()}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '8px', fontSize: '11px' }}>

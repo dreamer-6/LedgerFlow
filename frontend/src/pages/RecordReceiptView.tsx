@@ -582,11 +582,23 @@ export const RecordReceiptView: React.FC<RecordReceiptViewProps> = ({
                 </div>
                 <div style={{ color: 'var(--color-text-secondary, #64748B)', marginTop: '2px' }}>{(selectedCustomer as any).party_code || 'CUS-008'}</div>
                 <div style={{ color: 'var(--color-text-secondary, #475569)', marginTop: '4px', lineHeight: 1.4 }}>
-                  {selectedCustomer.address_line1 || selectedCustomer.address_line2 || '34, MG Road, Ernakulam,'}
-                  <br />
-                  {selectedCustomer.city || 'Kerala - 682016'}
-                  <br />
-                  India
+                  {(() => {
+                    const hasStreet = selectedCustomer.address_line1 && selectedCustomer.address_line1 !== 'Main Business Address';
+                    if (hasStreet) {
+                      return (
+                        <>
+                          {selectedCustomer.address_line1}
+                          {selectedCustomer.address_line2 && <><br />{selectedCustomer.address_line2}</>}
+                          <br />
+                          {[selectedCustomer.city, selectedCustomer.state].filter(Boolean).join(', ')}
+                        </>
+                      );
+                    }
+                    if (selectedCustomer.city) {
+                      return <div>{selectedCustomer.city}{selectedCustomer.state ? `, ${selectedCustomer.state}` : ''}</div>;
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', color: 'var(--color-text-secondary, #475569)' }}>

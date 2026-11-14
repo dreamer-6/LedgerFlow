@@ -145,7 +145,10 @@ export const ServiceBillCreationView: React.FC<ServiceBillCreationViewProps> = (
           const first = pList[0];
           setPartyId(first.party_id);
           setPhone(first.phone || '');
-          const addr = [first.address_line1, first.city, first.state].filter(Boolean).join(', ');
+          const hasStreet = first.address_line1 && first.address_line1 !== 'Main Business Address';
+          const addr = hasStreet
+            ? [first.address_line1, first.city, first.state].filter(Boolean).join(', ')
+            : (first.city || '');
           if (addr) setBillingAddress(addr);
           if (first.gstin) setGstin(first.gstin);
         }
@@ -164,7 +167,10 @@ export const ServiceBillCreationView: React.FC<ServiceBillCreationViewProps> = (
     const found = parties.find((p) => p.party_id === pId);
     if (found) {
       if (found.phone) setPhone(found.phone);
-      const addr = [found.address_line1, found.city, found.state].filter(Boolean).join(', ');
+      const hasStreet = found.address_line1 && found.address_line1 !== 'Main Business Address';
+      const addr = hasStreet
+        ? [found.address_line1, found.city, found.state].filter(Boolean).join(', ')
+        : (found.city || '');
       if (addr) setBillingAddress(addr);
       if (found.gstin) setGstin(found.gstin);
     }

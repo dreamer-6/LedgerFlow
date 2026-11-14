@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS party_addresses (
     address_id TEXT PRIMARY KEY,
     party_id TEXT NOT NULL REFERENCES parties(party_id) ON DELETE CASCADE,
     address_type TEXT CHECK(address_type IN ('BILLING', 'SHIPPING', 'BOTH')) DEFAULT 'BOTH',
-    address_line1 TEXT NOT NULL,
+    address_line1 TEXT,
     address_line2 TEXT,
     city TEXT NOT NULL,
     state TEXT NOT NULL,

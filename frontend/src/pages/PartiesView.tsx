@@ -922,9 +922,7 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
                 <>
                   <div className="party-form-row party-form-row-2">
                     <div className="party-field-group">
-                      <label className="party-field-label">
-                        Address Line 1 <span className="required">*</span>
-                      </label>
+                      <label className="party-field-label">Address Line 1 (Optional)</label>
                       <input
                         type="text"
                         className="party-input"
@@ -2306,13 +2304,25 @@ export const PartiesView: React.FC<PartiesViewProps> = ({
               <div className="party-details-fields">
                 <div style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-primary)' }}>
                   <div style={{ fontWeight: 600, marginBottom: '4px' }}>Billing Address</div>
-                  <div>{selectedParty.address_line1 || 'No street address specified'}</div>
-                  {selectedParty.address_line2 && <div>{selectedParty.address_line2}</div>}
-                  <div>
-                    {[selectedParty.city, selectedParty.state, selectedParty.pincode]
-                      .filter(Boolean)
-                      .join(', ')}
-                  </div>
+                  {selectedParty.address_line1 && selectedParty.address_line1 !== 'Main Business Address' ? (
+                    <>
+                      <div>{selectedParty.address_line1}</div>
+                      {selectedParty.address_line2 && <div>{selectedParty.address_line2}</div>}
+                      <div>
+                        {[selectedParty.city, selectedParty.state, selectedParty.pincode]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      {selectedParty.city ? (
+                        <div>District: <strong>{selectedParty.city}</strong>{selectedParty.state ? `, ${selectedParty.state}` : ''}</div>
+                      ) : (
+                        <div style={{ color: 'var(--text-muted)' }}>No address specified</div>
+                      )}
+                    </div>
+                  )}
                   <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '4px' }}>
                     Country: India
                   </div>

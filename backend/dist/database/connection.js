@@ -121,6 +121,10 @@ function getDatabase(customPath) {
     }
     catch { }
     try {
+        db.exec('ALTER TABLE stock_items ADD COLUMN category TEXT;');
+    }
+    catch { }
+    try {
         db.exec(`
       CREATE TABLE IF NOT EXISTS stock_item_serials (
         serial_id TEXT PRIMARY KEY,

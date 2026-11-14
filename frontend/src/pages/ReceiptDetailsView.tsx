@@ -285,7 +285,18 @@ export const ReceiptDetailsView: React.FC<ReceiptDetailsViewProps> = ({
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', color: 'var(--color-text-secondary, #475569)' }}>
               <MapPin size={15} color="#94A3B8" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <span>{party?.address_line1 || party?.address_line2 || '34, MG Road, Ernakulam, Kerala - 682016'}</span>
+              <span>
+                {(() => {
+                  const hasStreet = party?.address_line1 && party?.address_line1 !== 'Main Business Address';
+                  if (hasStreet) {
+                    return [party?.address_line1, party?.address_line2, party?.city, party?.state].filter(Boolean).join(', ');
+                  }
+                  if (party?.city) {
+                    return party?.city;
+                  }
+                  return voucher.party_city || '—';
+                })()}
+              </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-secondary, #475569)' }}>
               <Phone size={14} color="#94A3B8" />

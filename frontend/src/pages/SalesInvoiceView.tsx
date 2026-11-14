@@ -1696,7 +1696,16 @@ export const SalesInvoiceView: React.FC<SalesInvoiceViewProps> = ({
                     </span>
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.3 }}>
-                    {[selectedParty.address_line1, selectedParty.city, selectedParty.state].filter(Boolean).join(', ') || 'No address provided'}
+                    {(() => {
+                      const hasStreet = selectedParty.address_line1 && selectedParty.address_line1 !== 'Main Business Address';
+                      if (hasStreet) {
+                        return [selectedParty.address_line1, selectedParty.city, selectedParty.state].filter(Boolean).join(', ');
+                      }
+                      if (selectedParty.city) {
+                        return selectedParty.city;
+                      }
+                      return 'No address provided';
+                    })()}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px 8px', fontSize: '11px', borderTop: '1px solid var(--border-subtle, #E2E8F0)', paddingTop: '6px' }}>
                     <div>

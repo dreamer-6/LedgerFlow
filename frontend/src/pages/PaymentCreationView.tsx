@@ -939,7 +939,7 @@ export const PaymentCreationView: React.FC<PaymentCreationViewProps> = ({
                   </div>
                   {(selectedSupplier.address_line1 || selectedSupplier.city) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                      <MapPin size={12} /> {[selectedSupplier.address_line1, selectedSupplier.city, selectedSupplier.state].filter(Boolean).join(', ')}
+                      <MapPin size={12} /> {[selectedSupplier.address_line1 && selectedSupplier.address_line1 !== 'Main Business Address' ? selectedSupplier.address_line1 : null, selectedSupplier.city, selectedSupplier.state].filter(Boolean).join(', ')}
                     </div>
                   )}
                   {selectedSupplier.phone && (

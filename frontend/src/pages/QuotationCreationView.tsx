@@ -281,12 +281,15 @@ export const QuotationCreationView: React.FC<QuotationCreationViewProps> = ({
   const selectParty = (party: any) => {
     setSelectedCustomerId(party.party_id);
     setCustomerSearchQuery(`${party.party_name} (${party.code || 'CUS-001'})`);
-    const partyAddr = [
-      party.address_line1,
-      party.address_line2,
-      party.city,
-      party.state ? (party.pincode ? `${party.state} - ${party.pincode}` : party.state) : party.pincode
-    ].filter(Boolean).join(', ');
+    const hasStreet = party.address_line1 && party.address_line1 !== 'Main Business Address';
+    const partyAddr = hasStreet
+      ? [
+          party.address_line1,
+          party.address_line2,
+          party.city,
+          party.state ? (party.pincode ? `${party.state} - ${party.pincode}` : party.state) : party.pincode
+        ].filter(Boolean).join(', ')
+      : (party.city || '');
 
     setCustomerDetails({
       name: party.party_name,

@@ -203,22 +203,41 @@ export function normalizeInvoiceData(rawVoucherData: any, company: any): Normali
   const compAddressStr = [compLine1, compLine2].filter(Boolean).join('\n') || company?.address || '';
 
   // Buyer / Party address formatting (wrapped across natural lines)
-  const partyLine1 = [v.address_line1, v.address_line2].filter(Boolean).join(', ');
-  const partyLine2 = [
-    v.city,
-    v.state ? (v.pincode ? `${v.state} - ${v.pincode}` : v.state) : v.pincode,
-    v.country
-  ].filter(Boolean).join(', ');
-  const partyAddressStr = [partyLine1, partyLine2].filter(Boolean).join('\n') || v.party_address || '';
+  const cleanLine1 = (v.address_line1 && v.address_line1 !== 'Main Business Address') ? v.address_line1.trim() : '';
+  const cleanLine2 = v.address_line2 ? v.address_line2.trim() : '';
+  const hasStreetAddress = Boolean(cleanLine1 || cleanLine2);
+
+  let partyAddressStr = '';
+  if (hasStreetAddress) {
+    const partyLine1 = [cleanLine1, cleanLine2].filter(Boolean).join(', ');
+    const partyLine2 = [
+      v.city,
+      v.state ? (v.pincode ? `${v.state} - ${v.pincode}` : v.state) : v.pincode,
+      v.country
+    ].filter(Boolean).join(', ');
+    partyAddressStr = [partyLine1, partyLine2].filter(Boolean).join('\n');
+  } else {
+    // If no street address, simple show District (city)
+    partyAddressStr = v.city || (v.party_address && v.party_address !== 'Main Business Address' ? v.party_address : '');
+  }
 
   // Shipping address formatting
-  const shipLine1 = [v.shipping_address_line1 || v.shipping_address, v.shipping_address_line2].filter(Boolean).join(', ');
-  const shipLine2 = [
-    v.shipping_city,
-    v.shipping_state ? (v.shipping_pincode ? `${v.shipping_state} - ${v.shipping_pincode}` : v.shipping_state) : v.shipping_pincode,
-    v.shipping_country
-  ].filter(Boolean).join(', ');
-  const shipAddressStr = [shipLine1, shipLine2].filter(Boolean).join('\n');
+  const rawShip1 = v.shipping_address_line1 || v.shipping_address;
+  const cleanShipLine1 = (rawShip1 && rawShip1 !== 'Main Business Address') ? rawShip1.trim() : '';
+  const cleanShipLine2 = v.shipping_address_line2 ? v.shipping_address_line2.trim() : '';
+  const hasShipStreet = Boolean(cleanShipLine1 || cleanShipLine2);
+  let shipAddressStr = '';
+  if (hasShipStreet) {
+    const shipLine1 = [cleanShipLine1, cleanShipLine2].filter(Boolean).join(', ');
+    const shipLine2 = [
+      v.shipping_city,
+      v.shipping_state ? (v.shipping_pincode ? `${v.shipping_state} - ${v.shipping_pincode}` : v.shipping_state) : v.shipping_pincode,
+      v.shipping_country
+    ].filter(Boolean).join(', ');
+    shipAddressStr = [shipLine1, shipLine2].filter(Boolean).join('\n');
+  } else if (v.shipping_city) {
+    shipAddressStr = v.shipping_city;
+  }
   const hasShipping = Boolean(shipAddressStr.trim() || v.shipping_party_name);
 
   // Normalize line items
@@ -451,12 +470,17 @@ export function normalizeQuotationData(quotation: any, company: any): Normalized
   const compAddressStr = [compLine1, compLine2].filter(Boolean).join('\n') || company?.address || '';
 
   // Customer address
-  const custLine1 = cust.address;
-  const custLine2 = [
-    cust.city,
-    cust.state ? (cust.pincode ? `${cust.state} - ${cust.pincode}` : cust.state) : cust.pincode
-  ].filter(Boolean).join(', ');
-  const custAddressStr = [custLine1, custLine2].filter(Boolean).join('\n') || '';
+  const cleanCustLine1 = (cust.address && cust.address !== 'Main Business Address') ? cust.address.trim() : '';
+  let custAddressStr = '';
+  if (cleanCustLine1) {
+    const custLine2 = [
+      cust.city,
+      cust.state ? (cust.pincode ? `${cust.state} - ${cust.pincode}` : cust.state) : cust.pincode
+    ].filter(Boolean).join(', ');
+    custAddressStr = [cleanCustLine1, custLine2].filter(Boolean).join('\n');
+  } else {
+    custAddressStr = cust.city || '';
+  }
 
   const hasBank = !!(company?.bank_name || company?.bank_account_no);
 

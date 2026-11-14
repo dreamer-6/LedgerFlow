@@ -359,9 +359,16 @@ export const PaymentDetailsView: React.FC<PaymentDetailsViewProps> = ({
           </div>
 
           <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary, #64748B)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            {supplierParty?.address_line1 && (
-              <div>{supplierParty.address_line1}, {supplierParty.city} {supplierParty.state}</div>
-            )}
+            {(() => {
+              const hasStreet = supplierParty?.address_line1 && supplierParty.address_line1 !== 'Main Business Address';
+              if (hasStreet) {
+                return <div>{[supplierParty.address_line1, supplierParty.city, supplierParty.state].filter(Boolean).join(', ')}</div>;
+              }
+              if (supplierParty?.city) {
+                return <div>{supplierParty.city}{supplierParty.state ? `, ${supplierParty.state}` : ''}</div>;
+              }
+              return null;
+            })()}
             {supplierParty?.gstin && (
               <div>GSTIN: <span style={{ fontWeight: 600, color: 'var(--color-text, #0F172A)' }}>{supplierParty.gstin}</span></div>
             )}
