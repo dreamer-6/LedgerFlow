@@ -131,8 +131,8 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
     );
   }, [data.lines, paginationConfig]);
 
-  // Section 1: Full Company Header + TAX INVOICE Metadata Grid (Page 1)
-  const renderHeader = () => (
+  // Section 1: Full Company Header + TAX INVOICE Metadata Grid
+  const renderHeader = (pageNum: number = 1, totalPages: number = 1) => (
     <div
       style={{
         display: 'grid',
@@ -142,8 +142,8 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
         marginBottom: '10px'
       }}
     >
-      {/* Left: Company Identity */}
-      <div>
+      {/* Left: Company Identity (with left padding) */}
+      <div style={{ paddingLeft: '14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '8px' }}>
           {showLogo && data.companyLogo && (
             <img
@@ -312,10 +312,10 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
             }}
           >
             {data.voucherType === 'PURCHASE'
-              ? 'PURCHASE INVOICE RECORD'
+              ? (totalPages > 1 ? `PURCHASE INVOICE RECORD • PAGE ${pageNum} OF ${totalPages}` : 'PURCHASE INVOICE RECORD')
               : data.voucherType === 'QUOTATION'
-                ? 'PRICE OFFER • ORIGINAL FOR CUSTOMER'
-                : 'ORIGINAL FOR RECIPIENT'}
+                ? (totalPages > 1 ? `PRICE OFFER • PAGE ${pageNum} OF ${totalPages}` : 'PRICE OFFER • ORIGINAL FOR CUSTOMER')
+                : (totalPages > 1 ? `ORIGINAL FOR RECIPIENT • PAGE ${pageNum} OF ${totalPages}` : 'ORIGINAL FOR RECIPIENT')}
           </div>
         </div>
 
@@ -1109,16 +1109,10 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
             flexDirection: 'column'
           }}
         >
-          {/* Top Header Region (First page or Continuation) */}
+          {/* Top Header Region: Same Box Style of Company, Invoice and Customer Detail on ALL pages */}
           <div style={{ flexShrink: 0 }}>
-            {page.isFirstPage ? (
-              <>
-                {renderHeader()}
-                {renderParties()}
-              </>
-            ) : (
-              renderContinuationHeader(page.pageIndex + 1, page.totalPages)
-            )}
+            {renderHeader(page.pageIndex + 1, page.totalPages)}
+            {renderParties()}
           </div>
 
           {/* Full-Height Line Items Table */}

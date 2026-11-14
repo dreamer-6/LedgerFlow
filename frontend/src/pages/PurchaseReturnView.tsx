@@ -1456,13 +1456,13 @@ export const PurchaseReturnView: React.FC<PurchaseReturnViewProps> = ({
         voucher={
           deleteModalVoucher
             ? {
-                voucher_id: deleteModalVoucher.voucher_id,
-                voucher_number: deleteModalVoucher.voucher_number || 'Return',
-                voucher_type: deleteModalVoucher.voucher_type || 'PURCHASE_RETURN',
-                status: deleteModalVoucher.status || 'POSTED',
-                party_name: deleteModalVoucher.party_name,
-                total_amount_paise: deleteModalVoucher.total_amount_paise
-              }
+              voucher_id: deleteModalVoucher.voucher_id,
+              voucher_number: deleteModalVoucher.voucher_number || 'Return',
+              voucher_type: deleteModalVoucher.voucher_type || 'PURCHASE_RETURN',
+              status: deleteModalVoucher.status || 'POSTED',
+              party_name: deleteModalVoucher.party_name,
+              total_amount_paise: deleteModalVoucher.total_amount_paise
+            }
             : null
         }
         userRole="ADMIN"

@@ -207,10 +207,31 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
   const [hsnSac, setHsnSac] = useState<string>('84713010');
   const [unitId, setUnitId] = useState<string>('unit_nos');
 
-  // Dynamic user-created categories, brands, and item types
-  const [customCategories, setCustomCategories] = useState<string[]>([]);
-  const [customBrands, setCustomBrands] = useState<string[]>([]);
-  const [customItemTypes, setCustomItemTypes] = useState<string[]>([]);
+  // Dynamic user-created categories, brands, and item types (persisted in localStorage)
+  const [customCategories, setCustomCategories] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('lf_custom_categories');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [customBrands, setCustomBrands] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('lf_custom_brands');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [customItemTypes, setCustomItemTypes] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('lf_custom_item_types');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Modals for creating new category, brand, and item type on the fly
   const [showAddCategoryModal, setShowAddCategoryModal] = useState<boolean>(false);
@@ -808,6 +829,300 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
       setIsAdjusting(false);
     }
   };
+
+  // Helper actions to add and persist custom Category, Brand, and Item Type
+  const addCustomCategory = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setCustomCategories((prev) => {
+      const updated = prev.includes(trimmed) ? prev : [...prev, trimmed];
+      try {
+        localStorage.setItem('lf_custom_categories', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    setCategory(trimmed);
+  };
+
+  const addCustomBrand = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setCustomBrands((prev) => {
+      const updated = prev.includes(trimmed) ? prev : [...prev, trimmed];
+      try {
+        localStorage.setItem('lf_custom_brands', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    setBrand(trimmed);
+  };
+
+  const addCustomItemType = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setCustomItemTypes((prev) => {
+      const updated = prev.includes(trimmed) ? prev : [...prev, trimmed];
+      try {
+        localStorage.setItem('lf_custom_item_types', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    setItemType(trimmed);
+  };
+
+  // Reusable modal markup for on-the-fly Category, Brand, and Item Type creation
+  const renderAddModals = () => (
+    <>
+      {/* Create New Item Type Modal */}
+      {showAddItemTypeModal && (
+        <div
+          className="item-modal-overlay"
+          style={{ zIndex: 9999 }}
+          onClick={() => setShowAddItemTypeModal(false)}
+        >
+          <div
+            className="item-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '420px', zIndex: 10000 }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: 'rgba(234, 88, 12, 0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#EA580C'
+                }}
+              >
+                <PlusCircle size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Add Custom Item Type</h3>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Create a new classification type for your items.
+                </p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const trimmed = newItemTypeName.trim();
+                if (!trimmed) return;
+                addCustomItemType(trimmed);
+                setShowAddItemTypeModal(false);
+                setNewItemTypeName('');
+                setToast({ message: `Item type "${trimmed}" created and selected.`, type: 'success' });
+              }}
+            >
+              <div style={{ marginBottom: '18px' }}>
+                <label className="item-field-label">Item Type Name</label>
+                <input
+                  type="text"
+                  autoFocus
+                  className="item-input"
+                  placeholder="e.g. Spare Part, Raw Material, Accessory..."
+                  value={newItemTypeName}
+                  onChange={(e) => setNewItemTypeName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setShowAddItemTypeModal(false);
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="items-btn-secondary"
+                  onClick={() => setShowAddItemTypeModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="items-add-btn"
+                  disabled={!newItemTypeName.trim()}
+                >
+                  Add & Select
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create New Category Modal */}
+      {showAddCategoryModal && (
+        <div
+          className="item-modal-overlay"
+          style={{ zIndex: 9999 }}
+          onClick={() => setShowAddCategoryModal(false)}
+        >
+          <div
+            className="item-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '420px', zIndex: 10000 }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: 'rgba(234, 88, 12, 0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#EA580C'
+                }}
+              >
+                <FolderPlus size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Add New Category</h3>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Create a custom item category for your inventory.
+                </p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const trimmed = newCategoryName.trim();
+                if (!trimmed) return;
+                addCustomCategory(trimmed);
+                setShowAddCategoryModal(false);
+                setNewCategoryName('');
+                setToast({ message: `Category "${trimmed}" created and selected.`, type: 'success' });
+              }}
+            >
+              <div style={{ marginBottom: '18px' }}>
+                <label className="item-field-label">Category Name</label>
+                <input
+                  type="text"
+                  autoFocus
+                  className="item-input"
+                  placeholder="e.g. Keyboards, Cooling, Accessories..."
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setShowAddCategoryModal(false);
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="items-btn-secondary"
+                  onClick={() => setShowAddCategoryModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="items-add-btn"
+                  disabled={!newCategoryName.trim()}
+                >
+                  Add & Select
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create New Brand Modal */}
+      {showAddBrandModal && (
+        <div
+          className="item-modal-overlay"
+          style={{ zIndex: 9999 }}
+          onClick={() => setShowAddBrandModal(false)}
+        >
+          <div
+            className="item-modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '420px', zIndex: 10000 }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: 'rgba(234, 88, 12, 0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#EA580C'
+                }}
+              >
+                <Tag size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Add New Brand</h3>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Create a custom brand name for your stock items.
+                </p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const trimmed = newBrandName.trim();
+                if (!trimmed) return;
+                addCustomBrand(trimmed);
+                setShowAddBrandModal(false);
+                setNewBrandName('');
+                setToast({ message: `Brand "${trimmed}" created and selected.`, type: 'success' });
+              }}
+            >
+              <div style={{ marginBottom: '18px' }}>
+                <label className="item-field-label">Brand Name</label>
+                <input
+                  type="text"
+                  autoFocus
+                  className="item-input"
+                  placeholder="e.g. Logitech, Crucial, Gigabyte..."
+                  value={newBrandName}
+                  onChange={(e) => setNewBrandName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setShowAddBrandModal(false);
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="items-btn-secondary"
+                  onClick={() => setShowAddBrandModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="items-add-btn"
+                  disabled={!newBrandName.trim()}
+                >
+                  Add & Select
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   // --------------------------------------------------------------------------
   // RENDER: Stock Creation / Edit Form (Matches Stock Creation.png & Complex)
@@ -1560,6 +1875,9 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
             <ChevronDown size={14} />
           </button>
         </div>
+
+        {/* Dynamic Category, Brand, and Item Type creation modals */}
+        {renderAddModals()}
       </div>
     );
   }
@@ -1742,227 +2060,8 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
         </div>
       )}
 
-      {/* Create New Item Type Modal */}
-      {showAddItemTypeModal && (
-        <div className="item-modal-overlay" onClick={() => setShowAddItemTypeModal(false)}>
-          <div className="item-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <div
-                style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '50%',
-                  background: 'rgba(234, 88, 12, 0.12)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#EA580C'
-                }}
-              >
-                <PlusCircle size={20} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Add Custom Item Type</h3>
-                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  Create a new classification type for your items.
-                </p>
-              </div>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const trimmed = newItemTypeName.trim();
-                if (!trimmed) return;
-                if (!customItemTypes.includes(trimmed)) {
-                  setCustomItemTypes((prev) => [...prev, trimmed]);
-                }
-                setItemType(trimmed);
-                setShowAddItemTypeModal(false);
-                setNewItemTypeName('');
-                setToast({ message: `Item type "${trimmed}" created and selected.`, type: 'success' });
-              }}
-            >
-              <div style={{ marginBottom: '18px' }}>
-                <label className="item-field-label">Item Type Name</label>
-                <input
-                  type="text"
-                  autoFocus
-                  className="item-input"
-                  placeholder="e.g. Spare Part, Raw Material, Accessory..."
-                  value={newItemTypeName}
-                  onChange={(e) => setNewItemTypeName(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button
-                  type="button"
-                  className="items-btn-secondary"
-                  onClick={() => setShowAddItemTypeModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="items-add-btn"
-                  disabled={!newItemTypeName.trim()}
-                >
-                  Add & Select
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Create New Category Modal */}
-      {showAddCategoryModal && (
-        <div className="item-modal-overlay" onClick={() => setShowAddCategoryModal(false)}>
-          <div className="item-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <div
-                style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '50%',
-                  background: 'rgba(234, 88, 12, 0.12)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#EA580C'
-                }}
-              >
-                <FolderPlus size={20} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Add New Category</h3>
-                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  Create a custom item category for your inventory.
-                </p>
-              </div>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const trimmed = newCategoryName.trim();
-                if (!trimmed) return;
-                if (!customCategories.includes(trimmed)) {
-                  setCustomCategories((prev) => [...prev, trimmed]);
-                }
-                setCategory(trimmed);
-                setShowAddCategoryModal(false);
-                setNewCategoryName('');
-                setToast({ message: `Category "${trimmed}" created and selected.`, type: 'success' });
-              }}
-            >
-              <div style={{ marginBottom: '18px' }}>
-                <label className="item-field-label">Category Name</label>
-                <input
-                  type="text"
-                  autoFocus
-                  className="item-input"
-                  placeholder="e.g. Keyboards, Cooling, Accessories..."
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button
-                  type="button"
-                  className="items-btn-secondary"
-                  onClick={() => setShowAddCategoryModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="items-add-btn"
-                  disabled={!newCategoryName.trim()}
-                >
-                  Add & Select
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Create New Brand Modal */}
-      {showAddBrandModal && (
-        <div className="item-modal-overlay" onClick={() => setShowAddBrandModal(false)}>
-          <div className="item-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-              <div
-                style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '50%',
-                  background: 'rgba(234, 88, 12, 0.12)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#EA580C'
-                }}
-              >
-                <Tag size={20} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Add New Brand</h3>
-                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  Create a custom brand name for your stock items.
-                </p>
-              </div>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const trimmed = newBrandName.trim();
-                if (!trimmed) return;
-                if (!customBrands.includes(trimmed)) {
-                  setCustomBrands((prev) => [...prev, trimmed]);
-                }
-                setBrand(trimmed);
-                setShowAddBrandModal(false);
-                setNewBrandName('');
-                setToast({ message: `Brand "${trimmed}" created and selected.`, type: 'success' });
-              }}
-            >
-              <div style={{ marginBottom: '18px' }}>
-                <label className="item-field-label">Brand Name</label>
-                <input
-                  type="text"
-                  autoFocus
-                  className="item-input"
-                  placeholder="e.g. Logitech, Crucial, Gigabyte..."
-                  value={newBrandName}
-                  onChange={(e) => setNewBrandName(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                <button
-                  type="button"
-                  className="items-btn-secondary"
-                  onClick={() => setShowAddBrandModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="items-add-btn"
-                  disabled={!newBrandName.trim()}
-                >
-                  Add & Select
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Dynamic Category, Brand, and Item Type creation modals */}
+      {renderAddModals()}
 
       {/* Page Header */}
       <div className="items-header">

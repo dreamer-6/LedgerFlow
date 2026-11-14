@@ -171,11 +171,11 @@ export const ReceiptPrintModal: React.FC<ReceiptPrintModalProps> = ({
   const termsList = receiptData.termsText
     ? receiptData.termsText.split('\n').filter(Boolean)
     : [
-        '1. Payment received towards the invoices mentioned above.',
-        '2. Receipt is subject to bank realisation.',
-        '3. Any difference will be adjusted in the next transaction.',
-        '4. This is a computer generated receipt.'
-      ];
+      '1. Payment received towards the invoices mentioned above.',
+      '2. Receipt is subject to bank realisation.',
+      '3. Any difference will be adjusted in the next transaction.',
+      '4. This is a computer generated receipt.'
+    ];
 
   return (
     <div

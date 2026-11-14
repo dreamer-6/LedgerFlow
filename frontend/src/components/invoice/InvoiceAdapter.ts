@@ -35,7 +35,7 @@ export interface NormalizedInvoiceData {
   dueDate: string;
   paymentTerms: string;
   placeOfSupply: string;
-  
+
   // Company (Seller / Supplier)
   companyName: string;
   companyAddress: string;
@@ -49,7 +49,7 @@ export interface NormalizedInvoiceData {
   companyGstin?: string;
   companyPan?: string;
   companyLogo?: string;
-  
+
   // Buyer / Bill To
   partyName: string;
   partyAddress: string;
@@ -61,7 +61,7 @@ export interface NormalizedInvoiceData {
   partyEmail?: string;
   partyGstin?: string;
   partyPan?: string;
-  
+
   // Ship To (Optional)
   hasShippingAddress: boolean;
   actualShippingAddress?: string;
@@ -71,7 +71,7 @@ export interface NormalizedInvoiceData {
 
   // Items
   lines: InvoiceLineItem[];
-  
+
   // Totals & Taxes
   subTotal: number;
   taxTotal: number;
@@ -80,7 +80,7 @@ export interface NormalizedInvoiceData {
   grandTotal: number;
   amountInWords: string;
   showGstBreakdown?: boolean;
-  
+
   // Bank Details (only when configured)
   hasBankDetails: boolean;
   bankName?: string;
@@ -88,7 +88,7 @@ export interface NormalizedInvoiceData {
   bankAccountNo?: string;
   bankIfsc?: string;
   bankBranch?: string;
-  
+
   // Terms & Conditions
   termsAndConditions?: string;
 }
@@ -171,7 +171,7 @@ export function numberToIndianWords(paiseAmount: number): string {
 
   const rupees = Math.floor(num / 100);
   const paise = num % 100;
-  
+
   let str = 'Rupees ' + inWords(rupees).trim();
   if (paise > 0) {
     str += ' and ' + inWords(paise).trim() + ' Paise';
