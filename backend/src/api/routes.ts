@@ -314,7 +314,7 @@ export function createApiRouter(db: DatabaseSync): Router {
       db.exec('COMMIT;');
       res.status(201).json({ partyId, partyName: partyName.trim(), ledgerId });
     } catch (err: any) {
-      try { db.exec('ROLLBACK;'); } catch (_) {}
+      try { db.exec('ROLLBACK;'); } catch (_) { }
       if (err.message && err.message.includes('UNIQUE constraint failed')) {
         return res.status(400).json({ error: 'A party or ledger with this name or unique identifier already exists in this company.' });
       }
@@ -449,7 +449,7 @@ export function createApiRouter(db: DatabaseSync): Router {
       db.exec('COMMIT;');
       res.json({ success: true, message: 'Party updated successfully.' });
     } catch (err: any) {
-      try { db.exec('ROLLBACK;'); } catch (_) {}
+      try { db.exec('ROLLBACK;'); } catch (_) { }
       if (err.message && err.message.includes('UNIQUE constraint failed')) {
         return res.status(400).json({ error: 'A party or ledger with this name or unique identifier already exists in this company.' });
       }
@@ -491,7 +491,7 @@ export function createApiRouter(db: DatabaseSync): Router {
         db.exec('COMMIT;');
         res.json({ success: true, message: 'Party deleted successfully.' });
       } catch (delErr: any) {
-        try { db.exec('ROLLBACK;'); } catch (_) {}
+        try { db.exec('ROLLBACK;'); } catch (_) { }
         res.status(500).json({ error: delErr.message });
       }
     } catch (err: any) {
@@ -575,7 +575,7 @@ export function createApiRouter(db: DatabaseSync): Router {
             const serialsArr = b.serialNumbers.split(',').map((s: string) => s.trim()).filter(Boolean);
             for (const s of serialsArr) {
               db.prepare('INSERT OR IGNORE INTO stock_item_serials (serial_id, item_id, serial_number, status) VALUES (?, ?, ?, ?)')
-                .run('ser_' + Date.now().toString(36) + Math.random().toString(36).substring(2,6), existing.item_id, s, 'AVAILABLE');
+                .run('ser_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6), existing.item_id, s, 'AVAILABLE');
             }
           }
 
@@ -637,8 +637,8 @@ export function createApiRouter(db: DatabaseSync): Router {
               const effectiveRate = rate > 0
                 ? rate
                 : (summary.weightedAverageRatePaise > 0
-                    ? summary.weightedAverageRatePaise
-                    : (Number(existing.purchase_rate_paise) || 0));
+                  ? summary.weightedAverageRatePaise
+                  : (Number(existing.purchase_rate_paise) || 0));
               const valPaise = Math.round(qty * effectiveRate);
               PostingEngine.postVoucher(db, {
                 companyId,
@@ -718,7 +718,7 @@ export function createApiRouter(db: DatabaseSync): Router {
 
           db.exec('COMMIT;');
         } catch (updateErr: any) {
-          try { db.exec('ROLLBACK;'); } catch (_) {}
+          try { db.exec('ROLLBACK;'); } catch (_) { }
           return res.status(400).json({ error: updateErr.message });
         }
 
@@ -791,7 +791,7 @@ export function createApiRouter(db: DatabaseSync): Router {
         const serialsArr = b.serialNumbers.split(',').map((s: string) => s.trim()).filter(Boolean);
         for (const s of serialsArr) {
           db.prepare('INSERT OR IGNORE INTO stock_item_serials (serial_id, item_id, serial_number, status, purchase_date, warranty_expiry_date) VALUES (?, ?, ?, ?, ?, ?)')
-            .run('ser_' + Date.now().toString(36) + Math.random().toString(36).substring(2,6), itemId, s, 'AVAILABLE', todayStr, expiryDate);
+            .run('ser_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6), itemId, s, 'AVAILABLE', todayStr, expiryDate);
         }
       }
 
@@ -1240,7 +1240,7 @@ export function createApiRouter(db: DatabaseSync): Router {
         db.exec('COMMIT;');
         res.json({ success: true, message: 'Stock item removed successfully.' });
       } catch (delErr: any) {
-        try { db.exec('ROLLBACK;'); } catch (_) {}
+        try { db.exec('ROLLBACK;'); } catch (_) { }
         res.status(500).json({ error: delErr.message });
       }
     } catch (err: any) {
@@ -1807,7 +1807,7 @@ export function createApiRouter(db: DatabaseSync): Router {
           db.exec('COMMIT;');
           return res.status(200).json({ success: true, message: 'Draft voucher deleted successfully.' });
         } catch (delErr: any) {
-          try { db.exec('ROLLBACK;'); } catch (_) {}
+          try { db.exec('ROLLBACK;'); } catch (_) { }
           throw delErr;
         }
       }
@@ -1940,7 +1940,7 @@ export function createApiRouter(db: DatabaseSync): Router {
             message: `Voucher ${vch.voucher_number || ''} permanently deleted and number freed for reuse.`
           });
         } catch (purgeErr: any) {
-          try { db.exec('ROLLBACK;'); } catch (_) {}
+          try { db.exec('ROLLBACK;'); } catch (_) { }
           throw purgeErr;
         }
       }
