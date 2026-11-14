@@ -507,10 +507,25 @@ export const CompanyProfileTab: React.FC<CompanyProfileTabProps> = ({
               className="form-control"
               value={formData.bank_name || ''}
               onChange={e => onChange('bank_name', e.target.value)}
-              placeholder="e.g. State Bank of India"
+              placeholder="e.g. Canara Bank / State Bank of India"
             />
           </div>
 
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary, #475569)', marginBottom: '5px' }}>
+              Banking Name / Account Name <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>(Optional - prints on invoice only if set)</span>
+            </label>
+            <input
+              type="text"
+              className="form-control"
+              value={formData.banking_name || ''}
+              onChange={e => onChange('banking_name', e.target.value)}
+              placeholder="e.g. Account Holder / Trade Name"
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary, #475569)', marginBottom: '5px' }}>
               Account Number
@@ -523,9 +538,7 @@ export const CompanyProfileTab: React.FC<CompanyProfileTabProps> = ({
               placeholder="e.g. 123456789012"
             />
           </div>
-        </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary, #475569)', marginBottom: '5px' }}>
               IFSC Code (11 Characters)
@@ -544,7 +557,9 @@ export const CompanyProfileTab: React.FC<CompanyProfileTabProps> = ({
               </span>
             )}
           </div>
+        </div>
 
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-secondary, #475569)', marginBottom: '5px' }}>
               Branch Name

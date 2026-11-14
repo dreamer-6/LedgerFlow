@@ -415,7 +415,7 @@ ${printArea.outerHTML}
 
     hasBankDetails: Boolean(formData.bank_name || company?.bank_name),
     bankName: formData.bank_name || company?.bank_name,
-    bankAccountName: formData.legal_name || formData.company_name || company?.company_name,
+    bankAccountName: (formData.banking_name?.trim() || company?.banking_name?.trim()) || undefined,
     bankAccountNo: formData.bank_account_no || company?.bank_account_no,
     bankIfsc: formData.bank_ifsc || company?.bank_ifsc,
     bankBranch: formData.bank_branch || company?.bank_branch,

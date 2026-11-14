@@ -19,6 +19,7 @@ export interface Company {
   currency: string;
   currency_symbol: string;
   bank_name?: string;
+  banking_name?: string;
   bank_account_no?: string;
   bank_ifsc?: string;
   bank_branch?: string;
@@ -132,6 +133,10 @@ export interface StockItem {
   opening_rate_paise: number;
   reorder_level: number;
   is_active: number;
+  category?: string | null;
+  brand?: string | null;
+  item_type?: string | null;
+  description?: string | null;
   created_at?: string;
   serial_numbers?: string | null;
   has_serial_no?: number;
@@ -195,6 +200,10 @@ export interface LedgerMaster {
   opening_balance_type: 'DR' | 'CR';
   is_party: number;
   is_active: number;
+  category?: string | null;
+  brand?: string | null;
+  item_type?: string | null;
+  description?: string | null;
   created_at?: string;
   group_name: string;
   nature: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE';
@@ -258,6 +267,10 @@ export interface CreateStockItemPayload {
   sku?: string;
   hsnSac?: string;
   unitId?: string;
+  category?: string;
+  brand?: string;
+  itemType?: string;
+  description?: string;
   gstRate?: number;
   cessRate?: number;
   purchaseRatePaise?: number;

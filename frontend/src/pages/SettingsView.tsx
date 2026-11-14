@@ -276,6 +276,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       'phone',
       'email',
       'bank_name',
+      'banking_name',
       'bank_account_no',
       'bank_ifsc',
       'bank_branch',

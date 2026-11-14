@@ -758,12 +758,15 @@ export function createApiRouter(db: DatabaseSync): Router {
       db.prepare(`
         INSERT INTO stock_items (
           item_id, company_id, item_name, item_code, sku, hsn_sac,
-          unit_id, gst_rate, cess_rate, purchase_rate_paise, selling_rate_paise,
+          unit_id, category, brand, item_type, description,
+          gst_rate, cess_rate, purchase_rate_paise, selling_rate_paise,
           opening_qty, opening_rate_paise, reorder_level, warranty_months, serial_numbers, has_serial_no
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         itemId, companyId, b.itemName.trim(), b.itemCode || null, b.sku || null, b.hsnSac || '84713010',
-        unitId, b.gstRate !== undefined && b.gstRate !== null ? Number(b.gstRate) : 18.00, b.cessRate || 0,
+        unitId, b.category ? String(b.category).trim() : null, b.brand ? String(b.brand).trim() : null,
+        b.itemType || b.item_type || 'PRODUCT', b.description ? String(b.description).trim() : null,
+        b.gstRate !== undefined && b.gstRate !== null ? Number(b.gstRate) : 18.00, b.cessRate || 0,
         rate, sellRate,
         qty, rate, b.reorderLevel || 0,
         warrantyMonths,
@@ -1198,16 +1201,23 @@ export function createApiRouter(db: DatabaseSync): Router {
         return res.status(400).json({ error: 'Selling rate cannot be negative.' });
       }
 
+      const category = b.category !== undefined ? (b.category ? String(b.category).trim() : null) : item.category;
+      const brand = b.brand !== undefined ? (b.brand ? String(b.brand).trim() : null) : item.brand;
+      const itemType = b.itemType !== undefined ? b.itemType : (b.item_type !== undefined ? b.item_type : item.item_type);
+      const description = b.description !== undefined ? (b.description ? String(b.description).trim() : null) : item.description;
+
       db.prepare(`
         UPDATE stock_items SET
           item_name = ?, item_code = ?, sku = ?, hsn_sac = ?,
-          unit_id = ?, gst_rate = ?, cess_rate = ?,
+          unit_id = ?, category = ?, brand = ?, item_type = ?, description = ?,
+          gst_rate = ?, cess_rate = ?,
           purchase_rate_paise = ?, selling_rate_paise = ?,
           reorder_level = ?, warranty_months = ?, has_serial_no = ?
         WHERE item_id = ?
       `).run(
         itemName, itemCode, sku, hsnSac,
-        unitId, gstRate, cessRate,
+        unitId, category, brand, itemType, description,
+        gstRate, cessRate,
         purchaseRatePaise, sellingRatePaise,
         reorderLevel, warrantyMonths, hasSerialNo,
         req.params.id

@@ -29,7 +29,7 @@ export interface PageChunk<T> {
 export const DEFAULT_A4_PAGINATION_CONFIG: PaginationConfig = {
   totalPageHeight: 1020,
   page1HeaderHeight: 290,
-  continuationHeaderHeight: 52,
+  continuationHeaderHeight: 90,
   tableHeaderHeight: 40,
   footerHeight: 330,
   pageNumberHeight: 30,
@@ -40,7 +40,7 @@ export const DEFAULT_A4_PAGINATION_CONFIG: PaginationConfig = {
 export const A4_LANDSCAPE_PAGINATION_CONFIG: PaginationConfig = {
   totalPageHeight: 720,
   page1HeaderHeight: 250,
-  continuationHeaderHeight: 48,
+  continuationHeaderHeight: 80,
   tableHeaderHeight: 38,
   footerHeight: 270,
   pageNumberHeight: 26,
@@ -50,7 +50,7 @@ export const A4_LANDSCAPE_PAGINATION_CONFIG: PaginationConfig = {
 export const A5_PORTRAIT_PAGINATION_CONFIG: PaginationConfig = {
   totalPageHeight: 780,
   page1HeaderHeight: 260,
-  continuationHeaderHeight: 48,
+  continuationHeaderHeight: 85,
   tableHeaderHeight: 38,
   footerHeight: 280,
   pageNumberHeight: 26,
@@ -60,7 +60,7 @@ export const A5_PORTRAIT_PAGINATION_CONFIG: PaginationConfig = {
 export const A5_LANDSCAPE_PAGINATION_CONFIG: PaginationConfig = {
   totalPageHeight: 530,
   page1HeaderHeight: 210,
-  continuationHeaderHeight: 44,
+  continuationHeaderHeight: 75,
   tableHeaderHeight: 36,
   footerHeight: 230,
   pageNumberHeight: 24,
@@ -70,7 +70,7 @@ export const A5_LANDSCAPE_PAGINATION_CONFIG: PaginationConfig = {
 export const LETTER_PORTRAIT_PAGINATION_CONFIG: PaginationConfig = {
   totalPageHeight: 980,
   page1HeaderHeight: 290,
-  continuationHeaderHeight: 52,
+  continuationHeaderHeight: 90,
   tableHeaderHeight: 40,
   footerHeight: 330,
   pageNumberHeight: 30,
@@ -80,7 +80,7 @@ export const LETTER_PORTRAIT_PAGINATION_CONFIG: PaginationConfig = {
 export const LETTER_LANDSCAPE_PAGINATION_CONFIG: PaginationConfig = {
   totalPageHeight: 740,
   page1HeaderHeight: 250,
-  continuationHeaderHeight: 48,
+  continuationHeaderHeight: 80,
   tableHeaderHeight: 38,
   footerHeight: 270,
   pageNumberHeight: 26,

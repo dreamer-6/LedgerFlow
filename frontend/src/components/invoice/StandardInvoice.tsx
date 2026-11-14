@@ -138,8 +138,8 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
         display: 'grid',
         gridTemplateColumns: '1.45fr 1fr',
         gap: '16px',
-        alignItems: 'start',
-        marginBottom: '12px'
+        alignItems: 'center',
+        marginBottom: '10px'
       }}
     >
       {/* Left: Company Identity */}
@@ -373,59 +373,124 @@ export const StandardInvoice: React.FC<StandardInvoiceProps> = ({
     </div>
   );
 
-  // Compact Continuation Header (Page 2..N)
+  // Structured Tally-Style Continuation Header (Page 2..N)
   const renderContinuationHeader = (pageNum: number, totalPages: number) => (
     <div
       style={{
+        border: '1px solid #E2E8F0',
+        borderRadius: '6px',
+        backgroundColor: '#F8FAFC',
+        padding: '8px 12px',
+        marginBottom: '10px',
         display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderBottom: '1.5px solid #0F172A',
-        paddingBottom: '8px',
-        marginBottom: '14px',
-        flexWrap: 'wrap',
+        flexDirection: 'column',
         gap: '6px'
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        {showLogo && data.companyLogo && (
-          <img
-            src={data.companyLogo}
-            alt=""
-            style={{ height: '22px', maxWidth: '80px', objectFit: 'contain' }}
-          />
-        )}
-        <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px' }}>
-          {data.companyName}
-        </span>
-        {hasGstin && (
-          <span style={{ fontSize: '11px', color: '#64748B', fontFamily: 'monospace' }}>
-            GSTIN: {data.companyGstin}
+      {/* Top Row: Company & Invoice Info */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderBottom: '1px solid #E2E8F0',
+          paddingBottom: '6px',
+          flexWrap: 'wrap',
+          gap: '8px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {showLogo && data.companyLogo && (
+            <img
+              src={data.companyLogo}
+              alt=""
+              style={{ maxHeight: '24px', maxWidth: '70px', objectFit: 'contain' }}
+            />
+          )}
+          <div>
+            <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px', marginRight: '8px' }}>
+              {data.companyName}
+            </span>
+            {hasGstin && (
+              <span style={{ fontSize: '10.5px', color: '#64748B', fontFamily: 'monospace', marginRight: '8px' }}>
+                GSTIN: <strong style={{ color: '#0F172A' }}>{data.companyGstin}</strong>
+              </span>
+            )}
+            {hasState && (
+              <span style={{ fontSize: '10.5px', color: '#64748B' }}>
+                State: <strong style={{ color: '#0F172A' }}>{companyStateDisplay}</strong>
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: '#475569' }}>
+          <span
+            style={{
+              backgroundColor: '#EA580C',
+              color: '#FFFFFF',
+              fontWeight: 700,
+              fontSize: '10px',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              letterSpacing: '0.4px',
+              textTransform: 'uppercase'
+            }}
+          >
+            {data.voucherType === 'QUOTATION'
+              ? 'QUOTATION'
+              : data.voucherType === 'PURCHASE'
+                ? 'PURCHASE VOUCHER'
+                : 'TAX INVOICE'}{' '}
+            • Page {pageNum} of {totalPages}
           </span>
-        )}
-        <span style={{ color: '#94A3B8', fontSize: '11px' }}>•</span>
-        <span style={{ color: '#EA580C', fontWeight: 800, fontSize: '11px', letterSpacing: '0.02em', backgroundColor: '#FFF7ED', padding: '1px 6px', borderRadius: '4px', border: '1px solid #FFEDD5' }}>
-          {data.voucherType === 'QUOTATION'
-            ? 'QUOTATION'
-            : data.voucherType === 'PURCHASE'
-              ? 'PURCHASE VOUCHER'
-              : 'TAX INVOICE'}{' '}
-          (Continued)
-        </span>
-      </div>
-      <div style={{ fontSize: '11px', color: '#475569', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-        {data.partyName && (
           <span>
-            Party: <strong style={{ color: '#0F172A' }}>{data.partyName}</strong>
+            {data.voucherType === 'QUOTATION' ? 'Quotation No: ' : 'Invoice No: '}
+            <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{data.voucherNumber}</strong>
           </span>
-        )}
-        <span style={{ color: '#CBD5E1' }}>|</span>
-        <span>
-          {data.voucherType === 'QUOTATION' ? 'Quotation No: ' : 'Invoice No: '}
-          <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{data.voucherNumber}</strong>
-        </span>
-        <span style={{ color: '#CBD5E1' }}>|</span>
-        <span>Date: <strong style={{ color: '#0F172A' }}>{data.voucherDate}</strong></span>
+          <span style={{ color: '#CBD5E1' }}>|</span>
+          <span>
+            Date: <strong style={{ color: '#0F172A' }}>{data.voucherDate}</strong>
+          </span>
+        </div>
+      </div>
+
+      {/* Bottom Row: Customer Billed To Details (Tally Context) */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontSize: '11px',
+          color: '#334155',
+          flexWrap: 'wrap',
+          gap: '6px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '10px', fontWeight: 800, color: '#EA580C', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            BILLED TO:
+          </span>
+          <strong style={{ color: '#0F172A', fontSize: '12px' }}>{data.partyName}</strong>
+          {data.partyAddress && (
+            <span style={{ color: '#64748B', fontSize: '10.5px' }}>
+              — {data.partyAddress.replace(/\n+/g, ', ')}
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '10.5px', flexShrink: 0 }}>
+          {data.partyGstin && (
+            <span>
+              GSTIN: <strong style={{ color: '#0F172A', fontFamily: 'monospace' }}>{data.partyGstin}</strong>
+            </span>
+          )}
+          {data.partyState && (
+            <>
+              <span style={{ color: '#CBD5E1' }}>|</span>
+              <span>State: <strong style={{ color: '#0F172A' }}>{data.partyState}</strong></span>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

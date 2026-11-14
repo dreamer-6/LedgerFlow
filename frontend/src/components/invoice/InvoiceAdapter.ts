@@ -412,7 +412,7 @@ export function normalizeInvoiceData(rawVoucherData: any, company: any): Normali
 
     hasBankDetails: hasBank,
     bankName: company?.bank_name,
-    bankAccountName: company?.legal_name || company?.company_name,
+    bankAccountName: company?.banking_name?.trim() ? company.banking_name.trim() : undefined,
     bankAccountNo: company?.bank_account_no,
     bankIfsc: company?.bank_ifsc,
     bankBranch: company?.bank_branch,
@@ -588,7 +588,7 @@ export function normalizeQuotationData(quotation: any, company: any): Normalized
 
     hasBankDetails: hasBank,
     bankName: company?.bank_name,
-    bankAccountName: company?.legal_name || company?.company_name,
+    bankAccountName: company?.banking_name?.trim() ? company.banking_name.trim() : undefined,
     bankAccountNo: company?.bank_account_no,
     bankIfsc: company?.bank_ifsc,
     bankBranch: company?.bank_branch,

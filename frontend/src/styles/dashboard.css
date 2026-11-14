@@ -524,18 +524,151 @@
 
 /* ─── SALES & PURCHASE OVERVIEW CHART ─── */
 .lf-chart-body {
-  padding: 18px 24px 20px 24px;
+  padding: 16px 20px 20px 20px;
   flex: 1;
   display: flex;
   flex-direction: column;
 }
 
+.lf-chart-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.lf-chart-summary-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--color-surface-subtle, #F8FAFC);
+  border: 1px solid var(--color-border, #E2E8F0);
+  border-radius: 8px;
+  padding: 6px 14px;
+  flex-wrap: wrap;
+}
+
+[data-theme="dark"] .lf-chart-summary-ribbon {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.lf-chart-summary-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+}
+
+.lf-chart-summary-label {
+  color: var(--color-text-muted, #64748B);
+  font-weight: 500;
+}
+
+.lf-chart-summary-val {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-weight: 700;
+  color: var(--color-text, #0F172A);
+}
+
+.lf-chart-summary-val.sales {
+  color: var(--color-primary, #F97316);
+}
+
+.lf-chart-summary-val.purchase {
+  color: var(--color-text-secondary, #475569);
+}
+
+.lf-chart-summary-val.surplus {
+  color: #16A34A;
+}
+
+.lf-chart-summary-val.deficit {
+  color: #DC2626;
+}
+
 .lf-chart-legend {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 16px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.lf-chart-series-filter {
+  display: flex;
+  align-items: center;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E2E8F0);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+[data-theme="dark"] .lf-chart-series-filter {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.lf-chart-series-pill {
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted, #64748B);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.lf-chart-series-pill:hover {
+  color: var(--color-text, #0F172A);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.lf-chart-series-pill.active {
+  background: var(--color-primary, #F97316);
+  color: #FFFFFF;
+}
+
+.lf-chart-scope-pills {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.lf-chart-scope-pill {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--color-border, #E2E8F0);
+  background: var(--color-surface, #FFFFFF);
+  color: var(--color-text-secondary, #475569);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lf-chart-scope-pill:hover {
+  border-color: var(--color-primary, #F97316);
+  color: var(--color-primary, #F97316);
+}
+
+.lf-chart-scope-pill.active {
+  background: #FFF7ED;
+  border-color: var(--color-primary, #F97316);
+  color: var(--color-primary, #F97316);
+  font-weight: 700;
+}
+
+[data-theme="dark"] .lf-chart-scope-pill.active {
+  background: rgba(249, 115, 22, 0.15);
+  border-color: var(--color-primary, #F97316);
+  color: #FB923C;
 }
 
 .lf-legend-item {
@@ -629,7 +762,16 @@
 .lf-bar {
   width: 14px;
   border-radius: 5px 5px 0 0;
-  transition: height 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease;
+  transition: height 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
+}
+
+.lf-bar.wide {
+  width: 22px;
+}
+
+.lf-chart-col:hover .lf-bar {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
 }
 
 .lf-bar.sales {
@@ -1090,6 +1232,7 @@
 }
 
 .lf-stock-total-val {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 26px;
   font-weight: 800;
   color: var(--color-text, #0F172A);
@@ -1196,11 +1339,13 @@
 }
 
 .lf-stock-cat-val {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-weight: 600;
   color: var(--color-text, #0F172A);
 }
 
 .lf-stock-cat-pct {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 11px;
   font-weight: 600;
   color: var(--color-text-muted, #64748B);
@@ -1245,6 +1390,7 @@
 }
 
 .lf-stock-donut-center-val {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 16px;
   font-weight: 800;
   color: var(--color-text, #0F172A);
@@ -1253,6 +1399,7 @@
 }
 
 .lf-stock-donut-center-units {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
   font-size: 11px;
   font-weight: 600;
   color: var(--color-text-muted, #64748B);

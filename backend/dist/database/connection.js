@@ -89,6 +89,10 @@ function getDatabase(customPath) {
     }
     catch { }
     try {
+        db.exec('ALTER TABLE companies ADD COLUMN banking_name TEXT;');
+    }
+    catch { }
+    try {
         db.exec('ALTER TABLE companies ADD COLUMN invoice_settings TEXT;');
     }
     catch { }
@@ -122,6 +126,18 @@ function getDatabase(customPath) {
     catch { }
     try {
         db.exec('ALTER TABLE stock_items ADD COLUMN category TEXT;');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE stock_items ADD COLUMN brand TEXT;');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE stock_items ADD COLUMN item_type TEXT;');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE stock_items ADD COLUMN description TEXT;');
     }
     catch { }
     try {

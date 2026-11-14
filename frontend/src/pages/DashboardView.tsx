@@ -108,6 +108,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [prevMonthStockValPaise, setPrevMonthStockValPaise] = useState<number | null>(null);
 
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
+  const [chartSeries, setChartSeries] = useState<'ALL' | 'SALES' | 'PURCHASE'>('ALL');
   const [isFullscreenChart, setIsFullscreenChart] = useState(false);
   const [activeMenuVoucherId, setActiveMenuVoucherId] = useState<string | null>(null);
   const [cancellingVoucher, setCancellingVoucher] = useState<any | null>(null);
@@ -420,6 +421,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       purchaseTrendPct: pTrend
     };
   }, [data, scope]);
+
+  const periodSalesTotal = useMemo(() => {
+    return chartBars.reduce((sum, b) => sum + b.salesPaise, 0);
+  }, [chartBars]);
+
+  const periodPurchaseTotal = useMemo(() => {
+    return chartBars.reduce((sum, b) => sum + b.purchasePaise, 0);
+  }, [chartBars]);
+
+  const periodNetDiff = periodSalesTotal - periodPurchaseTotal;
 
   // Business Health status indicators based on real explainable measures
   const { hasAnyTransactions, healthScoreDisplay, healthStatusText, healthDescText, healthArcOffset, salesShare, purchaseShare, recvShare, payShare, svcShare } = useMemo(() => {
@@ -1187,28 +1198,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               <div className="lf-panel-controls">
-                <button
-                  type="button"
-                  className="lf-ctrl-btn"
-                  onClick={() => onNavigateReports('daybook')}
-                  title="Filter transactions in Day Book"
-                >
-                  <Filter size={13} /> Day Book
-                </button>
-                <select
-                  value={scope}
-                  onChange={(e) => setScope(e.target.value as DashboardScope)}
-                  className="lf-ctrl-select"
-                  aria-label="Filter scope"
-                >
-                  <option value="Financial Year">Financial Year</option>
-                  <option value="This Quarter">This Quarter</option>
-                  <option value="This Month">This Month</option>
-                  <option value="Previous Month">Previous Month</option>
-                  <option value="This Week">This Week</option>
-                  <option value="Single Day">Single Day</option>
-                  <option value="Custom Date Range">Custom Date Range</option>
-                </select>
+                {/* Dynamic Quick Timeframe Pills */}
+                <div className="lf-chart-scope-pills">
+                  {(
+                    [
+                      { id: 'Financial Year', label: 'FY' },
+                      { id: 'This Quarter', label: 'Quarter' },
+                      { id: 'This Month', label: 'Month' },
+                      { id: 'This Week', label: 'Week' },
+                      { id: 'Single Day', label: 'Today' },
+                      { id: 'Custom Date Range', label: 'Custom' }
+                    ] as const
+                  ).map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`lf-chart-scope-pill ${scope === p.id ? 'active' : ''}`}
+                      onClick={() => setScope(p.id)}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
 
                 {scope === 'Single Day' && (
                   <input
@@ -1242,6 +1253,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                 <button
                   type="button"
+                  className="lf-ctrl-btn"
+                  onClick={() => onNavigateReports('daybook')}
+                  title="Filter transactions in Day Book"
+                >
+                  <Filter size={13} /> Day Book
+                </button>
+
+                <button
+                  type="button"
                   className="lf-ctrl-icon-btn"
                   onClick={() => setIsFullscreenChart((prev) => !prev)}
                   title={isFullscreenChart ? 'Minimize Chart' : 'Maximize Chart'}
@@ -1253,14 +1273,61 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="lf-chart-body">
-              {/* Legend */}
-              <div className="lf-chart-legend">
-                <span className="lf-legend-item">
-                  <span className="lf-legend-dot sales" /> Sales
-                </span>
-                <span className="lf-legend-item">
-                  <span className="lf-legend-dot purchase" /> Purchase
-                </span>
+              {/* Dynamic Top Bar: Real-time Stats Ribbon & Interactive Series Filter */}
+              <div className="lf-chart-top-bar">
+                <div className="lf-chart-summary-ribbon">
+                  {chartSeries !== 'PURCHASE' && (
+                    <div className="lf-chart-summary-stat">
+                      <span className="lf-legend-dot sales" />
+                      <span className="lf-chart-summary-label">Sales:</span>
+                      <span className="lf-chart-summary-val sales">{formatINR(periodSalesTotal)}</span>
+                    </div>
+                  )}
+
+                  {chartSeries !== 'SALES' && (
+                    <div className="lf-chart-summary-stat">
+                      <span className="lf-legend-dot purchase" />
+                      <span className="lf-chart-summary-label">Purchase:</span>
+                      <span className="lf-chart-summary-val purchase">{formatINR(periodPurchaseTotal)}</span>
+                    </div>
+                  )}
+
+                  {chartSeries === 'ALL' && (
+                    <div className="lf-chart-summary-stat">
+                      <span className="lf-chart-summary-label">Net:</span>
+                      <span className={`lf-chart-summary-val ${periodNetDiff >= 0 ? 'surplus' : 'deficit'}`}>
+                        {periodNetDiff >= 0 ? '+' : ''}{formatINR(periodNetDiff)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Series Filter & Legend */}
+                <div className="lf-chart-legend">
+                  <div className="lf-chart-series-filter" role="group" aria-label="Chart series selection">
+                    <button
+                      type="button"
+                      className={`lf-chart-series-pill ${chartSeries === 'ALL' ? 'active' : ''}`}
+                      onClick={() => setChartSeries('ALL')}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      className={`lf-chart-series-pill ${chartSeries === 'SALES' ? 'active' : ''}`}
+                      onClick={() => setChartSeries('SALES')}
+                    >
+                      Sales
+                    </button>
+                    <button
+                      type="button"
+                      className={`lf-chart-series-pill ${chartSeries === 'PURCHASE' ? 'active' : ''}`}
+                      onClick={() => setChartSeries('PURCHASE')}
+                    >
+                      Purchase
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Plot Area */}
@@ -1303,11 +1370,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
                   )}
 
-                  {/* 6 Grouped month columns */}
+                  {/* Grouped / Filtered bar columns */}
                   {chartBars.map((bar, idx) => {
                     const sHeight = Math.max(3, Math.round((bar.salesPaise / yMax) * 145));
                     const pHeight = Math.max(3, Math.round((bar.purchasePaise / yMax) * 145));
                     const isHovered = hoveredBarIndex === idx;
+                    const netColDiff = bar.salesPaise - bar.purchasePaise;
 
                     return (
                       <div
@@ -1316,46 +1384,76 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         onMouseEnter={() => setHoveredBarIndex(idx)}
                         onMouseLeave={() => setHoveredBarIndex(null)}
                       >
-                        {/* Hover Tooltip matching Dashboard.png dark card */}
+                        {/* Hover Tooltip with rich comparative metrics */}
                         {isHovered && (
                           <div className="lf-chart-tooltip">
                             <div className="lf-chart-tooltip-month">
                               {bar.monthName}, {bar.key.split('-')[0]}
                             </div>
-                            <div className="lf-chart-tooltip-row">
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#F97316' }} />
-                                Sales
-                              </span>
-                              <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                                {formatINR(bar.salesPaise)}
-                              </span>
-                            </div>
-                            <div className="lf-chart-tooltip-row">
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#E2D9D0' }} />
-                                Purchase
-                              </span>
-                              <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                                {formatINR(bar.purchasePaise)}
-                              </span>
-                            </div>
+                            {chartSeries !== 'PURCHASE' && (
+                              <div className="lf-chart-tooltip-row">
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#F97316' }} />
+                                  Sales
+                                </span>
+                                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                                  {formatINR(bar.salesPaise)}
+                                </span>
+                              </div>
+                            )}
+                            {chartSeries !== 'SALES' && (
+                              <div className="lf-chart-tooltip-row">
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#E2D9D0' }} />
+                                  Purchase
+                                </span>
+                                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                                  {formatINR(bar.purchasePaise)}
+                                </span>
+                              </div>
+                            )}
+                            {chartSeries === 'ALL' && (
+                              <div
+                                className="lf-chart-tooltip-row"
+                                style={{
+                                  borderTop: '1px dashed rgba(255, 255, 255, 0.15)',
+                                  marginTop: 4,
+                                  paddingTop: 4,
+                                  fontSize: '10.5px'
+                                }}
+                              >
+                                <span style={{ color: 'rgba(255, 255, 255, 0.7)' }}>Variance</span>
+                                <span
+                                  style={{
+                                    fontWeight: 700,
+                                    fontVariantNumeric: 'tabular-nums',
+                                    color: netColDiff >= 0 ? '#4ADE80' : '#F87171'
+                                  }}
+                                >
+                                  {netColDiff >= 0 ? '+' : ''}{formatINR(netColDiff)}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
 
                         <div className="lf-chart-col-bars">
                           {/* Sales Bar */}
-                          <div
-                            className="lf-bar sales"
-                            style={{ height: `${sHeight}px` }}
-                            title={`Sales: ${formatINR(bar.salesPaise)}`}
-                          />
+                          {chartSeries !== 'PURCHASE' && (
+                            <div
+                              className={`lf-bar sales ${chartSeries === 'SALES' ? 'wide' : ''}`}
+                              style={{ height: `${sHeight}px` }}
+                              title={`Sales: ${formatINR(bar.salesPaise)}`}
+                            />
+                          )}
                           {/* Purchase Bar */}
-                          <div
-                            className="lf-bar purchase"
-                            style={{ height: `${pHeight}px` }}
-                            title={`Purchase: ${formatINR(bar.purchasePaise)}`}
-                          />
+                          {chartSeries !== 'SALES' && (
+                            <div
+                              className={`lf-bar purchase ${chartSeries === 'PURCHASE' ? 'wide' : ''}`}
+                              style={{ height: `${pHeight}px` }}
+                              title={`Purchase: ${formatINR(bar.purchasePaise)}`}
+                            />
+                          )}
                         </div>
                         <span className="lf-chart-month-label">{bar.monthName}</span>
                       </div>

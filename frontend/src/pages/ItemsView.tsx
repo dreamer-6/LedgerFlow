@@ -31,7 +31,10 @@ import {
   Upload,
   Download,
   Info,
-  Barcode
+  Barcode,
+  FolderPlus,
+  Tag,
+  PlusCircle
 } from 'lucide-react';
 import { SerialNumberRegisterView } from './SerialNumberRegisterView';
 
@@ -197,12 +200,27 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
   // --------------------------------------------------------------------------
   const [itemName, setItemName] = useState<string>('');
   const [itemCode, setItemCode] = useState<string>('');
-  const [itemType, setItemType] = useState<'PRODUCT' | 'SERVICE'>('PRODUCT');
+  const [itemType, setItemType] = useState<string>('PRODUCT');
   const [category, setCategory] = useState<string>('Processors');
   const [brand, setBrand] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [hsnSac, setHsnSac] = useState<string>('84713010');
   const [unitId, setUnitId] = useState<string>('unit_nos');
+
+  // Dynamic user-created categories, brands, and item types
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [customBrands, setCustomBrands] = useState<string[]>([]);
+  const [customItemTypes, setCustomItemTypes] = useState<string[]>([]);
+
+  // Modals for creating new category, brand, and item type on the fly
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState<boolean>(false);
+  const [newCategoryName, setNewCategoryName] = useState<string>('');
+
+  const [showAddBrandModal, setShowAddBrandModal] = useState<boolean>(false);
+  const [newBrandName, setNewBrandName] = useState<string>('');
+
+  const [showAddItemTypeModal, setShowAddItemTypeModal] = useState<boolean>(false);
+  const [newItemTypeName, setNewItemTypeName] = useState<string>('');
 
   // Inventory Details
   const [openingQty, setOpeningQty] = useState<string>('0');
@@ -321,8 +339,53 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
     return `ITM-${cleanId.slice(-3).padStart(3, '0').toUpperCase()}`;
   };
 
-  // Derive Category from Item
+  // Dynamic lists of available Categories, Brands, and Item Types
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>();
+    PRESET_CATEGORIES.filter((c) => c !== 'All Categories').forEach((c) => set.add(c));
+    items.forEach((i) => {
+      if (i.category && i.category.trim()) set.add(i.category.trim());
+    });
+    customCategories.forEach((c) => set.add(c));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [items, customCategories]);
+
+  const availableBrands = useMemo(() => {
+    const set = new Set<string>();
+    PRESET_BRANDS.filter((b) => b !== 'All Brands').forEach((b) => set.add(b));
+    items.forEach((i) => {
+      if (i.brand && i.brand.trim()) set.add(i.brand.trim());
+    });
+    customBrands.forEach((b) => set.add(b));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [items, customBrands]);
+
+  const availableItemTypes = useMemo(() => {
+    const list = [
+      { id: 'PRODUCT', label: 'Product (Stock Item)' },
+      { id: 'SERVICE', label: 'Service (Non-Stock)' },
+      { id: 'RAW_MATERIAL', label: 'Raw Material' },
+      { id: 'FINISHED_GOODS', label: 'Finished Goods' },
+      { id: 'CONSUMABLE', label: 'Consumables' },
+      { id: 'CAPITAL_GOODS', label: 'Capital Good / Asset' },
+      { id: 'TRADING', label: 'Trading Good' }
+    ];
+    customItemTypes.forEach((t) => {
+      if (!list.some((x) => x.id === t)) {
+        list.push({ id: t, label: t });
+      }
+    });
+    items.forEach((i) => {
+      if (i.item_type && !list.some((x) => x.id === i.item_type)) {
+        list.push({ id: i.item_type, label: i.item_type });
+      }
+    });
+    return list;
+  }, [items, customItemTypes]);
+
+  // Derive Category from Item (checks saved item.category first)
   const deriveCategory = (item: StockItem) => {
+    if (item.category && item.category.trim()) return item.category.trim();
     const name = item.item_name.toLowerCase();
     if (item.hsn_sac?.startsWith('99') || name.includes('service') || name.includes('installation') || name.includes('setup')) {
       return 'Services';
@@ -338,10 +401,11 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
     return 'General Hardware';
   };
 
-  // Derive Brand from Item (returns '-' if not identifiable, no fake fallback)
+  // Derive Brand from Item (checks saved item.brand first)
   const deriveBrand = (item: StockItem) => {
+    if (item.brand && item.brand.trim()) return item.brand.trim();
     const name = item.item_name.toLowerCase();
-    for (const b of PRESET_BRANDS) {
+    for (const b of availableBrands) {
       if (b !== 'All Brands' && name.includes(b.toLowerCase())) return b;
     }
     return '-';
@@ -555,10 +619,10 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
     setItemName(item.item_name);
     setItemCode(item.item_code || formatItemCode(item));
     const isService = item.hsn_sac?.startsWith('99') || item.item_name?.toLowerCase().includes('service');
-    setItemType(isService ? 'SERVICE' : 'PRODUCT');
-    setCategory(deriveCategory(item));
-    setBrand(deriveBrand(item));
-    setDescription('');
+    setItemType(item.item_type || (isService ? 'SERVICE' : 'PRODUCT'));
+    setCategory(item.category || deriveCategory(item));
+    setBrand(item.brand || deriveBrand(item));
+    setDescription(item.description || '');
     setHsnSac(item.hsn_sac || '84713010');
     setUnitId(item.unit_id || (units.length > 0 ? units[0].unit_id : 'unit_nos'));
     setOpeningQty(String(item.opening_qty || 0));
@@ -658,7 +722,11 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
       godownId: godownId || undefined,
       serialNumbers: trackSerial && serialNumbers.trim() ? serialNumbers.trim() : undefined,
       hasSerialNo: trackSerial,
-      warrantyMonths: wMonths
+      warrantyMonths: wMonths,
+      category: category.trim() || undefined,
+      brand: brand.trim() || undefined,
+      item_type: itemType.trim() || undefined,
+      description: description.trim() || undefined
     };
 
     try {
@@ -891,56 +959,146 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
               {/* Row 3: Item Type & Category & Brand */}
               <div className="item-form-row item-form-row-3">
                 <div className="item-field-group">
-                  <label className="item-field-label">
-                    Item Type <span className="required">*</span>
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <label className="item-field-label" style={{ marginBottom: 0 }}>
+                      Item Type <span className="required">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewItemTypeName('');
+                        setShowAddItemTypeModal(true);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--color-primary, #EA580C)',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        padding: 0
+                      }}
+                    >
+                      + Add Type
+                    </button>
+                  </div>
                   <select
                     className="item-select"
                     value={itemType}
                     onChange={(e) => {
-                      const t = e.target.value as 'PRODUCT' | 'SERVICE';
+                      if (e.target.value === '__ADD_NEW__') {
+                        setNewItemTypeName('');
+                        setShowAddItemTypeModal(true);
+                        return;
+                      }
+                      const t = e.target.value;
                       setItemType(t);
                       if (t === 'SERVICE') {
                         setHsnSac('9987');
                         setOpeningQty('0');
                         setCategory('Services');
-                      } else {
+                      } else if (t === 'PRODUCT' && hsnSac === '9987') {
                         setHsnSac('84713010');
-                        setCategory('Processors');
                       }
                     }}
                   >
-                    <option value="PRODUCT">Product (Stock Item)</option>
-                    <option value="SERVICE">Service (Non-Stock)</option>
+                    {availableItemTypes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label}
+                      </option>
+                    ))}
+                    <option value="__ADD_NEW__">+ Create New Item Type...</option>
                   </select>
                 </div>
 
                 <div className="item-field-group">
-                  <label className="item-field-label">
-                    Category <span className="required">*</span>
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <label className="item-field-label" style={{ marginBottom: 0 }}>
+                      Category <span className="required">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewCategoryName('');
+                        setShowAddCategoryModal(true);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--color-primary, #EA580C)',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        padding: 0
+                      }}
+                    >
+                      + Add Category
+                    </button>
+                  </div>
                   <select
                     className="item-select"
                     value={category}
-                    onChange={(e) => setCategory(e.target.value)}
+                    onChange={(e) => {
+                      if (e.target.value === '__ADD_NEW__') {
+                        setNewCategoryName('');
+                        setShowAddCategoryModal(true);
+                        return;
+                      }
+                      setCategory(e.target.value);
+                    }}
                   >
-                    {PRESET_CATEGORIES.filter(c => c !== 'All Categories').map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                    {availableCategories.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
                     ))}
+                    <option value="__ADD_NEW__">+ Create New Category...</option>
                   </select>
                 </div>
 
                 <div className="item-field-group">
-                  <label className="item-field-label">Brand (Optional)</label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <label className="item-field-label" style={{ marginBottom: 0 }}>
+                      Brand (Optional)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewBrandName('');
+                        setShowAddBrandModal(true);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--color-primary, #EA580C)',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        padding: 0
+                      }}
+                    >
+                      + Add Brand
+                    </button>
+                  </div>
                   <select
                     className="item-select"
                     value={brand}
-                    onChange={(e) => setBrand(e.target.value)}
+                    onChange={(e) => {
+                      if (e.target.value === '__ADD_NEW__') {
+                        setNewBrandName('');
+                        setShowAddBrandModal(true);
+                        return;
+                      }
+                      setBrand(e.target.value);
+                    }}
                   >
                     <option value="">Select Brand</option>
-                    {PRESET_BRANDS.filter(b => b !== 'All Brands').map((b) => (
-                      <option key={b} value={b}>{b}</option>
+                    {availableBrands.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
                     ))}
+                    <option value="__ADD_NEW__">+ Create New Brand...</option>
                   </select>
                 </div>
               </div>
@@ -1584,6 +1742,228 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
         </div>
       )}
 
+      {/* Create New Item Type Modal */}
+      {showAddItemTypeModal && (
+        <div className="item-modal-overlay" onClick={() => setShowAddItemTypeModal(false)}>
+          <div className="item-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: 'rgba(234, 88, 12, 0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#EA580C'
+                }}
+              >
+                <PlusCircle size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Add Custom Item Type</h3>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Create a new classification type for your items.
+                </p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const trimmed = newItemTypeName.trim();
+                if (!trimmed) return;
+                if (!customItemTypes.includes(trimmed)) {
+                  setCustomItemTypes((prev) => [...prev, trimmed]);
+                }
+                setItemType(trimmed);
+                setShowAddItemTypeModal(false);
+                setNewItemTypeName('');
+                setToast({ message: `Item type "${trimmed}" created and selected.`, type: 'success' });
+              }}
+            >
+              <div style={{ marginBottom: '18px' }}>
+                <label className="item-field-label">Item Type Name</label>
+                <input
+                  type="text"
+                  autoFocus
+                  className="item-input"
+                  placeholder="e.g. Spare Part, Raw Material, Accessory..."
+                  value={newItemTypeName}
+                  onChange={(e) => setNewItemTypeName(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="items-btn-secondary"
+                  onClick={() => setShowAddItemTypeModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="items-add-btn"
+                  disabled={!newItemTypeName.trim()}
+                >
+                  Add & Select
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create New Category Modal */}
+      {showAddCategoryModal && (
+        <div className="item-modal-overlay" onClick={() => setShowAddCategoryModal(false)}>
+          <div className="item-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: 'rgba(234, 88, 12, 0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#EA580C'
+                }}
+              >
+                <FolderPlus size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Add New Category</h3>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Create a custom item category for your inventory.
+                </p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const trimmed = newCategoryName.trim();
+                if (!trimmed) return;
+                if (!customCategories.includes(trimmed)) {
+                  setCustomCategories((prev) => [...prev, trimmed]);
+                }
+                setCategory(trimmed);
+                setShowAddCategoryModal(false);
+                setNewCategoryName('');
+                setToast({ message: `Category "${trimmed}" created and selected.`, type: 'success' });
+              }}
+            >
+              <div style={{ marginBottom: '18px' }}>
+                <label className="item-field-label">Category Name</label>
+                <input
+                  type="text"
+                  autoFocus
+                  className="item-input"
+                  placeholder="e.g. Keyboards, Cooling, Accessories..."
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="items-btn-secondary"
+                  onClick={() => setShowAddCategoryModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="items-add-btn"
+                  disabled={!newCategoryName.trim()}
+                >
+                  Add & Select
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create New Brand Modal */}
+      {showAddBrandModal && (
+        <div className="item-modal-overlay" onClick={() => setShowAddBrandModal(false)}>
+          <div className="item-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '50%',
+                  background: 'rgba(234, 88, 12, 0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#EA580C'
+                }}
+              >
+                <Tag size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>Add New Brand</h3>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Create a custom brand name for your stock items.
+                </p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const trimmed = newBrandName.trim();
+                if (!trimmed) return;
+                if (!customBrands.includes(trimmed)) {
+                  setCustomBrands((prev) => [...prev, trimmed]);
+                }
+                setBrand(trimmed);
+                setShowAddBrandModal(false);
+                setNewBrandName('');
+                setToast({ message: `Brand "${trimmed}" created and selected.`, type: 'success' });
+              }}
+            >
+              <div style={{ marginBottom: '18px' }}>
+                <label className="item-field-label">Brand Name</label>
+                <input
+                  type="text"
+                  autoFocus
+                  className="item-input"
+                  placeholder="e.g. Logitech, Crucial, Gigabyte..."
+                  value={newBrandName}
+                  onChange={(e) => setNewBrandName(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="items-btn-secondary"
+                  onClick={() => setShowAddBrandModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="items-add-btn"
+                  disabled={!newBrandName.trim()}
+                >
+                  Add & Select
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="items-header">
         <div className="items-header-left">
@@ -1615,7 +1995,8 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
               setCurrentPage(1);
             }}
           >
-            {PRESET_CATEGORIES.map((c) => (
+            <option value="All Categories">All Categories</option>
+            {availableCategories.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
@@ -1629,7 +2010,8 @@ export const ItemsView: React.FC<ItemsViewProps> = ({
               setCurrentPage(1);
             }}
           >
-            {PRESET_BRANDS.map((b) => (
+            <option value="All Brands">All Brands</option>
+            {availableBrands.map((b) => (
               <option key={b} value={b}>{b}</option>
             ))}
           </select>
