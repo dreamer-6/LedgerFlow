@@ -5,6 +5,8 @@ import {
   BarChart2,
   BarChart3,
   ShoppingBag,
+  ShoppingCart,
+  Percent,
   Users,
   Wallet,
   Receipt,
@@ -69,7 +71,45 @@ function formatDateDisplay(dateStr?: string): string {
   return `${d.getDate()} ${MONTHS_ABBR[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+/**
+ * Convert data points to smooth Catmull-Rom cubic bezier spline path
+ */
+function getSplinePath(points: { x: number; y: number }[]): string {
+  if (points.length === 0) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+
+  let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+function getSplineAreaPath(points: { x: number; y: number }[], bottomY: number): string {
+  if (points.length < 2) return '';
+  const lineD = getSplinePath(points);
+  const lastP = points[points.length - 1];
+  const firstP = points[0];
+  return `${lineD} L ${lastP.x.toFixed(1)} ${bottomY.toFixed(1)} L ${firstP.x.toFixed(1)} ${bottomY.toFixed(1)} Z`;
+}
+
 export type DashboardScope =
+  | '7D'
+  | '30D'
+  | '3M'
+  | '6M'
+  | '1Y'
   | 'Financial Year'
   | 'This Quarter'
   | 'This Month'
@@ -95,7 +135,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const todayDefault = currentDate || new Date().toISOString().split('T')[0];
-  const [scope, setScope] = useState<DashboardScope>('Financial Year');
+  const [scope, setScope] = useState<DashboardScope>('6M');
   const [selectedDate, setSelectedDate] = useState<string>(todayDefault);
   const [customFromDate, setCustomFromDate] = useState<string>(todayDefault);
   const [customToDate, setCustomToDate] = useState<string>(todayDefault);
@@ -305,6 +345,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const totalPurchasePaise = useMemo(() => {
     return data?.totalPurchasesPaise ?? 0;
   }, [data]);
+
+  const prevSalesPaise = data?.prevSalesPaise ?? 0;
+  const prevPurchasePaise = data?.prevPurchasesPaise ?? 0;
 
   const receivablesPaise = data?.receivablesPaise ?? 0;
   const payablesPaise = data?.payablesPaise ?? 0;
@@ -1184,281 +1227,293 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
 
-          {/* 3B. SALES & PURCHASE OVERVIEW CHART */}
-          <div className="lf-panel-card">
-            <div className="lf-panel-header">
-              <div className="lf-panel-header-left">
-                <div className="lf-panel-icon">
-                  <BarChart2 size={18} strokeWidth={2.2} />
+          {/* 3B. SALES & PURCHASE OVERVIEW REDESIGN (UI-048) */}
+          <div className="lf-spline-overview-card">
+            {/* Header */}
+            <div className="lf-spline-header">
+              <div className="lf-spline-title-group">
+                <div className="lf-spline-icon-box">
+                  <BarChart2 size={20} strokeWidth={2.2} />
                 </div>
-                <span className="lf-panel-title">Sales & Purchase Overview</span>
-                <span className="lf-panel-info-icon" title="Comparative trend of posted sales and purchase transactions with previous-period comparison">
-                  <Info size={14} />
-                </span>
+                <div>
+                  <div className="lf-spline-title">Sales & Purchase Overview</div>
+                  <div className="lf-spline-subtitle">Track sales, purchases and business performance.</div>
+                </div>
               </div>
 
-              <div className="lf-panel-controls">
-                {/* Dynamic Quick Timeframe Pills */}
-                <div className="lf-chart-scope-pills">
-                  {(
-                    [
-                      { id: 'Financial Year', label: 'FY' },
-                      { id: 'This Quarter', label: 'Quarter' },
-                      { id: 'This Month', label: 'Month' },
-                      { id: 'This Week', label: 'Week' },
-                      { id: 'Single Day', label: 'Today' },
-                      { id: 'Custom Date Range', label: 'Custom' }
-                    ] as const
-                  ).map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      className={`lf-chart-scope-pill ${scope === p.id ? 'active' : ''}`}
-                      onClick={() => setScope(p.id)}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-
-                {scope === 'Single Day' && (
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="lf-ctrl-input"
-                    style={{ padding: '2px 6px', fontSize: '11.5px', borderRadius: 4, border: '1px solid var(--color-border)' }}
-                  />
-                )}
-
-                {scope === 'Custom Date Range' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <input
-                      type="date"
-                      value={customFromDate}
-                      onChange={(e) => setCustomFromDate(e.target.value)}
-                      className="lf-ctrl-input"
-                      style={{ padding: '2px 6px', fontSize: '11.5px', borderRadius: 4, border: '1px solid var(--color-border)' }}
-                    />
-                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>to</span>
-                    <input
-                      type="date"
-                      value={customToDate}
-                      onChange={(e) => setCustomToDate(e.target.value)}
-                      className="lf-ctrl-input"
-                      style={{ padding: '2px 6px', fontSize: '11.5px', borderRadius: 4, border: '1px solid var(--color-border)' }}
-                    />
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  className="lf-ctrl-btn"
-                  onClick={() => onNavigateReports('daybook')}
-                  title="Filter transactions in Day Book"
-                >
-                  <Filter size={13} /> Day Book
-                </button>
-
-                <button
-                  type="button"
-                  className="lf-ctrl-icon-btn"
-                  onClick={() => setIsFullscreenChart((prev) => !prev)}
-                  title={isFullscreenChart ? 'Minimize Chart' : 'Maximize Chart'}
-                  aria-label="Expand chart"
-                >
-                  <Maximize2 size={14} />
-                </button>
+              {/* Time Filters */}
+              <div className="lf-spline-time-pills" role="group" aria-label="Overview timeframe">
+                {(
+                  [
+                    { id: '7D', label: '7D' },
+                    { id: '30D', label: '30D' },
+                    { id: '3M', label: '3M' },
+                    { id: '6M', label: '6M' },
+                    { id: '1Y', label: '1Y' }
+                  ] as const
+                ).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`lf-spline-time-btn ${scope === p.id ? 'active' : ''}`}
+                    onClick={() => setScope(p.id)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="lf-chart-body">
-              {/* Dynamic Top Bar: Real-time Stats Ribbon & Interactive Series Filter */}
-              <div className="lf-chart-top-bar">
-                <div className="lf-chart-summary-ribbon">
-                  {chartSeries !== 'PURCHASE' && (
-                    <div className="lf-chart-summary-stat">
-                      <span className="lf-legend-dot sales" />
-                      <span className="lf-chart-summary-label">Sales:</span>
-                      <span className="lf-chart-summary-val sales">{formatINR(periodSalesTotal)}</span>
-                    </div>
-                  )}
+            {/* Main Smooth Spline Line Chart Area */}
+            {(() => {
+              const count = chartBars.length;
+              const svgW = 660;
+              const svgH = 190;
+              const padX = 24;
+              const padY = 16;
+              const plotW = svgW - padX * 2;
+              const plotH = svgH - padY * 2;
+              const effectiveMax = Math.max(yMax * 1.15, 100000);
 
-                  {chartSeries !== 'SALES' && (
-                    <div className="lf-chart-summary-stat">
-                      <span className="lf-legend-dot purchase" />
-                      <span className="lf-chart-summary-label">Purchase:</span>
-                      <span className="lf-chart-summary-val purchase">{formatINR(periodPurchaseTotal)}</span>
-                    </div>
-                  )}
+              const salesPoints = chartBars.map((b, i) => {
+                const x = count <= 1 ? svgW / 2 : padX + (i / (count - 1)) * plotW;
+                const y = padY + (1 - Math.min(1, b.salesPaise / effectiveMax)) * plotH;
+                return { x, y };
+              });
 
-                  {chartSeries === 'ALL' && (
-                    <div className="lf-chart-summary-stat">
-                      <span className="lf-chart-summary-label">Net:</span>
-                      <span className={`lf-chart-summary-val ${periodNetDiff >= 0 ? 'surplus' : 'deficit'}`}>
-                        {periodNetDiff >= 0 ? '+' : ''}{formatINR(periodNetDiff)}
-                      </span>
-                    </div>
-                  )}
-                </div>
+              const purchasePoints = chartBars.map((b, i) => {
+                const x = count <= 1 ? svgW / 2 : padX + (i / (count - 1)) * plotW;
+                const y = padY + (1 - Math.min(1, b.purchasePaise / effectiveMax)) * plotH;
+                return { x, y };
+              });
 
-                {/* Series Filter & Legend */}
-                <div className="lf-chart-legend">
-                  <div className="lf-chart-series-filter" role="group" aria-label="Chart series selection">
-                    <button
-                      type="button"
-                      className={`lf-chart-series-pill ${chartSeries === 'ALL' ? 'active' : ''}`}
-                      onClick={() => setChartSeries('ALL')}
-                    >
-                      All
-                    </button>
-                    <button
-                      type="button"
-                      className={`lf-chart-series-pill ${chartSeries === 'SALES' ? 'active' : ''}`}
-                      onClick={() => setChartSeries('SALES')}
-                    >
-                      Sales
-                    </button>
-                    <button
-                      type="button"
-                      className={`lf-chart-series-pill ${chartSeries === 'PURCHASE' ? 'active' : ''}`}
-                      onClick={() => setChartSeries('PURCHASE')}
-                    >
-                      Purchase
-                    </button>
+              const salesSpline = getSplinePath(salesPoints);
+              const salesArea = getSplineAreaPath(salesPoints, padY + plotH);
+              const purchaseSpline = getSplinePath(purchasePoints);
+              const purchaseArea = getSplineAreaPath(purchasePoints, padY + plotH);
+
+              const hoveredBar = hoveredBarIndex !== null && chartBars[hoveredBarIndex] ? chartBars[hoveredBarIndex] : null;
+              const hoveredSP = hoveredBarIndex !== null && salesPoints[hoveredBarIndex] ? salesPoints[hoveredBarIndex] : null;
+              const hoveredPP = hoveredBarIndex !== null && purchasePoints[hoveredBarIndex] ? purchasePoints[hoveredBarIndex] : null;
+
+              return (
+                <div className="lf-spline-canvas-area">
+                  {/* Y-Axis scale */}
+                  <div className="lf-spline-y-axis">
+                    {yLabels.map((lbl, idx) => (
+                      <span key={idx}>{lbl}</span>
+                    ))}
                   </div>
+
+                  {/* SVG Plot Wrapper */}
+                  <div className="lf-spline-plot-wrapper">
+                    {/* Horizontal Gridlines */}
+                    {[0, 0.25, 0.5, 0.75, 1].map((step, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          right: 0,
+                          top: `${padY + (1 - step) * plotH}px`,
+                          borderTop: '1px dashed var(--color-border, #E2E8F0)',
+                          pointerEvents: 'none'
+                        }}
+                      />
+                    ))}
+
+                    {/* SVG Paths */}
+                    <svg className="lf-spline-svg" viewBox={`0 0 ${svgW} ${svgH}`} preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="lfSplineSalesGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#FF641F" stopOpacity="0.22" />
+                          <stop offset="100%" stopColor="#FF641F" stopOpacity="0.01" />
+                        </linearGradient>
+                        <linearGradient id="lfSplinePurchaseGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.18" />
+                          <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.01" />
+                        </linearGradient>
+                      </defs>
+
+                      {/* Area Fills */}
+                      {salesArea && <path d={salesArea} fill="url(#lfSplineSalesGrad)" />}
+                      {purchaseArea && <path d={purchaseArea} fill="url(#lfSplinePurchaseGrad)" />}
+
+                      {/* Stroke Lines */}
+                      {salesSpline && (
+                        <path
+                          d={salesSpline}
+                          fill="none"
+                          stroke="#FF641F"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+                      {purchaseSpline && (
+                        <path
+                          d={purchaseSpline}
+                          fill="none"
+                          stroke="#3B82F6"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+
+                      {/* Vertical Indicator Guide Line on Hover */}
+                      {hoveredSP && (
+                        <line
+                          x1={hoveredSP.x}
+                          y1={padY}
+                          x2={hoveredSP.x}
+                          y2={padY + plotH}
+                          stroke="#94A3B8"
+                          strokeWidth="1.5"
+                          strokeDasharray="4 4"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      )}
+
+                      {/* Circular Dots */}
+                      {salesPoints.map((pt, i) => (
+                        <circle
+                          key={`s-dot-${i}`}
+                          cx={pt.x}
+                          cy={pt.y}
+                          r={hoveredBarIndex === i ? 5.5 : 4}
+                          fill="#FFFFFF"
+                          stroke="#FF641F"
+                          strokeWidth="2.5"
+                          style={{ transition: 'all 0.15s ease' }}
+                        />
+                      ))}
+                      {purchasePoints.map((pt, i) => (
+                        <circle
+                          key={`p-dot-${i}`}
+                          cx={pt.x}
+                          cy={pt.y}
+                          r={hoveredBarIndex === i ? 5.5 : 4}
+                          fill="#FFFFFF"
+                          stroke="#3B82F6"
+                          strokeWidth="2.5"
+                          style={{ transition: 'all 0.15s ease' }}
+                        />
+                      ))}
+
+                      {/* Interactive Hover Trigger Slices */}
+                      {chartBars.map((_, i) => {
+                        const x = count <= 1 ? svgW / 2 : padX + (i / (count - 1)) * plotW;
+                        const sliceW = count <= 1 ? plotW : plotW / (count - 1);
+                        return (
+                          <rect
+                            key={`slice-${i}`}
+                            x={Math.max(0, x - sliceW / 2)}
+                            y={0}
+                            width={sliceW}
+                            height={svgH}
+                            fill="transparent"
+                            style={{ cursor: 'pointer' }}
+                            onMouseEnter={() => setHoveredBarIndex(i)}
+                            onMouseLeave={() => setHoveredBarIndex(null)}
+                          />
+                        );
+                      })}
+                    </svg>
+
+                    {/* Interactive Tooltip Card matching Mockup */}
+                    {hoveredBar && hoveredSP && hoveredPP && (
+                      <div
+                        className="lf-spline-tooltip"
+                        style={{
+                          left: `${(hoveredSP.x / svgW) * 100}%`,
+                          top: `${Math.min(hoveredSP.y, hoveredPP.y)}px`
+                        }}
+                      >
+                        <div className="lf-spline-tooltip-title">{hoveredBar.monthName}</div>
+                        <div className="lf-spline-tooltip-row">
+                          <span className="lf-spline-tooltip-label">
+                            <span className="lf-spline-tooltip-dot" style={{ backgroundColor: '#FF641F' }} />
+                            Sales
+                          </span>
+                          <span className="lf-spline-tooltip-val">{formatINR(hoveredBar.salesPaise)}</span>
+                        </div>
+                        <div className="lf-spline-tooltip-row">
+                          <span className="lf-spline-tooltip-label">
+                            <span className="lf-spline-tooltip-dot" style={{ backgroundColor: '#3B82F6' }} />
+                            Purchase
+                          </span>
+                          <span className="lf-spline-tooltip-val">{formatINR(hoveredBar.purchasePaise)}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* X-Axis Month / Date Labels */}
+                    <div className="lf-spline-x-labels">
+                      {chartBars.map((b) => (
+                        <span key={b.key} style={{ flex: 1, textAlign: 'center' }}>
+                          {b.monthName}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Empty State Banner */}
+                    {totalChartVolume === 0 && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '40%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          fontSize: '11.5px',
+                          color: 'var(--color-text-muted)',
+                          backgroundColor: 'var(--color-surface)',
+                          padding: '6px 14px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--color-border)',
+                          pointerEvents: 'none',
+                          zIndex: 5
+                        }}
+                      >
+                        No transactions recorded for this period
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Bottom Summary Bar */}
+            <div className="lf-spline-bottom-bar">
+              {/* Legend on Left */}
+              <div className="lf-spline-legend">
+                <div className="lf-spline-legend-item">
+                  <span className="lf-spline-legend-circle" style={{ backgroundColor: '#FF641F' }} />
+                  <span>Sales</span>
+                </div>
+                <div className="lf-spline-legend-item">
+                  <span className="lf-spline-legend-circle" style={{ backgroundColor: '#3B82F6' }} />
+                  <span>Purchase</span>
                 </div>
               </div>
 
-              {/* Plot Area */}
-              <div className="lf-chart-plot-area">
-                {/* Y-Axis scale */}
-                <div className="lf-chart-y-axis">
-                  {yLabels.map((lbl, idx) => (
-                    <span key={idx}>{lbl}</span>
-                  ))}
+              {/* Gross Profit & Profit Margin Summary on Right */}
+              <div className="lf-spline-summary-pill">
+                <div className="lf-spline-summary-stat">
+                  <BarChart2 size={16} strokeWidth={2.2} color="#64748B" />
+                  <span className="lf-spline-summary-stat-label">Gross Profit</span>
+                  <span className="lf-spline-summary-stat-val">
+                    {formatINR(data?.grossProfitPaise ?? (totalSalesPaise - totalPurchasePaise))}
+                  </span>
                 </div>
-
-                {/* Bars Container with 5 horizontal gridlines */}
-                <div className="lf-chart-bars-container">
-                  {[0, 25, 50, 75, 100].map((pct) => (
-                    <div
-                      key={pct}
-                      className="lf-chart-gridline"
-                      style={{ bottom: `calc(${pct * 0.8}% + 22px)` }}
-                    />
-                  ))}
-
-                  {totalChartVolume === 0 && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '40%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        fontSize: '11.5px',
-                        color: 'var(--color-text-muted)',
-                        backgroundColor: 'var(--color-surface)',
-                        padding: '6px 14px',
-                        borderRadius: '6px',
-                        border: '1px solid var(--color-border)',
-                        pointerEvents: 'none',
-                        zIndex: 5
-                      }}
-                    >
-                      No transactions recorded for this period
-                    </div>
-                  )}
-
-                  {/* Grouped / Filtered bar columns */}
-                  {chartBars.map((bar, idx) => {
-                    const sHeight = Math.max(3, Math.round((bar.salesPaise / yMax) * 145));
-                    const pHeight = Math.max(3, Math.round((bar.purchasePaise / yMax) * 145));
-                    const isHovered = hoveredBarIndex === idx;
-                    const netColDiff = bar.salesPaise - bar.purchasePaise;
-
-                    return (
-                      <div
-                        key={bar.key}
-                        className="lf-chart-col"
-                        onMouseEnter={() => setHoveredBarIndex(idx)}
-                        onMouseLeave={() => setHoveredBarIndex(null)}
-                      >
-                        {/* Hover Tooltip with rich comparative metrics */}
-                        {isHovered && (
-                          <div className="lf-chart-tooltip">
-                            <div className="lf-chart-tooltip-month">
-                              {bar.monthName}, {bar.key.split('-')[0]}
-                            </div>
-                            {chartSeries !== 'PURCHASE' && (
-                              <div className="lf-chart-tooltip-row">
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#F97316' }} />
-                                  Sales
-                                </span>
-                                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                                  {formatINR(bar.salesPaise)}
-                                </span>
-                              </div>
-                            )}
-                            {chartSeries !== 'SALES' && (
-                              <div className="lf-chart-tooltip-row">
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#E2D9D0' }} />
-                                  Purchase
-                                </span>
-                                <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                                  {formatINR(bar.purchasePaise)}
-                                </span>
-                              </div>
-                            )}
-                            {chartSeries === 'ALL' && (
-                              <div
-                                className="lf-chart-tooltip-row"
-                                style={{
-                                  borderTop: '1px dashed rgba(255, 255, 255, 0.15)',
-                                  marginTop: 4,
-                                  paddingTop: 4,
-                                  fontSize: '10.5px'
-                                }}
-                              >
-                                <span style={{ color: 'rgba(255, 255, 255, 0.7)' }}>Variance</span>
-                                <span
-                                  style={{
-                                    fontWeight: 700,
-                                    fontVariantNumeric: 'tabular-nums',
-                                    color: netColDiff >= 0 ? '#4ADE80' : '#F87171'
-                                  }}
-                                >
-                                  {netColDiff >= 0 ? '+' : ''}{formatINR(netColDiff)}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        <div className="lf-chart-col-bars">
-                          {/* Sales Bar */}
-                          {chartSeries !== 'PURCHASE' && (
-                            <div
-                              className={`lf-bar sales ${chartSeries === 'SALES' ? 'wide' : ''}`}
-                              style={{ height: `${sHeight}px` }}
-                              title={`Sales: ${formatINR(bar.salesPaise)}`}
-                            />
-                          )}
-                          {/* Purchase Bar */}
-                          {chartSeries !== 'SALES' && (
-                            <div
-                              className={`lf-bar purchase ${chartSeries === 'PURCHASE' ? 'wide' : ''}`}
-                              style={{ height: `${pHeight}px` }}
-                              title={`Purchase: ${formatINR(bar.purchasePaise)}`}
-                            />
-                          )}
-                        </div>
-                        <span className="lf-chart-month-label">{bar.monthName}</span>
-                      </div>
-                    );
-                  })}
+                <div className="lf-spline-summary-stat">
+                  <Percent size={15} strokeWidth={2.2} color="#64748B" />
+                  <span className="lf-spline-summary-stat-label">Profit Margin</span>
+                  <span className="lf-spline-summary-stat-val">
+                    {data?.profitMarginPct ?? (totalSalesPaise > 0 ? (((totalSalesPaise - totalPurchasePaise) / totalSalesPaise) * 100).toFixed(1) : '0.0')}%
+                  </span>
                 </div>
               </div>
             </div>
@@ -1516,12 +1571,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         vType === 'SALES'
                           ? 'type-sales'
                           : vType === 'PURCHASE'
-                          ? 'type-purchase'
-                          : vType === 'RECEIPT'
-                          ? 'type-receipt'
-                          : vType === 'PAYMENT'
-                          ? 'type-payment'
-                          : 'type-journal';
+                            ? 'type-purchase'
+                            : vType === 'RECEIPT'
+                              ? 'type-receipt'
+                              : vType === 'PAYMENT'
+                                ? 'type-payment'
+                                : 'type-journal';
 
                       const statusStr = (v.status || 'POSTED').toUpperCase();
                       const statusClass =

@@ -25,6 +25,7 @@ export interface ServiceBillCreationViewProps {
   activeFy: FinancialYear | null;
   currentDate?: string;
   editVoucherId?: string | null;
+  linkJobId?: string | null;
   onBack: () => void;
   onPostSuccess?: (voucherId: string) => void;
 }
@@ -45,6 +46,7 @@ export const ServiceBillCreationView: React.FC<ServiceBillCreationViewProps> = (
   activeFy,
   currentDate,
   editVoucherId,
+  linkJobId,
   onBack,
   onPostSuccess
 }) => {
@@ -60,72 +62,67 @@ export const ServiceBillCreationView: React.FC<ServiceBillCreationViewProps> = (
 
   // Section 1: Customer Details
   const [partyId, setPartyId] = useState('');
-  const [phone, setPhone] = useState('+91 98765 43210');
-  const [billingAddress, setBillingAddress] = useState('MG Road, Bangalore - 560001');
+  const [phone, setPhone] = useState('');
+  const [billingAddress, setBillingAddress] = useState('');
+
+  // Pre-fill from linked Service Job if provided
+  useEffect(() => {
+    if (company?.company_id && linkJobId) {
+      api.getServiceJob(company.company_id, linkJobId)
+        .then((j: any) => {
+          if (j) {
+            setPartyId(j.party_id || '');
+            if (j.customer_phone) setPhone(j.customer_phone);
+            if (j.customer_address) setBillingAddress(j.customer_address);
+            if (j.device_type) setDeviceType(j.device_type);
+            if (j.brand) setBrand(j.brand);
+            if (j.model) setModel(j.model);
+            if (j.serial_number) setSerialNumber(j.serial_number);
+            if (j.asset_tag) setAssetTag(j.asset_tag);
+            if (j.problem_reported) setProblemReported(j.problem_reported);
+            if (j.diagnosis) setDiagnosis(j.diagnosis);
+            if (j.job_number) setReferenceNo(j.job_number);
+          }
+        })
+        .catch((err) => console.error('Failed to pre-fill from service job:', err));
+    }
+  }, [company?.company_id, linkJobId]);
   const [gstin, setGstin] = useState('');
 
   // Section 2: Device Details
   const [deviceType, setDeviceType] = useState('Laptop');
-  const [brand, setBrand] = useState('Dell');
-  const [model, setModel] = useState('Latitude 5420');
-  const [serialNumber, setSerialNumber] = useState('8F3K2L1');
+  const [brand, setBrand] = useState('');
+  const [model, setModel] = useState('');
+  const [serialNumber, setSerialNumber] = useState('');
   const [assetTag, setAssetTag] = useState('');
 
   // Section 3: Service Details
-  const [serviceType, setServiceType] = useState('Hardware Repair');
-  const [problemReported, setProblemReported] = useState('System powering on but no display.');
-  const [diagnosis, setDiagnosis] = useState(
-    'RAM module faulty. Replaced 8GB DDR4 RAM and cleaned internal components.'
-  );
+  const [serviceType, setServiceType] = useState('Repair');
+  const [problemReported, setProblemReported] = useState('');
+  const [diagnosis, setDiagnosis] = useState('');
   const [billDate, setBillDate] = useState(() => currentDate || new Date().toISOString().split('T')[0]);
-  const [referenceNo, setReferenceNo] = useState('SR-001');
-  const [paymentTerms, setPaymentTerms] = useState('Net 30');
-  const [dueDate, setDueDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 30);
-    return d.toISOString().split('T')[0];
-  });
+  const [referenceNo, setReferenceNo] = useState('');
+  const [paymentTerms, setPaymentTerms] = useState('Immediate');
+  const [dueDate, setDueDate] = useState(() => currentDate || new Date().toISOString().split('T')[0]);
   const [technician, setTechnician] = useState('');
-  const [warranty, setWarranty] = useState('30 Days');
+  const [warranty, setWarranty] = useState('');
 
   // Section 4: Items & Charges
   const [lines, setLines] = useState<ServiceLineRow[]>([
     {
       id: 'row_1',
-      type: 'Part',
-      itemId: '',
-      itemOrService: 'DDR4 8GB RAM',
-      description: 'RAM 8GB DDR4',
-      qty: 1,
-      rate: 1850,
-      gstRate: 18
-    },
-    {
-      id: 'row_2',
-      type: 'Part',
-      itemId: '',
-      itemOrService: 'Thermal Paste',
-      description: 'Thermal paste',
-      qty: 1,
-      rate: 150,
-      gstRate: 18
-    },
-    {
-      id: 'row_3',
       type: 'Labour',
       itemId: undefined,
-      itemOrService: 'Repair & Testing',
-      description: 'Hardware repair and testing',
+      itemOrService: '',
+      description: '',
       qty: 1,
-      rate: 500,
+      rate: 0,
       gstRate: 18
     }
   ]);
 
   // Section 6: Remarks & Status
-  const [remarks, setRemarks] = useState(
-    'Replaced RAM and cleaned internal components. System working properly.'
-  );
+  const [remarks, setRemarks] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -140,18 +137,6 @@ export const ServiceBillCreationView: React.FC<ServiceBillCreationViewProps> = (
         ]);
         setParties(pList || []);
         setStockItems(iList || []);
-
-        if (pList && pList.length > 0 && !partyId) {
-          const first = pList[0];
-          setPartyId(first.party_id);
-          setPhone(first.phone || '');
-          const hasStreet = first.address_line1 && first.address_line1 !== 'Main Business Address';
-          const addr = hasStreet
-            ? [first.address_line1, first.city, first.state].filter(Boolean).join(', ')
-            : (first.city || '');
-          if (addr) setBillingAddress(addr);
-          if (first.gstin) setGstin(first.gstin);
-        }
       } catch (err: any) {
         console.error('Failed to load masters:', err);
       } finally {
@@ -269,14 +254,22 @@ export const ServiceBillCreationView: React.FC<ServiceBillCreationViewProps> = (
 
   const handleReset = () => {
     if (window.confirm('Are you sure you want to reset all entered service bill details?')) {
+      setPartyId('');
+      setPhone('');
+      setBillingAddress('');
+      setGstin('');
+      setBrand('');
+      setModel('');
+      setSerialNumber('');
+      setAssetTag('');
       setProblemReported('');
       setDiagnosis('');
       setReferenceNo('');
       setLines([
         {
           id: 'row_' + Date.now(),
-          type: 'Part',
-          itemId: '',
+          type: 'Labour',
+          itemId: undefined,
           itemOrService: '',
           description: '',
           qty: 1,
@@ -394,6 +387,19 @@ export const ServiceBillCreationView: React.FC<ServiceBillCreationViewProps> = (
 
       const result = await api.postVoucher(voucherPayload);
       const vId = result.voucherId || result.id;
+
+      if (linkJobId && vId) {
+        try {
+          await api.updateServiceJob(company.company_id, linkJobId, {
+            voucherId: vId,
+            serviceBillNumber: nextVchNumber,
+            serviceBillDate: billDate,
+            billAmountPaise: Math.round(summary.grandTotal * 100)
+          });
+        } catch (linkErr) {
+          console.error('Failed to link voucher to service job:', linkErr);
+        }
+      }
 
       if (status === 'POSTED' && onPostSuccess && vId) {
         onPostSuccess(vId);

@@ -2077,7 +2077,64 @@ export function createApiRouter(db: DatabaseSync): Router {
       let isFyScope = false;
       let granularity: 'daily' | 'weekly' | 'monthly' = 'monthly';
 
-      if (periodParam === 'This Week') {
+      if (periodParam === '7D') {
+        granularity = 'daily';
+        const d = new Date(todayDate);
+        d.setDate(d.getDate() - 6);
+        fromDate = d.toISOString().split('T')[0];
+        toDate = today;
+        const pdTo = new Date(d);
+        pdTo.setDate(pdTo.getDate() - 1);
+        const pdFrom = new Date(pdTo);
+        pdFrom.setDate(pdFrom.getDate() - 6);
+        prevFromDate = pdFrom.toISOString().split('T')[0];
+        prevToDate = pdTo.toISOString().split('T')[0];
+      } else if (periodParam === '30D') {
+        granularity = 'daily';
+        const d = new Date(todayDate);
+        d.setDate(d.getDate() - 29);
+        fromDate = d.toISOString().split('T')[0];
+        toDate = today;
+        const pdTo = new Date(d);
+        pdTo.setDate(pdTo.getDate() - 1);
+        const pdFrom = new Date(pdTo);
+        pdFrom.setDate(pdFrom.getDate() - 29);
+        prevFromDate = pdFrom.toISOString().split('T')[0];
+        prevToDate = pdTo.toISOString().split('T')[0];
+      } else if (periodParam === '3M') {
+        granularity = 'monthly';
+        const y = todayDate.getFullYear();
+        const m = todayDate.getMonth();
+        const startM = new Date(y, m - 2, 1);
+        fromDate = startM.toISOString().split('T')[0];
+        toDate = today;
+        const pStartM = new Date(y, m - 5, 1);
+        const pEndM = new Date(y, m - 2, 0);
+        prevFromDate = pStartM.toISOString().split('T')[0];
+        prevToDate = pEndM.toISOString().split('T')[0];
+      } else if (periodParam === '6M') {
+        granularity = 'monthly';
+        const y = todayDate.getFullYear();
+        const m = todayDate.getMonth();
+        const startM = new Date(y, m - 5, 1);
+        fromDate = startM.toISOString().split('T')[0];
+        toDate = today;
+        const pStartM = new Date(y, m - 11, 1);
+        const pEndM = new Date(y, m - 5, 0);
+        prevFromDate = pStartM.toISOString().split('T')[0];
+        prevToDate = pEndM.toISOString().split('T')[0];
+      } else if (periodParam === '1Y') {
+        granularity = 'monthly';
+        const y = todayDate.getFullYear();
+        const m = todayDate.getMonth();
+        const startM = new Date(y, m - 11, 1);
+        fromDate = startM.toISOString().split('T')[0];
+        toDate = today;
+        const pStartM = new Date(y - 1, m - 11, 1);
+        const pEndM = new Date(y, m - 11, 0);
+        prevFromDate = pStartM.toISOString().split('T')[0];
+        prevToDate = pEndM.toISOString().split('T')[0];
+      } else if (periodParam === 'This Week') {
         granularity = 'daily';
         const dayOfWeek = todayDate.getDay(); // 0 Sun, 1 Mon...
         const diffToMon = (dayOfWeek + 6) % 7;
@@ -2366,8 +2423,8 @@ export function createApiRouter(db: DatabaseSync): Router {
         }));
       } else {
         // Monthly breakdown
-        const trendQueryFrom = isFyScope ? fromDate : `${fyStartYear}-04-01`;
-        const trendQueryTo = isFyScope ? toDate : `${fyStartYear + 1}-03-31`;
+        const trendQueryFrom = isFyScope ? fromDate : `${fromDate.substring(0, 7)}-01`;
+        const trendQueryTo = isFyScope ? toDate : `${toDate.substring(0, 7)}-31`;
 
         const rawTrend = db.prepare(`
           SELECT
@@ -2384,13 +2441,25 @@ export function createApiRouter(db: DatabaseSync): Router {
 
         const trendMap = new Map<string, { salesPaise: number; purchasePaise: number }>();
 
-        for (let m = 4; m <= 12; m++) {
-          const mStr = `${fyStartYear}-${String(m).padStart(2, '0')}`;
-          trendMap.set(mStr, { salesPaise: 0, purchasePaise: 0 });
-        }
-        for (let m = 1; m <= 3; m++) {
-          const mStr = `${fyStartYear + 1}-${String(m).padStart(2, '0')}`;
-          trendMap.set(mStr, { salesPaise: 0, purchasePaise: 0 });
+        if (isFyScope) {
+          for (let m = 4; m <= 12; m++) {
+            const mStr = `${fyStartYear}-${String(m).padStart(2, '0')}`;
+            trendMap.set(mStr, { salesPaise: 0, purchasePaise: 0 });
+          }
+          for (let m = 1; m <= 3; m++) {
+            const mStr = `${fyStartYear + 1}-${String(m).padStart(2, '0')}`;
+            trendMap.set(mStr, { salesPaise: 0, purchasePaise: 0 });
+          }
+        } else {
+          const [sY, sM] = fromDate.substring(0, 7).split('-').map(Number);
+          const [eY, eM] = toDate.substring(0, 7).split('-').map(Number);
+          const iterM = new Date(sY, sM - 1, 1);
+          const endIterM = new Date(eY, eM - 1, 1);
+          while (iterM <= endIterM) {
+            const mStr = `${iterM.getFullYear()}-${String(iterM.getMonth() + 1).padStart(2, '0')}`;
+            trendMap.set(mStr, { salesPaise: 0, purchasePaise: 0 });
+            iterM.setMonth(iterM.getMonth() + 1);
+          }
         }
 
         for (const row of rawTrend) {
@@ -2402,16 +2471,20 @@ export function createApiRouter(db: DatabaseSync): Router {
           trendMap.set(row.month, cur);
         }
 
-        const fyOrder = [
-          `${fyStartYear}-04`, `${fyStartYear}-05`, `${fyStartYear}-06`,
-          `${fyStartYear}-07`, `${fyStartYear}-08`, `${fyStartYear}-09`,
-          `${fyStartYear}-10`, `${fyStartYear}-11`, `${fyStartYear}-12`,
-          `${fyStartYear + 1}-01`, `${fyStartYear + 1}-02`, `${fyStartYear + 1}-03`
-        ];
-
-        const trendEntries = Array.from(trendMap.entries()).sort(
-          (a, b) => fyOrder.indexOf(a[0]) - fyOrder.indexOf(b[0])
-        );
+        let trendEntries: [string, { salesPaise: number; purchasePaise: number }][];
+        if (isFyScope) {
+          const fyOrder = [
+            `${fyStartYear}-04`, `${fyStartYear}-05`, `${fyStartYear}-06`,
+            `${fyStartYear}-07`, `${fyStartYear}-08`, `${fyStartYear}-09`,
+            `${fyStartYear}-10`, `${fyStartYear}-11`, `${fyStartYear}-12`,
+            `${fyStartYear + 1}-01`, `${fyStartYear + 1}-02`, `${fyStartYear + 1}-03`
+          ];
+          trendEntries = Array.from(trendMap.entries()).sort(
+            (a, b) => fyOrder.indexOf(a[0]) - fyOrder.indexOf(b[0])
+          );
+        } else {
+          trendEntries = Array.from(trendMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+        }
 
         trendData = trendEntries.map(([month, vals]) => ({
           month,
@@ -2507,6 +2580,10 @@ export function createApiRouter(db: DatabaseSync): Router {
       res.json({
         totalSalesPaise: Math.max(0, periodSales.total),
         totalPurchasesPaise: Math.max(0, periodPurchases.total),
+        grossProfitPaise: Math.max(0, periodSales.total) - Math.max(0, periodPurchases.total),
+        profitMarginPct: periodSales.total > 0
+          ? (((Math.max(0, periodSales.total) - Math.max(0, periodPurchases.total)) / periodSales.total) * 100).toFixed(1)
+          : '0.0',
         prevSalesPaise: Math.max(0, prevSales.total),
         prevPurchasesPaise: Math.max(0, prevPurchases.total),
         periodInvoicesCount: periodInvoices.count,
@@ -2668,6 +2745,707 @@ export function createApiRouter(db: DatabaseSync): Router {
         'SELECT * FROM audit_logs WHERE company_id = ? ORDER BY created_at DESC LIMIT 200'
       ).all(req.companyId!);
       res.json(logs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // SERVICE MANAGEMENT MODULE (UI-048)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Helper to generate next sequential Job Number (e.g. JOB-0148 or JOB-2627-001)
+   */
+  const getNextJobNumber = (companyId: string, fyId?: string): string => {
+    const rows = db.prepare(`
+      SELECT job_number FROM service_jobs WHERE company_id = ?
+    `).all(companyId) as { job_number: string }[];
+
+    let maxNum = 0;
+    for (const r of rows) {
+      const match = r.job_number.match(/(\d+)$/);
+      if (match) {
+        const val = parseInt(match[1], 10);
+        if (!isNaN(val) && val > maxNum) maxNum = val;
+      }
+    }
+    const nextNum = maxNum + 1;
+    return `JOB-${nextNum.toString().padStart(4, '0')}`;
+  };
+
+  /**
+   * GET /service-jobs/next-number
+   */
+  router.get('/service-jobs/next-number', ...withCompany, (req: SecureRequest, res: Response) => {
+    try {
+      const companyId = req.companyId!;
+      const fyId = req.query.fyId as string | undefined;
+      const nextNumber = getNextJobNumber(companyId, fyId);
+      res.json({ nextJobNumber: nextNumber });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
+   * GET /service-jobs
+   * Paginated list of service jobs with multi-criteria filters and top summary KPIs
+   */
+  router.get('/service-jobs', ...withCompany, (req: SecureRequest, res: Response) => {
+    try {
+      const companyId = req.companyId!;
+      const { status, deviceType, search, fromDate, toDate, page = 1, limit = 50 } = req.query as any;
+
+      let sql = `
+        SELECT sj.*, p.party_name as linked_customer_name, p.phone as linked_customer_phone,
+               d.party_name as linked_dealer_name,
+               v.voucher_number as bill_voucher_number, v.total_amount_paise as bill_total_amount_paise,
+               COALESCE((
+                 SELECT SUM(ba.amount_paise)
+                 FROM bill_allocations ba
+                 JOIN vouchers rv ON ba.voucher_id = rv.voucher_id
+                 WHERE ba.reference_voucher_id = sj.service_bill_id
+                   AND rv.status != 'CANCELLED'
+               ), 0) as bill_paid_amount_paise
+        FROM service_jobs sj
+        LEFT JOIN parties p ON sj.customer_id = p.party_id
+        LEFT JOIN parties d ON sj.dealer_id = d.party_id
+        LEFT JOIN vouchers v ON sj.service_bill_id = v.voucher_id
+        WHERE sj.company_id = ?
+      `;
+      const params: any[] = [companyId];
+
+      if (status && status !== 'ALL') {
+        sql += ` AND sj.status = ?`;
+        params.push(status);
+      }
+      if (deviceType && deviceType !== 'ALL') {
+        sql += ` AND sj.device_type = ?`;
+        params.push(deviceType);
+      }
+      if (fromDate) {
+        sql += ` AND sj.job_date >= ?`;
+        params.push(fromDate);
+      }
+      if (toDate) {
+        sql += ` AND sj.job_date <= ?`;
+        params.push(toDate);
+      }
+      if (search && search.trim()) {
+        const term = `%${search.trim()}%`;
+        sql += ` AND (sj.job_number LIKE ? OR sj.customer_name LIKE ? OR sj.device_type LIKE ? OR sj.brand LIKE ? OR sj.model LIKE ? OR sj.serial_number LIKE ? OR sj.problem_reported LIKE ?)`;
+        params.push(term, term, term, term, term, term, term);
+      }
+
+      sql += ` ORDER BY sj.job_date DESC, sj.created_at DESC`;
+
+      const allMatching = db.prepare(sql).all(...params) as any[];
+      const totalCount = allMatching.length;
+      const offset = (Number(page) - 1) * Number(limit);
+      const paginated = allMatching.slice(offset, offset + Number(limit));
+
+      // Global stats for the company across all jobs
+      const statsRow = db.prepare(`
+        SELECT 
+          COUNT(*) as totalJobs,
+          COUNT(CASE WHEN status IN ('COMPLETED', 'DELIVERED') THEN 1 END) as completedJobs,
+          COUNT(CASE WHEN status IN ('IN_PROGRESS', 'SENT_TO_DEALER', 'RECEIVED_FROM_DEALER') THEN 1 END) as inProgressJobs,
+          COUNT(CASE WHEN status = 'RECEIVED' THEN 1 END) as pendingReceivedJobs
+        FROM service_jobs
+        WHERE company_id = ?
+      `).get(companyId) as any;
+
+      // Calculate total service income and unpaid bills across posted vouchers
+      const incomeRow = db.prepare(`
+        SELECT 
+          COALESCE(SUM(total_amount_paise), 0) as totalIncomePaise
+        FROM vouchers
+        WHERE company_id = ? AND status = 'POSTED'
+          AND (voucher_type = 'SALES' AND (narration LIKE '%Service%' OR terms_conditions LIKE '%service%'))
+      `).get(companyId) as any;
+
+      const unpaidRow = db.prepare(`
+        SELECT 
+          COALESCE(SUM(v.total_amount_paise - COALESCE(paid.amt, 0)), 0) as unpaidBillsPaise,
+          COUNT(CASE WHEN (v.total_amount_paise - COALESCE(paid.amt, 0)) > 0 THEN 1 END) as unpaidBillsCount
+        FROM vouchers v
+        LEFT JOIN (
+          SELECT ba.reference_voucher_id, SUM(ba.amount_paise) as amt
+          FROM bill_allocations ba
+          JOIN vouchers rv ON ba.voucher_id = rv.voucher_id
+          WHERE rv.status != 'CANCELLED'
+          GROUP BY ba.reference_voucher_id
+        ) paid ON v.voucher_id = paid.reference_voucher_id
+        WHERE v.company_id = ? AND v.status = 'POSTED'
+          AND (v.voucher_type = 'SALES' AND (v.narration LIKE '%Service%' OR v.terms_conditions LIKE '%service%'))
+      `).get(companyId) as any;
+
+      res.json({
+        items: paginated,
+        totalCount,
+        page: Number(page),
+        limit: Number(limit),
+        stats: {
+          totalJobs: statsRow?.totalJobs || 0,
+          completedJobs: statsRow?.completedJobs || 0,
+          inProgressJobs: statsRow?.inProgressJobs || 0,
+          pendingReceivedJobs: statsRow?.pendingReceivedJobs || 0,
+          serviceIncomePaise: incomeRow?.totalIncomePaise || 0,
+          unpaidBillsPaise: unpaidRow?.unpaidBillsPaise || 0,
+          unpaidBillsCount: unpaidRow?.unpaidBillsCount || 0
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
+   * POST /service-jobs
+   * Create a new Service Job
+   */
+  router.post('/service-jobs', ...withAccountant, (req: SecureRequest, res: Response) => {
+    try {
+      const companyId = req.companyId!;
+      const userId = req.user!.userId;
+      const b = req.body;
+
+      if (!b.customerName || !b.customerName.trim()) {
+        return res.status(400).json({ error: 'Customer Name is required.' });
+      }
+      if (!b.deviceType || !b.deviceType.trim()) {
+        return res.status(400).json({ error: 'Device Type is required.' });
+      }
+      if (!b.problemReported || !b.problemReported.trim()) {
+        return res.status(400).json({ error: 'Problem Reported is required.' });
+      }
+
+      // Resolve FY
+      const today = new Date().toISOString().split('T')[0];
+      const jobDate = b.jobDate || today;
+      let fyId = b.fyId;
+      if (!fyId) {
+        const fy = db.prepare('SELECT fy_id FROM financial_years WHERE company_id = ? AND ? BETWEEN start_date AND end_date LIMIT 1').get(companyId, jobDate) as any;
+        fyId = fy?.fy_id || `${companyId}_fy_2026_27`;
+      }
+
+      const jobId = 'job_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      const jobNumber = b.jobNumber && b.jobNumber.trim() ? b.jobNumber.trim() : getNextJobNumber(companyId, fyId);
+
+      const status = b.status || 'RECEIVED';
+      const physicalLocation = b.physicalLocation || (status === 'SENT_TO_DEALER' ? 'DEALER' : 'SHOP');
+      const serviceType = b.serviceType || 'INTERNAL_REPAIR';
+
+      db.prepare(`
+        INSERT INTO service_jobs (
+          job_id, company_id, fy_id, job_number, job_date,
+          customer_id, customer_name, customer_phone, customer_email, customer_address,
+          device_type, brand, model, serial_number, accessories,
+          problem_reported, diagnosis, work_performed, service_type,
+          status, physical_location, technician_name,
+          estimated_cost_paise, advance_paid_paise, priority, warranty_status,
+          dealer_id, dealer_name, courier_name, docket_number, dispatch_date, expected_return_date,
+          service_bill_id, service_bill_number, created_by
+        ) VALUES (
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?
+        )
+      `).run(
+        jobId, companyId, fyId, jobNumber, jobDate,
+        b.customerId || null, b.customerName.trim(), b.customerPhone || null, b.customerEmail || null, b.customerAddress || null,
+        b.deviceType.trim(), b.brand || null, b.model || null, b.serialNumber || null, b.accessories || null,
+        b.problemReported.trim(), b.diagnosis || null, b.workPerformed || null, serviceType,
+        status, physicalLocation, b.technicianName || null,
+        Number(b.estimatedCostPaise) || 0, Number(b.advancePaidPaise) || 0, b.priority || 'NORMAL', b.warrantyStatus || 'OUT_OF_WARRANTY',
+        b.dealerId || null, b.dealerName || null, b.courierName || null, b.docketNumber || null, b.dispatchDate || null, b.expectedReturnDate || null,
+        b.serviceBillId || null, b.serviceBillNumber || null, userId
+      );
+
+      // Record initial event
+      const eventId = 'sje_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      db.prepare(`
+        INSERT INTO service_job_events (
+          event_id, job_id, event_type, from_status, to_status, location, notes, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        eventId, jobId, 'JOB_CREATED', null, status, physicalLocation,
+        b.problemReported.trim(), userId
+      );
+
+      const created = db.prepare('SELECT * FROM service_jobs WHERE job_id = ?').get(jobId);
+      res.status(201).json(created);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  /**
+   * GET /service-jobs/:id
+   * Complete Job details with timeline and linked billing details
+   */
+  router.get('/service-jobs/:id', ...withCompany, (req: SecureRequest, res: Response) => {
+    try {
+      const companyId = req.companyId!;
+      const jobId = req.params.id;
+
+      const job = db.prepare(`
+        SELECT sj.*, p.party_name as linked_customer_name, p.phone as linked_customer_phone,
+               d.party_name as linked_dealer_name
+        FROM service_jobs sj
+        LEFT JOIN parties p ON sj.customer_id = p.party_id
+        LEFT JOIN parties d ON sj.dealer_id = d.party_id
+        WHERE sj.job_id = ? AND sj.company_id = ?
+      `).get(jobId, companyId) as any;
+
+      if (!job) {
+        return res.status(404).json({ error: 'Service job not found.' });
+      }
+
+      // Fetch audit event history
+      const events = db.prepare(`
+        SELECT sje.*, u.full_name as user_full_name
+        FROM service_job_events sje
+        LEFT JOIN users u ON sje.created_by = u.user_id
+        WHERE sje.job_id = ?
+        ORDER BY sje.created_at ASC
+      `).all(jobId);
+
+      // Fetch linked service bill details if exists
+      let linkedBill = null;
+      if (job.service_bill_id) {
+        const vch = db.prepare(`
+          SELECT voucher_id, voucher_number, voucher_date, total_amount_paise, status, terms_conditions
+          FROM vouchers
+          WHERE voucher_id = ? AND company_id = ?
+        `).get(job.service_bill_id, companyId) as any;
+
+        if (vch) {
+          const lines = db.prepare(`
+            SELECT * FROM voucher_lines WHERE voucher_id = ? ORDER BY line_number ASC
+          `).all(vch.voucher_id);
+
+          const paidAmt = db.prepare(`
+            SELECT COALESCE(SUM(ba.amount_paise), 0) as paid
+            FROM bill_allocations ba
+            JOIN vouchers rv ON ba.voucher_id = rv.voucher_id
+            WHERE ba.reference_voucher_id = ? AND rv.status != 'CANCELLED'
+          `).get(vch.voucher_id) as any;
+
+          linkedBill = {
+            ...vch,
+            lines,
+            paidAmountPaise: paidAmt?.paid || 0,
+            balanceDuePaise: Math.max(0, vch.total_amount_paise - (paidAmt?.paid || 0))
+          };
+        }
+      }
+
+      res.json({
+        job,
+        events,
+        linkedBill
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  /**
+   * PUT /service-jobs/:id
+   * Update Service Job Details
+   */
+  router.put('/service-jobs/:id', ...withAccountant, (req: SecureRequest, res: Response) => {
+    try {
+      const companyId = req.companyId!;
+      const jobId = req.params.id;
+      const b = req.body;
+
+      const existing = db.prepare('SELECT * FROM service_jobs WHERE job_id = ? AND company_id = ?').get(jobId, companyId) as any;
+      if (!existing) return res.status(404).json({ error: 'Service job not found.' });
+
+      db.prepare(`
+        UPDATE service_jobs SET
+          customer_id = ?, customer_name = ?, customer_phone = ?, customer_email = ?, customer_address = ?,
+          device_type = ?, brand = ?, model = ?, serial_number = ?, accessories = ?,
+          problem_reported = ?, diagnosis = ?, work_performed = ?, service_type = ?,
+          technician_name = ?, estimated_cost_paise = ?, advance_paid_paise = ?, priority = ?, warranty_status = ?,
+          dealer_id = ?, dealer_name = ?, courier_name = ?, docket_number = ?, dispatch_date = ?, expected_return_date = ?,
+          service_bill_id = ?, service_bill_number = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE job_id = ? AND company_id = ?
+      `).run(
+        b.customerId !== undefined ? b.customerId : existing.customer_id,
+        b.customerName ? b.customerName.trim() : existing.customer_name,
+        b.customerPhone !== undefined ? b.customerPhone : existing.customer_phone,
+        b.customerEmail !== undefined ? b.customerEmail : existing.customer_email,
+        b.customerAddress !== undefined ? b.customerAddress : existing.customer_address,
+        b.deviceType ? b.deviceType.trim() : existing.device_type,
+        b.brand !== undefined ? b.brand : existing.brand,
+        b.model !== undefined ? b.model : existing.model,
+        b.serialNumber !== undefined ? b.serialNumber : existing.serial_number,
+        b.accessories !== undefined ? b.accessories : existing.accessories,
+        b.problemReported ? b.problemReported.trim() : existing.problem_reported,
+        b.diagnosis !== undefined ? b.diagnosis : existing.diagnosis,
+        b.workPerformed !== undefined ? b.workPerformed : existing.work_performed,
+        b.serviceType || existing.service_type,
+        b.technicianName !== undefined ? b.technicianName : existing.technician_name,
+        b.estimatedCostPaise !== undefined ? Number(b.estimatedCostPaise) : existing.estimated_cost_paise,
+        b.advancePaidPaise !== undefined ? Number(b.advancePaidPaise) : existing.advance_paid_paise,
+        b.priority || existing.priority,
+        b.warrantyStatus || existing.warranty_status,
+        b.dealerId !== undefined ? b.dealerId : existing.dealer_id,
+        b.dealerName !== undefined ? b.dealerName : existing.dealer_name,
+        b.courierName !== undefined ? b.courierName : existing.courier_name,
+        b.docketNumber !== undefined ? b.docketNumber : existing.docket_number,
+        b.dispatchDate !== undefined ? b.dispatchDate : existing.dispatch_date,
+        b.expectedReturnDate !== undefined ? b.expectedReturnDate : existing.expected_return_date,
+        b.serviceBillId !== undefined ? b.serviceBillId : existing.service_bill_id,
+        b.serviceBillNumber !== undefined ? b.serviceBillNumber : existing.service_bill_number,
+        jobId, companyId
+      );
+
+      const updated = db.prepare('SELECT * FROM service_jobs WHERE job_id = ?').get(jobId);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  /**
+   * PATCH /service-jobs/:id/status
+   * Transition Job Status & Physical Location with Audit Event
+   */
+  router.patch('/service-jobs/:id/status', ...withAccountant, (req: SecureRequest, res: Response) => {
+    try {
+      const companyId = req.companyId!;
+      const userId = req.user!.userId;
+      const jobId = req.params.id;
+      const { status, physicalLocation, notes } = req.body;
+
+      const existing = db.prepare('SELECT * FROM service_jobs WHERE job_id = ? AND company_id = ?').get(jobId, companyId) as any;
+      if (!existing) return res.status(404).json({ error: 'Service job not found.' });
+
+      const newStatus = status || existing.status;
+      const newLoc = physicalLocation || (
+        newStatus === 'DELIVERED' ? 'DELIVERED_TO_CUSTOMER' :
+        newStatus === 'SENT_TO_DEALER' ? 'DEALER' :
+        newStatus === 'COMPLETED' ? 'SHOP' : existing.physical_location
+      );
+
+      db.prepare(`
+        UPDATE service_jobs SET
+          status = ?, physical_location = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE job_id = ? AND company_id = ?
+      `).run(newStatus, newLoc, jobId, companyId);
+
+      // Record status transition event
+      const eventId = 'sje_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      db.prepare(`
+        INSERT INTO service_job_events (
+          event_id, job_id, event_type, from_status, to_status, location, notes, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        eventId, jobId, 'STATUS_CHANGE', existing.status, newStatus, newLoc,
+        notes || `Status changed from ${existing.status} to ${newStatus}`, userId
+      );
+
+      const updated = db.prepare('SELECT * FROM service_jobs WHERE job_id = ?').get(jobId);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  /**
+   * POST /service-jobs/:id/dispatch
+   * Dealer Warranty Dispatch
+   */
+  router.post('/service-jobs/:id/dispatch', ...withAccountant, (req: SecureRequest, res: Response) => {
+    try {
+      const companyId = req.companyId!;
+      const userId = req.user!.userId;
+      const jobId = req.params.id;
+      const { dealerId, dealerName, courierName, docketNumber, dispatchDate, expectedReturnDate, notes } = req.body;
+
+      const existing = db.prepare('SELECT * FROM service_jobs WHERE job_id = ? AND company_id = ?').get(jobId, companyId) as any;
+      if (!existing) return res.status(404).json({ error: 'Service job not found.' });
+
+      db.prepare(`
+        UPDATE service_jobs SET
+          service_type = 'DEALER_WARRANTY',
+          status = 'SENT_TO_DEALER',
+          physical_location = 'COURIER_TO_DEALER',
+          dealer_id = ?,
+          dealer_name = ?,
+          courier_name = ?,
+          docket_number = ?,
+          dispatch_date = ?,
+          expected_return_date = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE job_id = ? AND company_id = ?
+      `).run(
+        dealerId || null, dealerName || 'Authorized Service Dealer',
+        courierName || null, docketNumber || null,
+        dispatchDate || new Date().toISOString().split('T')[0],
+        expectedReturnDate || null,
+        jobId, companyId
+      );
+
+      const eventId = 'sje_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      db.prepare(`
+        INSERT INTO service_job_events (
+          event_id, job_id, event_type, from_status, to_status, location, notes, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        eventId, jobId, 'DISPATCHED_TO_DEALER', existing.status, 'SENT_TO_DEALER', 'COURIER_TO_DEALER',
+        notes || `Dispatched to dealer ${dealerName || ''} via ${courierName || 'courier'} (Docket: ${docketNumber || 'N/A'})`,
+        userId
+      );
+
+      const updated = db.prepare('SELECT * FROM service_jobs WHERE job_id = ?').get(jobId);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  /**
+   * POST /service-jobs/:id/dealer-return
+   * Receive Product Back From Dealer
+   */
+  router.post('/service-jobs/:id/dealer-return', ...withAccountant, (req: SecureRequest, res: Response) => {
+    try {
+      const companyId = req.companyId!;
+      const userId = req.user!.userId;
+      const jobId = req.params.id;
+      const { dealerAction, replacementSerialNumber, returnDate, dealerDocketNumber, workPerformed, notes } = req.body;
+
+      const existing = db.prepare('SELECT * FROM service_jobs WHERE job_id = ? AND company_id = ?').get(jobId, companyId) as any;
+      if (!existing) return res.status(404).json({ error: 'Service job not found.' });
+
+      db.prepare(`
+        UPDATE service_jobs SET
+          status = 'RECEIVED_FROM_DEALER',
+          physical_location = 'SHOP',
+          dealer_action = ?,
+          replacement_serial_number = ?,
+          dealer_return_date = ?,
+          dealer_docket_number = ?,
+          work_performed = COALESCE(?, work_performed),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE job_id = ? AND company_id = ?
+      `).run(
+        dealerAction || 'REPAIRED',
+        replacementSerialNumber || null,
+        returnDate || new Date().toISOString().split('T')[0],
+        dealerDocketNumber || null,
+        workPerformed || null,
+        jobId, companyId
+      );
+
+      const eventId = 'sje_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      db.prepare(`
+        INSERT INTO service_job_events (
+          event_id, job_id, event_type, from_status, to_status, location, notes, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        eventId, jobId, 'RECEIVED_FROM_DEALER', existing.status, 'RECEIVED_FROM_DEALER', 'SHOP',
+        notes || `Received back from dealer. Action: ${dealerAction || 'Repaired'}${replacementSerialNumber ? `. Replacement S/N: ${replacementSerialNumber}` : ''}`,
+        userId
+      );
+
+      const updated = db.prepare('SELECT * FROM service_jobs WHERE job_id = ?').get(jobId);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  /**
+   * GET /service-dashboard/stats
+   * Analytics matching Mockup A (media_1794727913714_a13deb76.jpg)
+   */
+  router.get('/service-dashboard/stats', ...withCompany, (req: SecureRequest, res: Response) => {
+    try {
+      const companyId = req.companyId!;
+
+      // Top KPI counts
+      const counts = db.prepare(`
+        SELECT
+          COUNT(*) as totalJobs,
+          COUNT(CASE WHEN status IN ('COMPLETED', 'DELIVERED') THEN 1 END) as jobsCompleted,
+          COUNT(CASE WHEN status IN ('IN_PROGRESS', 'SENT_TO_DEALER', 'RECEIVED_FROM_DEALER') THEN 1 END) as inProgress,
+          COUNT(CASE WHEN status = 'RECEIVED' THEN 1 END) as pendingReceived,
+          COUNT(CASE WHEN status = 'CANCELLED' THEN 1 END) as cancelled
+        FROM service_jobs
+        WHERE company_id = ?
+      `).get(companyId) as any;
+
+      // Income from service bills
+      const income = db.prepare(`
+        SELECT COALESCE(SUM(total_amount_paise), 0) as totalIncomePaise
+        FROM vouchers
+        WHERE company_id = ? AND status = 'POSTED'
+          AND (voucher_type = 'SALES' AND (narration LIKE '%Service%' OR terms_conditions LIKE '%service%'))
+      `).get(companyId) as any;
+
+      // Unpaid bills
+      const unpaid = db.prepare(`
+        SELECT 
+          COALESCE(SUM(v.total_amount_paise - COALESCE(p.amt, 0)), 0) as unpaidBillsPaise,
+          COUNT(CASE WHEN (v.total_amount_paise - COALESCE(p.amt, 0)) > 0 THEN 1 END) as unpaidBillsCount
+        FROM vouchers v
+        LEFT JOIN (
+          SELECT ba.reference_voucher_id, SUM(ba.amount_paise) as amt
+          FROM bill_allocations ba
+          JOIN vouchers rv ON ba.voucher_id = rv.voucher_id
+          WHERE rv.status != 'CANCELLED'
+          GROUP BY ba.reference_voucher_id
+        ) p ON v.voucher_id = p.reference_voucher_id
+        WHERE v.company_id = ? AND v.status = 'POSTED'
+          AND (v.voucher_type = 'SALES' AND (v.narration LIKE '%Service%' OR v.terms_conditions LIKE '%service%'))
+      `).get(companyId) as any;
+
+      // Service by Device breakdown
+      const deviceRows = db.prepare(`
+        SELECT device_type, COUNT(*) as count
+        FROM service_jobs
+        WHERE company_id = ?
+        GROUP BY device_type
+        ORDER BY count DESC
+      `).all(companyId) as { device_type: string; count: number }[];
+
+      const totalJobs = counts?.totalJobs || 0;
+      const deviceStats = [
+        { type: 'Laptop', count: 0 },
+        { type: 'Desktop', count: 0 },
+        { type: 'Printer', count: 0 },
+        { type: 'Others', count: 0 }
+      ];
+
+      for (const r of deviceRows) {
+        const dType = (r.device_type || '').toLowerCase();
+        if (dType.includes('laptop')) deviceStats[0].count += r.count;
+        else if (dType.includes('desktop') || dType.includes('pc')) deviceStats[1].count += r.count;
+        else if (dType.includes('printer')) deviceStats[2].count += r.count;
+        else deviceStats[3].count += r.count;
+      }
+
+      const serviceByDevice = deviceStats.map(d => ({
+        device: d.type,
+        deviceType: d.type,
+        count: d.count,
+        pct: totalJobs > 0 ? Number(((d.count / totalJobs) * 100).toFixed(1)) : 0
+      }));
+
+      // Recent Service Jobs (latest 6)
+      const rawRecentJobs = db.prepare(`
+        SELECT sj.job_id, sj.job_number, sj.job_date, sj.customer_name, sj.device_type, sj.brand, sj.model,
+               sj.problem_reported, sj.status, sj.physical_location
+        FROM service_jobs sj
+        WHERE sj.company_id = ?
+        ORDER BY sj.job_date DESC, sj.created_at DESC
+        LIMIT 6
+      `).all(companyId) as any[];
+
+      const recentServiceJobs = rawRecentJobs.map(j => ({
+        job_id: j.job_id,
+        job_number: j.job_number,
+        job_date: j.job_date,
+        received_date: j.job_date,
+        customer_name: j.customer_name || 'Customer',
+        device_type: j.device_type || 'Device',
+        brand: j.brand || '',
+        model: j.model || '',
+        problem_reported: j.problem_reported || 'Service',
+        status: j.status || 'RECEIVED',
+        job_status: j.status || 'RECEIVED',
+        physical_location: j.physical_location || 'SHOP'
+      }));
+
+      // Monthly Trend (Income & Jobs) for last 7 months
+      const months: string[] = [];
+      const now = new Date();
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      }
+
+      const trendData = months.map(mStr => {
+        const monthJobs = db.prepare(`
+          SELECT COUNT(*) as count
+          FROM service_jobs
+          WHERE company_id = ? AND substr(job_date, 1, 7) = ?
+        `).get(companyId, mStr) as any;
+
+        const monthIncome = db.prepare(`
+          SELECT COALESCE(SUM(total_amount_paise), 0) as income
+          FROM vouchers
+          WHERE company_id = ? AND status = 'POSTED'
+            AND (voucher_type = 'SALES' AND (narration LIKE '%Service%' OR terms_conditions LIKE '%service%'))
+            AND substr(voucher_date, 1, 7) = ?
+        `).get(companyId, mStr) as any;
+
+        const parts = mStr.split('-');
+        const mIdx = parseInt(parts[1], 10) - 1;
+        const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        return {
+          month: MONTHS[mIdx],
+          monthKey: mStr,
+          label: MONTHS[mIdx],
+          jobsCount: monthJobs?.count || 0,
+          incomePaise: monthIncome?.income || 0
+        };
+      });
+
+      const kpiPayload = {
+        serviceIncomePaise: income?.totalIncomePaise || 0,
+        incomeChangePct: 0,
+        jobsCompleted: counts?.jobsCompleted || 0,
+        completedChangePct: 0,
+        inProgress: counts?.inProgress || 0,
+        pendingReceived: counts?.pendingReceived || 0,
+        unpaidBillsPaise: unpaid?.unpaidBillsPaise || 0,
+        unpaidBillsCount: unpaid?.unpaidBillsCount || 0
+      };
+
+      const billedCount = (db.prepare(`
+        SELECT COUNT(*) as count FROM service_jobs WHERE company_id = ? AND service_bill_id IS NOT NULL
+      `).get(companyId) as any)?.count || 0;
+
+      res.json({
+        kpis: kpiPayload,
+        kpi: kpiPayload,
+        jobsByStatus: {
+          total: totalJobs,
+          completed: counts?.jobsCompleted || 0,
+          completedPct: totalJobs > 0 ? Number(((counts?.jobsCompleted / totalJobs) * 100).toFixed(1)) : 0,
+          inProgress: counts?.inProgress || 0,
+          inProgressPct: totalJobs > 0 ? Number(((counts?.inProgress / totalJobs) * 100).toFixed(1)) : 0,
+          pending: counts?.pendingReceived || 0,
+          pendingPct: totalJobs > 0 ? Number(((counts?.pendingReceived / totalJobs) * 100).toFixed(1)) : 0,
+          cancelled: counts?.cancelled || 0,
+          cancelledPct: totalJobs > 0 ? Number(((counts?.cancelled / totalJobs) * 100).toFixed(1)) : 0
+        },
+        serviceByDevice,
+        recentJobs: recentServiceJobs,
+        recentServiceJobs,
+        trend: trendData,
+        trendData,
+        statusOverview: {
+          received: counts?.pendingReceived || 0,
+          inProgress: counts?.inProgress || 0,
+          completed: counts?.jobsCompleted || 0,
+          billed: billedCount
+        }
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

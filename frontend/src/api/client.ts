@@ -159,6 +159,117 @@ export interface GodownBalanceItem {
   availableStock: number;
 }
 
+export interface ServiceJobEvent {
+  event_id: string;
+  job_id: string;
+  event_type: string;
+  from_status?: string | null;
+  to_status?: string | null;
+  from_location?: string | null;
+  to_location?: string | null;
+  notes?: string | null;
+  metadata?: any;
+  created_at: string;
+  created_by?: string;
+  user_name?: string;
+}
+
+export interface ServiceJob {
+  job_id: string;
+  company_id: string;
+  fy_id: string;
+  job_number: string;
+  received_date: string;
+  party_id: string;
+  customer_name?: string;
+  customer_phone?: string;
+  customer_email?: string;
+  customer_address?: string;
+  device_type: string;
+  brand?: string;
+  model?: string;
+  serial_number?: string;
+  asset_tag?: string;
+  accessories_received?: string;
+  problem_reported: string;
+  diagnosis?: string;
+  work_performed?: string;
+  job_status: 'RECEIVED' | 'IN_PROGRESS' | 'COMPLETED' | 'DELIVERED' | 'CANCELLED';
+  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  physical_location: 'WORKSHOP' | 'DISPATCHED_TO_DEALER' | 'RECEIVED_FROM_DEALER' | 'CUSTOMER_DELIVERED';
+  is_dealer_warranty: boolean;
+  dealer_name?: string;
+  dealer_contact?: string;
+  courier_service?: string;
+  tracking_number?: string;
+  dispatched_at?: string;
+  dealer_return_status?: string;
+  replacement_serial_number?: string;
+  dealer_returned_at?: string;
+  technician_name?: string;
+  voucher_id?: string | null;
+  service_bill_number?: string | null;
+  service_bill_date?: string | null;
+  bill_amount_paise?: number;
+  payment_status?: 'PAID' | 'UNPAID' | 'PARTIAL' | null;
+  amount_paid_paise?: number;
+  balance_due_paise?: number;
+  created_at: string;
+  updated_at: string;
+  events?: ServiceJobEvent[];
+  linkedBill?: any;
+}
+
+export interface ServiceDashboardStats {
+  kpis: {
+    serviceIncomePaise: number;
+    incomeChangePct: number;
+    jobsCompleted: number;
+    completedChangePct: number;
+    inProgress: number;
+    pendingReceived: number;
+    unpaidBillsPaise: number;
+    unpaidBillsCount: number;
+  };
+  trend: Array<{
+    month: string;
+    incomePaise: number;
+    jobsCount: number;
+  }>;
+  jobsByStatus: {
+    total: number;
+    completed: number;
+    completedPct: number;
+    inProgress: number;
+    inProgressPct: number;
+    pending: number;
+    pendingPct: number;
+    cancelled: number;
+    cancelledPct: number;
+  };
+  serviceByDevice: Array<{
+    deviceType: string;
+    count: number;
+    pct: number;
+  }>;
+  recentJobs: Array<{
+    job_id: string;
+    job_number: string;
+    service_bill_number?: string;
+    customer_name: string;
+    device_type: string;
+    problem_reported: string;
+    job_status: string;
+    received_date: string;
+  }>;
+  statusOverview: {
+    received: number;
+    inProgress: number;
+    completed: number;
+    billed: number;
+  };
+}
+
 export interface ItemStockBalanceResponse {
   itemId: string;
   itemName: string;
@@ -1217,6 +1328,133 @@ export const api = {
       headers: getHeaders()
     });
     if (!res.ok) throw new Error(await extractErrorMessage(res, 'Request failed'));
+    return res.json();
+  },
+
+  // ---------------- SERVICE MANAGEMENT (UI-048) ----------------
+  async getServiceJobs(
+    companyId: string,
+    params?: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      status?: string;
+      deviceType?: string;
+      paymentStatus?: string;
+      fromDate?: string;
+      toDate?: string;
+    }
+  ): Promise<{ jobs: ServiceJob[]; total: number; page: number; totalPages: number; kpis: any }> {
+    const sp = new URLSearchParams({ companyId });
+    if (params?.page) sp.append('page', String(params.page));
+    if (params?.limit) sp.append('limit', String(params.limit));
+    if (params?.search) sp.append('search', params.search);
+    if (params?.status) sp.append('status', params.status);
+    if (params?.deviceType) sp.append('deviceType', params.deviceType);
+    if (params?.paymentStatus) sp.append('paymentStatus', params.paymentStatus);
+    if (params?.fromDate) sp.append('fromDate', params.fromDate);
+    if (params?.toDate) sp.append('toDate', params.toDate);
+
+    const res = await fetch(`${API_BASE}/service-jobs?${sp.toString()}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to fetch service jobs'));
+    return res.json();
+  },
+
+  async getNextServiceJobNumber(companyId: string): Promise<{ nextJobNumber: string }> {
+    const res = await fetch(`${API_BASE}/service-jobs/next-number?companyId=${encodeURIComponent(companyId)}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to get next service job number'));
+    return res.json();
+  },
+
+  async createServiceJob(companyId: string, payload: any): Promise<{ jobId: string; jobNumber: string }> {
+    const res = await fetch(`${API_BASE}/service-jobs?companyId=${encodeURIComponent(companyId)}`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to create service job'));
+    return res.json();
+  },
+
+  async getServiceJob(companyId: string, jobId: string): Promise<ServiceJob> {
+    const res = await fetch(`${API_BASE}/service-jobs/${jobId}?companyId=${encodeURIComponent(companyId)}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to fetch service job details'));
+    return res.json();
+  },
+
+  async updateServiceJob(companyId: string, jobId: string, payload: any): Promise<{ success: boolean }> {
+    const res = await fetch(`${API_BASE}/service-jobs/${jobId}?companyId=${encodeURIComponent(companyId)}`, {
+      method: 'PUT',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to update service job'));
+    return res.json();
+  },
+
+  async updateServiceJobStatus(
+    companyId: string,
+    jobId: string,
+    payload: { status: string; physicalLocation?: string; notes?: string }
+  ): Promise<{ success: boolean; status: string; physicalLocation: string }> {
+    const res = await fetch(`${API_BASE}/service-jobs/${jobId}/status?companyId=${encodeURIComponent(companyId)}`, {
+      method: 'PATCH',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to update job status'));
+    return res.json();
+  },
+
+  async dispatchServiceJobToDealer(
+    companyId: string,
+    jobId: string,
+    payload: {
+      dealerName: string;
+      dealerContact?: string;
+      courierService?: string;
+      trackingNumber?: string;
+      notes?: string;
+    }
+  ): Promise<{ success: boolean }> {
+    const res = await fetch(`${API_BASE}/service-jobs/${jobId}/dispatch?companyId=${encodeURIComponent(companyId)}`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to dispatch to dealer'));
+    return res.json();
+  },
+
+  async returnServiceJobFromDealer(
+    companyId: string,
+    jobId: string,
+    payload: {
+      dealerReturnStatus: string;
+      replacementSerialNumber?: string;
+      notes?: string;
+    }
+  ): Promise<{ success: boolean }> {
+    const res = await fetch(`${API_BASE}/service-jobs/${jobId}/dealer-return?companyId=${encodeURIComponent(companyId)}`, {
+      method: 'POST',
+      headers: getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to receive product from dealer'));
+    return res.json();
+  },
+
+  async getServiceDashboardStats(companyId: string): Promise<ServiceDashboardStats> {
+    const res = await fetch(`${API_BASE}/service-dashboard/stats?companyId=${encodeURIComponent(companyId)}`, {
+      headers: getHeaders()
+    });
+    if (!res.ok) throw new Error(await extractErrorMessage(res, 'Failed to fetch service dashboard stats'));
     return res.json();
   }
 };

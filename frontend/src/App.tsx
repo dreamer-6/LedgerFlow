@@ -25,7 +25,11 @@ import { TaxConfigurationView } from './pages/TaxConfigurationView';
 import { UtilitiesView } from './pages/UtilitiesView';
 import { SettingsView } from './pages/SettingsView';
 import { InvoicePrintModal } from './pages/InvoicePrintModal';
-import { ServiceBillsDashboardView } from './pages/ServiceBillsDashboardView';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { ServiceDashboardView } from './pages/ServiceDashboardView';
+import { ServiceRegisterView } from './pages/ServiceRegisterView';
+import { ServiceJobDetailsView } from './pages/ServiceJobDetailsView';
+import { ServiceJobFormView } from './pages/ServiceJobFormView';
 import { ServiceBillCreationView } from './pages/ServiceBillCreationView';
 import { SalesView } from './pages/SalesView';
 import { SalesInvoiceView } from './pages/SalesInvoiceView';
@@ -154,7 +158,11 @@ export const App: React.FC = () => {
   const [activePrintJournalId, setActivePrintJournalId] = useState<string | null>(null);
   const [journalRegisterFilter, setJournalRegisterFilter] = useState<{ type?: string; status?: string; minAmount?: number } | undefined>(undefined);
   const [duplicateJournalData, setDuplicateJournalData] = useState<any | null>(null);
-  const [serviceBillViewMode, setServiceBillViewMode] = useState<'dashboard' | 'create'>('dashboard');
+  const [serviceBillViewMode, setServiceBillViewMode] = useState<'dashboard' | 'register' | 'details' | 'create_job' | 'create_bill'>('dashboard');
+  const [selectedServiceJobId, setSelectedServiceJobId] = useState<string | null>(null);
+  const [editServiceJobId, setEditServiceJobId] = useState<string | null>(null);
+  const [serviceJobLinkForBill, setServiceJobLinkForBill] = useState<string | null>(null);
+  const [serviceOrigin, setServiceOrigin] = useState<'dashboard' | 'register'>('dashboard');
   const [quotationViewMode, setQuotationViewMode] = useState<'dashboard' | 'create' | 'register' | 'view'>('dashboard');
   const [quotationOrigin, setQuotationOrigin] = useState<'dashboard' | 'register'>('dashboard');
   const [editQuotationId, setEditQuotationId] = useState<string | null>(null);
@@ -594,7 +602,8 @@ export const App: React.FC = () => {
       return;
     }
     if (type === 'SERVICE' || type === 'SERVICE_BILL') {
-      setServiceBillViewMode('create');
+      setServiceJobLinkForBill(null);
+      setServiceBillViewMode('create_bill');
       setActiveTab('service_bill');
       return;
     }
@@ -626,8 +635,10 @@ export const App: React.FC = () => {
     { label: 'Journal Dashboard', tab: 'journal', category: 'Module', icon: <BookText size={14} />, hotkey: 'Alt+J' },
     { label: 'Create Journal Entry', tab: 'journal_create', category: 'Voucher', icon: <BookText size={14} />, hotkey: 'F7' },
     { label: 'Journal Register', tab: 'journal_register', category: 'Register', icon: <BookText size={14} /> },
-    { label: 'Service Bills Dashboard', tab: 'service_bill', category: 'Module', icon: <Wrench size={14} />, hotkey: 'Alt+W' },
+    { label: 'Service Dashboard', tab: 'service_dashboard', category: 'Module', icon: <Wrench size={14} />, hotkey: 'Alt+W' },
     { label: 'Create Service Bill', tab: 'service_bill_create', category: 'Voucher', icon: <Wrench size={14} /> },
+    { label: 'New Service Job', tab: 'service_job_new', category: 'Voucher', icon: <Wrench size={14} /> },
+    { label: 'Service Register', tab: 'service_register', category: 'Register', icon: <Wrench size={14} /> },
     { label: 'Parties (Customers & Suppliers)', tab: 'parties', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+3' },
     { label: 'Stock Items & Inventory', tab: 'items', category: 'Master', icon: <Boxes size={14} />, hotkey: 'Alt+I' },
     { label: 'Ledgers Master (Chart of Accounts)', tab: 'ledgers', category: 'Master', icon: <BookOpen size={14} />, hotkey: 'Alt+L' },
@@ -753,15 +764,31 @@ export const App: React.FC = () => {
       setSearchQuery('');
       return;
     }
-    if (item.tab === 'service_bill_create') {
-      setServiceBillViewMode('create');
+    if (item.tab === 'service_dashboard' || item.tab === 'service_bill') {
+      setServiceBillViewMode('dashboard');
       setActiveTab('service_bill');
       setShowSearchModal(false);
       setSearchQuery('');
       return;
     }
-    if (item.tab === 'service_bill') {
-      setServiceBillViewMode('dashboard');
+    if (item.tab === 'service_register') {
+      setServiceBillViewMode('register');
+      setActiveTab('service_bill');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'service_bill_create') {
+      setServiceJobLinkForBill(null);
+      setServiceBillViewMode('create_bill');
+      setActiveTab('service_bill');
+      setShowSearchModal(false);
+      setSearchQuery('');
+      return;
+    }
+    if (item.tab === 'service_job_new') {
+      setEditServiceJobId(null);
+      setServiceBillViewMode('create_job');
       setActiveTab('service_bill');
       setShowSearchModal(false);
       setSearchQuery('');
@@ -873,6 +900,8 @@ export const App: React.FC = () => {
         setPaymentViewMode={setPaymentViewMode}
         journalViewMode={journalViewMode}
         setJournalViewMode={setJournalViewMode}
+        serviceBillViewMode={serviceBillViewMode}
+        setServiceBillViewMode={setServiceBillViewMode}
         currentDate={currentDate}
         onOpenBusinessSwitcher={() => setShowBusinessSwitcher(true)}
         onOpenFyModal={() => setShowFyModal(true)}
@@ -880,729 +909,976 @@ export const App: React.FC = () => {
         onOpenSearch={() => setShowSearchModal(true)}
         onLogout={handleLogout}
       >
-          {/* 1. Dashboard View */}
-          {activeTab === 'dashboard' && (
-            <div key="dashboard" className="view-container-animated">
-              <DashboardView
-                companyId={company?.company_id || ''}
+        {/* 1. Dashboard View */}
+        {activeTab === 'dashboard' && (
+          <div key="dashboard" className="view-container-animated">
+            <DashboardView
+              companyId={company?.company_id || ''}
+              company={company}
+              activeFy={activeFy}
+              user={user}
+              currentDate={currentDate}
+              onOpenNewVoucher={handleOpenNewVoucher}
+              onViewVoucher={(id) => setActivePrintVoucherId(id)}
+              onNavigateReports={(sub) => {
+                setReportSubTab(sub);
+                setActiveTab('reports');
+              }}
+              onNavigateTab={(tab, sub) => {
+                setActiveTab(tab);
+                if (sub) setReportSubTab(sub);
+              }}
+            />
+          </div>
+        )}
+
+        {/* 1.1 Sales Module — Dashboard, Register, Invoice View, Return, and Create/Edit */}
+        {activeTab === 'sales' && (
+          <div key="sales" className="view-container-animated">
+            {salesViewMode === 'dashboard' ? (
+              <SalesView
                 company={company}
                 activeFy={activeFy}
-                user={user}
-                currentDate={currentDate}
-                onOpenNewVoucher={handleOpenNewVoucher}
-                onViewVoucher={(id) => setActivePrintVoucherId(id)}
-                onNavigateReports={(sub) => {
-                  setReportSubTab(sub);
-                  setActiveTab('reports');
+                onCreateInvoice={() => {
+                  setConvertedQuotation(null);
+                  setSalesEditVoucherId(null);
+                  setSalesViewMode('create');
+                }}
+                onOpenRegister={() => setSalesViewMode('register')}
+                onOpenReturn={() => setSalesViewMode('return')}
+                onViewVoucher={(id) => {
+                  setSelectedInvoiceViewId(id);
+                  setSalesViewMode('view_invoice');
+                }}
+                onEditVoucher={(id) => {
+                  setSalesEditVoucherId(id);
+                  setSalesViewMode('create');
                 }}
                 onNavigateTab={(tab, sub) => {
                   setActiveTab(tab);
                   if (sub) setReportSubTab(sub);
                 }}
               />
-            </div>
-          )}
-
-          {/* 1.1 Sales Module — Dashboard, Register, Invoice View, Return, and Create/Edit */}
-          {activeTab === 'sales' && (
-            <div key="sales" className="view-container-animated">
-              {salesViewMode === 'dashboard' ? (
-                <SalesView
-                  company={company}
-                  activeFy={activeFy}
-                  onCreateInvoice={() => {
-                    setConvertedQuotation(null);
-                    setSalesEditVoucherId(null);
-                    setSalesViewMode('create');
-                  }}
-                  onOpenRegister={() => setSalesViewMode('register')}
-                  onOpenReturn={() => setSalesViewMode('return')}
-                  onViewVoucher={(id) => {
-                    setSelectedInvoiceViewId(id);
-                    setSalesViewMode('view_invoice');
-                  }}
-                  onEditVoucher={(id) => {
-                    setSalesEditVoucherId(id);
-                    setSalesViewMode('create');
-                  }}
-                  onNavigateTab={(tab, sub) => {
-                    setActiveTab(tab);
-                    if (sub) setReportSubTab(sub);
-                  }}
-                />
-              ) : salesViewMode === 'register' ? (
-                <SalesRegisterView
-                  company={company}
-                  activeFy={activeFy}
-                  onCreateInvoice={() => {
-                    setConvertedQuotation(null);
-                    setSalesEditVoucherId(null);
-                    setSalesViewMode('create');
-                  }}
-                  onViewInvoice={(id) => {
-                    setSelectedInvoiceViewId(id);
-                    setSalesViewMode('view_invoice');
-                  }}
-                  onEditInvoice={(id) => {
-                    setSalesEditVoucherId(id);
-                    setSalesViewMode('create');
-                  }}
-                  onPrintInvoice={(id) => setActivePrintVoucherId(id)}
-                  onNavigateTab={(tab, sub) => {
-                    setActiveTab(tab);
-                    if (sub) setReportSubTab(sub);
-                  }}
-                />
-              ) : salesViewMode === 'view_invoice' ? (
-                <IndividualSalesInvoiceView
-                  invoiceId={selectedInvoiceViewId || ''}
-                  company={company}
-                  onBack={() => setSalesViewMode('register')}
-                  onEdit={(id) => {
-                    setSalesEditVoucherId(id);
-                    setSalesViewMode('create');
-                  }}
-                  onRecordPayment={(voucherId, partyId, _bal) => {
-                    (window as any)._preselectedReceiptRefId = voucherId;
-                    (window as any)._preselectedReceiptPartyId = partyId;
-                    setActiveTab('receipts');
-                    setReceiptViewMode('create');
-                  }}
-                />
-              ) : salesViewMode === 'return' ? (
-                <SalesReturnView
-                  company={company}
-                  activeFy={activeFy}
-                  currentDate={currentDate}
-                  onPostSuccess={(id) => setActivePrintVoucherId(id)}
-                  onNavigateTab={(tab, sub) => {
-                    setActiveTab(tab);
-                    if (sub) setReportSubTab(sub);
-                  }}
-                />
-              ) : (
-                <SalesInvoiceView
-                  company={company}
-                  activeFy={activeFy}
-                  currentDate={currentDate}
-                  initialQuotation={convertedQuotation}
-                  editVoucherId={salesEditVoucherId}
-                  onBack={() => {
-                    setConvertedQuotation(null);
-                    setSalesEditVoucherId(null);
-                    setSalesViewMode('register');
-                  }}
-                  onPostSuccess={(voucherId) => {
-                    if (convertedQuotation && company) {
-                      quotationStorage.markConverted(company.company_id, convertedQuotation.id, voucherId);
-                    }
-                    setConvertedQuotation(null);
-                    setSalesEditVoucherId(null);
-                    setActivePrintVoucherId(voucherId);
-                    setSalesViewMode('register');
-                  }}
-                />
-              )}
-            </div>
-          )}
-
-          {/* 1.1.1 Quotation Module (UI-039) — Rebuilt Quotation Dashboard, Register, Details & Create */}
-          {activeTab === 'quotation' && (
-            <div key="quotation" className="view-container-animated">
-              {quotationViewMode === 'dashboard' && (
-                <QuotationDashboardView
-                  company={company}
-                  activeFy={activeFy}
-                  onNewQuotation={() => {
-                    setEditQuotationId(null);
-                    setQuotationOrigin('dashboard');
-                    setQuotationViewMode('create');
-                  }}
-                  onOpenRegister={(filter) => {
-                    setQuotationRegisterFilter(filter);
-                    setQuotationViewMode('register');
-                  }}
-                  onViewQuotation={(id) => {
-                    setSelectedQuotationId(id);
-                    setQuotationOrigin('dashboard');
-                    setQuotationViewMode('view');
-                  }}
-                  onEditQuotation={(id) => {
-                    setEditQuotationId(id);
-                    setQuotationOrigin('dashboard');
-                    setQuotationViewMode('create');
-                  }}
-                  onDuplicateQuotation={(id) => {
-                    if (company) {
-                      const copy = quotationStorage.duplicate(company.company_id, id);
-                      if (copy) {
-                        setEditQuotationId(copy.id);
-                        setQuotationOrigin('dashboard');
-                        setQuotationViewMode('create');
-                      }
-                    }
-                  }}
-                  onConvertToInvoice={(quotation) => {
-                    setConvertedQuotation(quotation);
-                    setActiveTab('sales');
-                    setSalesViewMode('create');
-                  }}
-                />
-              )}
-
-              {quotationViewMode === 'register' && (
-                <QuotationRegisterView
-                  company={company}
-                  activeFy={activeFy}
-                  initialFilter={quotationRegisterFilter}
-                  onNewQuotation={() => {
-                    setEditQuotationId(null);
-                    setQuotationOrigin('register');
-                    setQuotationViewMode('create');
-                  }}
-                  onViewQuotation={(id) => {
-                    setSelectedQuotationId(id);
-                    setQuotationOrigin('register');
-                    setQuotationViewMode('view');
-                  }}
-                  onEditQuotation={(id) => {
-                    setEditQuotationId(id);
-                    setQuotationOrigin('register');
-                    setQuotationViewMode('create');
-                  }}
-                  onConvertToInvoice={(quotation) => {
-                    setConvertedQuotation(quotation);
-                    setActiveTab('sales');
-                    setSalesViewMode('create');
-                  }}
-                />
-              )}
-
-              {quotationViewMode === 'view' && (
-                <QuotationDetailsView
-                  quotationId={selectedQuotationId}
-                  company={company}
-                  activeFy={activeFy}
-                  onBack={() => setQuotationViewMode(quotationOrigin)}
-                  onEdit={(id) => {
-                    setEditQuotationId(id);
-                    setQuotationViewMode('create');
-                  }}
-                  onDuplicate={(id) => {
-                    if (company) {
-                      const copy = quotationStorage.duplicate(company.company_id, id);
-                      if (copy) {
-                        setEditQuotationId(copy.id);
-                        setQuotationViewMode('create');
-                      }
-                    }
-                  }}
-                  onConvertToInvoice={(quotation) => {
-                    setConvertedQuotation(quotation);
-                    setActiveTab('sales');
-                    setSalesViewMode('create');
-                  }}
-                />
-              )}
-
-              {quotationViewMode === 'create' && (
-                <QuotationCreationView
-                  company={company}
-                  activeFy={activeFy}
-                  currentDate={currentDate}
-                  editQuotationId={editQuotationId}
-                  onBack={() => {
-                    setEditQuotationId(null);
-                    setQuotationViewMode(quotationOrigin);
-                  }}
-                  onSaveSuccess={() => {
-                    setEditQuotationId(null);
-                    setQuotationViewMode('register');
-                  }}
-                  onConvertToInvoice={(quotation) => {
-                    setEditQuotationId(null);
-                    setConvertedQuotation(quotation);
-                    setActiveTab('sales');
-                    setSalesViewMode('create');
-                  }}
-                />
-              )}
-            </div>
-          )}
-
-          {/* 1.2 Purchase Module (UI-036) — Dashboard, Register, Invoice Creation, Return */}
-          {activeTab === 'purchase' && (
-            <div key="purchase" className="view-container-animated">
-              {purchaseViewMode === 'dashboard' ? (
-                <PurchaseView
-                  company={company}
-                  activeFy={activeFy}
-                  onCreateInvoice={() => {
-                    setPurchaseEditVoucherId(null);
-                    setPurchaseViewMode('create');
-                  }}
-                  onOpenRegister={() => setPurchaseViewMode('register')}
-                  onOpenReturn={() => setPurchaseViewMode('return')}
-                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
-                  onEditVoucher={(id) => {
-                    setPurchaseEditVoucherId(id);
-                    setPurchaseViewMode('create');
-                  }}
-                  onNavigateTab={(tab, sub) => {
-                    setActiveTab(tab);
-                    if (sub) setReportSubTab(sub);
-                  }}
-                />
-              ) : purchaseViewMode === 'register' ? (
-                <PurchaseRegisterView
-                  company={company}
-                  activeFy={activeFy}
-                  onCreateInvoice={() => {
-                    setPurchaseEditVoucherId(null);
-                    setPurchaseViewMode('create');
-                  }}
-                  onViewInvoice={(id) => setActivePrintVoucherId(id)}
-                  onEditInvoice={(id) => {
-                    setPurchaseEditVoucherId(id);
-                    setPurchaseViewMode('create');
-                  }}
-                  onPrintInvoice={(id) => setActivePrintVoucherId(id)}
-                  onNavigateTab={(tab, sub) => {
-                    setActiveTab(tab);
-                    if (sub) setReportSubTab(sub);
-                  }}
-                />
-              ) : purchaseViewMode === 'create' ? (
-                <PurchaseInvoiceView
-                  company={company}
-                  activeFy={activeFy}
-                  currentDate={currentDate}
-                  editVoucherId={purchaseEditVoucherId}
-                  onBack={() => {
-                    setPurchaseEditVoucherId(null);
-                    setPurchaseViewMode('register');
-                  }}
-                  onPostSuccess={(voucherId) => {
-                    setPurchaseEditVoucherId(null);
-                    setActivePrintVoucherId(voucherId);
-                    setPurchaseViewMode('register');
-                  }}
-                />
-              ) : purchaseViewMode === 'return' ? (
-                <PurchaseReturnView
-                  company={company}
-                  activeFy={activeFy}
-                  currentDate={currentDate}
-                  onPostSuccess={(id) => setActivePrintVoucherId(id)}
-                  onNavigateTab={(tab, sub) => {
-                    setActiveTab(tab);
-                    if (sub) setReportSubTab(sub);
-                  }}
-                />
-              ) : null}
-            </div>
-          )}
-
-          {/* 1.3 Receipts Module (UI-042) — Dashboard, Register, Record, Details */}
-          {activeTab === 'receipts' && (
-            <div key="receipts" className="view-container-animated">
-              {receiptViewMode === 'dashboard' && (
-                <ReceiptDashboardView
-                  company={company}
-                  activeFy={activeFy}
-                  onRecordReceipt={() => {
-                    setReceiptOrigin('dashboard');
-                    setReceiptViewMode('create');
-                  }}
-                  onViewRegister={(filter) => {
-                    setReceiptRegisterFilter(filter);
-                    setReceiptViewMode('register');
-                  }}
-                  onSelectReceipt={(id) => {
-                    setSelectedReceiptId(id);
-                    setReceiptOrigin('dashboard');
-                    setReceiptViewMode('view');
-                  }}
-                />
-              )}
-
-              {receiptViewMode === 'register' && (
-                <ReceiptRegisterView
-                  company={company}
-                  activeFy={activeFy}
-                  initialFilter={receiptRegisterFilter}
-                  onRecordReceipt={() => {
-                    setReceiptOrigin('register');
-                    setReceiptViewMode('create');
-                  }}
-                  onSelectReceipt={(id) => {
-                    setSelectedReceiptId(id);
-                    setReceiptOrigin('register');
-                    setReceiptViewMode('view');
-                  }}
-                  onPrintReceipt={(id) => {
-                    setActivePrintReceiptId(id);
-                  }}
-                />
-              )}
-
-              {receiptViewMode === 'create' && (
-                <RecordReceiptView
-                  company={company}
-                  activeFy={activeFy}
-                  currentDate={currentDate}
-                  preselectedPartyId={(window as any)._preselectedReceiptPartyId || null}
-                  onBack={() => {
-                    setReceiptViewMode(receiptOrigin);
-                  }}
-                  onSaveSuccess={(voucherId, isPosted) => {
-                    if (isPosted) {
-                      setActivePrintReceiptId(voucherId);
-                    }
-                    setReceiptViewMode(receiptOrigin);
-                  }}
-                  onPreview={(previewPayload) => {
-                    setReceiptPreviewData(previewPayload);
-                  }}
-                />
-              )}
-
-              {receiptViewMode === 'view' && selectedReceiptId && (
-                <ReceiptDetailsView
-                  voucherId={selectedReceiptId}
-                  company={company}
-                  activeFy={activeFy}
-                  onBack={() => {
-                    setReceiptViewMode(receiptOrigin);
-                  }}
-                  onPrint={(id) => {
-                    setActivePrintReceiptId(id);
-                  }}
-                  onDuplicate={(vch) => {
-                    (window as any)._preselectedReceiptPartyId = vch.party_id;
-                    setReceiptOrigin('register');
-                    setReceiptViewMode('create');
-                  }}
-                  onNavigateInvoice={() => {
-                    setActiveTab('sales');
-                    if (setSalesViewMode) setSalesViewMode('register');
-                  }}
-                />
-              )}
-            </div>
-          )}
-
-          {/* 1.4 Payments Module (UI-043) — Payment Dashboard, Register, Record Payment & Details */}
-          {activeTab === 'payments' && (
-            <div key="payments" className="view-container-animated">
-              {paymentViewMode === 'dashboard' && (
-                <PaymentDashboardView
-                  company={company}
-                  activeFy={activeFy}
-                  onRecordPayment={() => {
-                    setPaymentOrigin('dashboard');
-                    setPaymentViewMode('create');
-                  }}
-                  onViewRegister={(filter) => {
-                    setPaymentRegisterFilter(filter);
-                    setPaymentOrigin('dashboard');
-                    setPaymentViewMode('register');
-                  }}
-                  onSelectPayment={(id) => {
-                    setSelectedPaymentId(id);
-                    setPaymentOrigin('dashboard');
-                    setPaymentViewMode('view');
-                  }}
-                />
-              )}
-
-              {paymentViewMode === 'register' && (
-                <PaymentRegisterView
-                  company={company}
-                  activeFy={activeFy}
-                  initialFilter={paymentRegisterFilter}
-                  onRecordPayment={() => {
-                    setPaymentOrigin('register');
-                    setPaymentViewMode('create');
-                  }}
-                  onSelectPayment={(id) => {
-                    setSelectedPaymentId(id);
-                    setPaymentOrigin('register');
-                    setPaymentViewMode('view');
-                  }}
-                  onPrintPayment={(id) => {
-                    setActivePrintPaymentId(id);
-                  }}
-                />
-              )}
-
-              {paymentViewMode === 'create' && (
-                <RecordPaymentView
-                  company={company}
-                  activeFy={activeFy}
-                  currentDate={currentDate}
-                  preselectedPartyId={(window as any)._preselectedPaymentPartyId || null}
-                  onBack={() => {
-                    setPaymentViewMode(paymentOrigin);
-                  }}
-                  onSaveSuccess={(voucherId, isPosted) => {
-                    if (isPosted) {
-                      setActivePrintPaymentId(voucherId);
-                    }
-                    setPaymentViewMode(paymentOrigin);
-                  }}
-                  onPreview={(previewPayload) => {
-                    setPaymentPreviewData(previewPayload);
-                  }}
-                  onPrint={(previewPayload) => {
-                    setPaymentPreviewData(previewPayload);
-                    setActivePrintPaymentId('preview');
-                  }}
-                />
-              )}
-
-              {paymentViewMode === 'view' && selectedPaymentId && (
-                <PaymentDetailsView
-                  voucherId={selectedPaymentId}
-                  company={company}
-                  activeFy={activeFy}
-                  onBack={() => {
-                    setPaymentViewMode(paymentOrigin);
-                  }}
-                  onPrint={(id) => {
-                    setActivePrintPaymentId(id);
-                  }}
-                  onDuplicate={(vch) => {
-                    (window as any)._preselectedPaymentPartyId = vch.party_id;
-                    setPaymentOrigin('register');
-                    setPaymentViewMode('create');
-                  }}
-                  onNavigateInvoice={(invId) => {
-                    setActiveTab('purchase');
-                    if (setPurchaseViewMode) setPurchaseViewMode('register');
-                  }}
-                />
-              )}
-            </div>
-          )}
-
-          {/* 1.5 Journal Module (UI-044) — Journal Dashboard, Creation, Register, Details */}
-          {activeTab === 'journal' && (
-            <div key="journal" className="view-container-animated">
-              {journalViewMode === 'dashboard' && (
-                <JournalDashboardView
-                  company={company}
-                  activeFy={activeFy}
-                  onCreateJournal={() => {
-                    setJournalOrigin('dashboard');
-                    setDuplicateJournalData(null);
-                    setJournalViewMode('create');
-                  }}
-                  onViewRegister={(filter) => {
-                    setJournalRegisterFilter(filter);
-                    setJournalViewMode('register');
-                  }}
-                  onSelectJournal={(id) => {
-                    setSelectedJournalId(id);
-                    setJournalOrigin('dashboard');
-                    setJournalViewMode('view');
-                  }}
-                />
-              )}
-
-              {journalViewMode === 'create' && (
-                <CreateJournalView
-                  company={company}
-                  activeFy={activeFy}
-                  currentDate={currentDate}
-                  duplicateVoucherData={duplicateJournalData || undefined}
-                  onBack={() => {
-                    setDuplicateJournalData(null);
-                    setJournalViewMode(journalOrigin);
-                  }}
-                  onPostSuccess={(voucherId) => {
-                    setDuplicateJournalData(null);
-                    setSelectedJournalId(voucherId);
-                    setJournalOrigin('register');
-                    setJournalViewMode('view');
-                  }}
-                />
-              )}
-
-              {journalViewMode === 'register' && (
-                <JournalRegisterView
-                  company={company}
-                  activeFy={activeFy}
-                  initialFilter={journalRegisterFilter}
-                  onCreateJournal={() => {
-                    setJournalOrigin('register');
-                    setDuplicateJournalData(null);
-                    setJournalViewMode('create');
-                  }}
-                  onSelectJournal={(id) => {
-                    setSelectedJournalId(id);
-                    setJournalOrigin('register');
-                    setJournalViewMode('view');
-                  }}
-                  onPrintJournal={(id) => {
-                    setActivePrintJournalId(id);
-                  }}
-                />
-              )}
-
-              {journalViewMode === 'view' && selectedJournalId && (
-                <JournalDetailsView
-                  voucherId={selectedJournalId}
-                  company={company}
-                  activeFy={activeFy}
-                  onBack={() => {
-                    setJournalViewMode(journalOrigin);
-                  }}
-                  onPrint={(id) => {
-                    setActivePrintJournalId(id);
-                  }}
-                  onDuplicate={(vch) => {
-                    setDuplicateJournalData(vch);
-                    setJournalOrigin('register');
-                    setJournalViewMode('create');
-                  }}
-                />
-              )}
-            </div>
-          )}
-
-          {/* 2. Voucher Entry View */}
-          {activeTab === 'vouchers' && (
-            <div key="vouchers" className="view-container-animated">
-              <VoucherEntryView
+            ) : salesViewMode === 'register' ? (
+              <SalesRegisterView
                 company={company}
                 activeFy={activeFy}
-                initialType={voucherInitialType}
-                currentDate={currentDate}
-                editVoucherId={editVoucherId}
-                onPostSuccess={(id) => {
-                  setEditVoucherId(null);
-                  handleVoucherPostSuccess(id);
+                onCreateInvoice={() => {
+                  setConvertedQuotation(null);
+                  setSalesEditVoucherId(null);
+                  setSalesViewMode('create');
                 }}
-                onNavigate={(tab, subTab) => {
+                onViewInvoice={(id) => {
+                  setSelectedInvoiceViewId(id);
+                  setSalesViewMode('view_invoice');
+                }}
+                onEditInvoice={(id) => {
+                  setSalesEditVoucherId(id);
+                  setSalesViewMode('create');
+                }}
+                onPrintInvoice={(id) => setActivePrintVoucherId(id)}
+                onNavigateTab={(tab, sub) => {
                   setActiveTab(tab);
-                  if (subTab) setReportSubTab(subTab);
+                  if (sub) setReportSubTab(sub);
                 }}
               />
-            </div>
-          )}
+            ) : salesViewMode === 'view_invoice' ? (
+              <IndividualSalesInvoiceView
+                invoiceId={selectedInvoiceViewId || ''}
+                company={company}
+                onBack={() => setSalesViewMode('register')}
+                onEdit={(id) => {
+                  setSalesEditVoucherId(id);
+                  setSalesViewMode('create');
+                }}
+                onRecordPayment={(voucherId, partyId, _bal) => {
+                  (window as any)._preselectedReceiptRefId = voucherId;
+                  (window as any)._preselectedReceiptPartyId = partyId;
+                  setActiveTab('receipts');
+                  setReceiptViewMode('create');
+                }}
+              />
+            ) : salesViewMode === 'return' ? (
+              <SalesReturnView
+                company={company}
+                activeFy={activeFy}
+                currentDate={currentDate}
+                onPostSuccess={(id) => setActivePrintVoucherId(id)}
+                onNavigateTab={(tab, sub) => {
+                  setActiveTab(tab);
+                  if (sub) setReportSubTab(sub);
+                }}
+              />
+            ) : (
+              <SalesInvoiceView
+                company={company}
+                activeFy={activeFy}
+                currentDate={currentDate}
+                initialQuotation={convertedQuotation}
+                editVoucherId={salesEditVoucherId}
+                onBack={() => {
+                  setConvertedQuotation(null);
+                  setSalesEditVoucherId(null);
+                  setSalesViewMode('register');
+                }}
+                onPostSuccess={(voucherId) => {
+                  if (convertedQuotation && company) {
+                    quotationStorage.markConverted(company.company_id, convertedQuotation.id, voucherId);
+                  }
+                  setConvertedQuotation(null);
+                  setSalesEditVoucherId(null);
+                  setActivePrintVoucherId(voucherId);
+                  setSalesViewMode('register');
+                }}
+              />
+            )}
+          </div>
+        )}
 
-          {/* 2.1 Service Bill Entry View (UI-009) */}
-          {activeTab === 'service_bill' && (
+        {/* 1.1.1 Quotation Module (UI-039) — Rebuilt Quotation Dashboard, Register, Details & Create */}
+        {activeTab === 'quotation' && (
+          <div key="quotation" className="view-container-animated">
+            {quotationViewMode === 'dashboard' && (
+              <QuotationDashboardView
+                company={company}
+                activeFy={activeFy}
+                onNewQuotation={() => {
+                  setEditQuotationId(null);
+                  setQuotationOrigin('dashboard');
+                  setQuotationViewMode('create');
+                }}
+                onOpenRegister={(filter) => {
+                  setQuotationRegisterFilter(filter);
+                  setQuotationViewMode('register');
+                }}
+                onViewQuotation={(id) => {
+                  setSelectedQuotationId(id);
+                  setQuotationOrigin('dashboard');
+                  setQuotationViewMode('view');
+                }}
+                onEditQuotation={(id) => {
+                  setEditQuotationId(id);
+                  setQuotationOrigin('dashboard');
+                  setQuotationViewMode('create');
+                }}
+                onDuplicateQuotation={(id) => {
+                  if (company) {
+                    const copy = quotationStorage.duplicate(company.company_id, id);
+                    if (copy) {
+                      setEditQuotationId(copy.id);
+                      setQuotationOrigin('dashboard');
+                      setQuotationViewMode('create');
+                    }
+                  }
+                }}
+                onConvertToInvoice={(quotation) => {
+                  setConvertedQuotation(quotation);
+                  setActiveTab('sales');
+                  setSalesViewMode('create');
+                }}
+              />
+            )}
+
+            {quotationViewMode === 'register' && (
+              <QuotationRegisterView
+                company={company}
+                activeFy={activeFy}
+                initialFilter={quotationRegisterFilter}
+                onNewQuotation={() => {
+                  setEditQuotationId(null);
+                  setQuotationOrigin('register');
+                  setQuotationViewMode('create');
+                }}
+                onViewQuotation={(id) => {
+                  setSelectedQuotationId(id);
+                  setQuotationOrigin('register');
+                  setQuotationViewMode('view');
+                }}
+                onEditQuotation={(id) => {
+                  setEditQuotationId(id);
+                  setQuotationOrigin('register');
+                  setQuotationViewMode('create');
+                }}
+                onConvertToInvoice={(quotation) => {
+                  setConvertedQuotation(quotation);
+                  setActiveTab('sales');
+                  setSalesViewMode('create');
+                }}
+              />
+            )}
+
+            {quotationViewMode === 'view' && (
+              <QuotationDetailsView
+                quotationId={selectedQuotationId}
+                company={company}
+                activeFy={activeFy}
+                onBack={() => setQuotationViewMode(quotationOrigin)}
+                onEdit={(id) => {
+                  setEditQuotationId(id);
+                  setQuotationViewMode('create');
+                }}
+                onDuplicate={(id) => {
+                  if (company) {
+                    const copy = quotationStorage.duplicate(company.company_id, id);
+                    if (copy) {
+                      setEditQuotationId(copy.id);
+                      setQuotationViewMode('create');
+                    }
+                  }
+                }}
+                onConvertToInvoice={(quotation) => {
+                  setConvertedQuotation(quotation);
+                  setActiveTab('sales');
+                  setSalesViewMode('create');
+                }}
+              />
+            )}
+
+            {quotationViewMode === 'create' && (
+              <QuotationCreationView
+                company={company}
+                activeFy={activeFy}
+                currentDate={currentDate}
+                editQuotationId={editQuotationId}
+                onBack={() => {
+                  setEditQuotationId(null);
+                  setQuotationViewMode(quotationOrigin);
+                }}
+                onSaveSuccess={() => {
+                  setEditQuotationId(null);
+                  setQuotationViewMode('register');
+                }}
+                onConvertToInvoice={(quotation) => {
+                  setEditQuotationId(null);
+                  setConvertedQuotation(quotation);
+                  setActiveTab('sales');
+                  setSalesViewMode('create');
+                }}
+              />
+            )}
+          </div>
+        )}
+
+        {/* 1.2 Purchase Module (UI-036) — Dashboard, Register, Invoice Creation, Return */}
+        {activeTab === 'purchase' && (
+          <div key="purchase" className="view-container-animated">
+            {purchaseViewMode === 'dashboard' ? (
+              <PurchaseView
+                company={company}
+                activeFy={activeFy}
+                onCreateInvoice={() => {
+                  setPurchaseEditVoucherId(null);
+                  setPurchaseViewMode('create');
+                }}
+                onOpenRegister={() => setPurchaseViewMode('register')}
+                onOpenReturn={() => setPurchaseViewMode('return')}
+                onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                onEditVoucher={(id) => {
+                  setPurchaseEditVoucherId(id);
+                  setPurchaseViewMode('create');
+                }}
+                onNavigateTab={(tab, sub) => {
+                  setActiveTab(tab);
+                  if (sub) setReportSubTab(sub);
+                }}
+              />
+            ) : purchaseViewMode === 'register' ? (
+              <PurchaseRegisterView
+                company={company}
+                activeFy={activeFy}
+                onCreateInvoice={() => {
+                  setPurchaseEditVoucherId(null);
+                  setPurchaseViewMode('create');
+                }}
+                onViewInvoice={(id) => setActivePrintVoucherId(id)}
+                onEditInvoice={(id) => {
+                  setPurchaseEditVoucherId(id);
+                  setPurchaseViewMode('create');
+                }}
+                onPrintInvoice={(id) => setActivePrintVoucherId(id)}
+                onNavigateTab={(tab, sub) => {
+                  setActiveTab(tab);
+                  if (sub) setReportSubTab(sub);
+                }}
+              />
+            ) : purchaseViewMode === 'create' ? (
+              <PurchaseInvoiceView
+                company={company}
+                activeFy={activeFy}
+                currentDate={currentDate}
+                editVoucherId={purchaseEditVoucherId}
+                onBack={() => {
+                  setPurchaseEditVoucherId(null);
+                  setPurchaseViewMode('register');
+                }}
+                onPostSuccess={(voucherId) => {
+                  setPurchaseEditVoucherId(null);
+                  setActivePrintVoucherId(voucherId);
+                  setPurchaseViewMode('register');
+                }}
+              />
+            ) : purchaseViewMode === 'return' ? (
+              <PurchaseReturnView
+                company={company}
+                activeFy={activeFy}
+                currentDate={currentDate}
+                onPostSuccess={(id) => setActivePrintVoucherId(id)}
+                onNavigateTab={(tab, sub) => {
+                  setActiveTab(tab);
+                  if (sub) setReportSubTab(sub);
+                }}
+              />
+            ) : null}
+          </div>
+        )}
+
+        {/* 1.3 Receipts Module (UI-042) — Dashboard, Register, Record, Details */}
+        {activeTab === 'receipts' && (
+          <div key="receipts" className="view-container-animated">
+            {receiptViewMode === 'dashboard' && (
+              <ReceiptDashboardView
+                company={company}
+                activeFy={activeFy}
+                onRecordReceipt={() => {
+                  setReceiptOrigin('dashboard');
+                  setReceiptViewMode('create');
+                }}
+                onViewRegister={(filter) => {
+                  setReceiptRegisterFilter(filter);
+                  setReceiptViewMode('register');
+                }}
+                onSelectReceipt={(id) => {
+                  setSelectedReceiptId(id);
+                  setReceiptOrigin('dashboard');
+                  setReceiptViewMode('view');
+                }}
+              />
+            )}
+
+            {receiptViewMode === 'register' && (
+              <ReceiptRegisterView
+                company={company}
+                activeFy={activeFy}
+                initialFilter={receiptRegisterFilter}
+                onRecordReceipt={() => {
+                  setReceiptOrigin('register');
+                  setReceiptViewMode('create');
+                }}
+                onSelectReceipt={(id) => {
+                  setSelectedReceiptId(id);
+                  setReceiptOrigin('register');
+                  setReceiptViewMode('view');
+                }}
+                onPrintReceipt={(id) => {
+                  setActivePrintReceiptId(id);
+                }}
+              />
+            )}
+
+            {receiptViewMode === 'create' && (
+              <RecordReceiptView
+                company={company}
+                activeFy={activeFy}
+                currentDate={currentDate}
+                preselectedPartyId={(window as any)._preselectedReceiptPartyId || null}
+                onBack={() => {
+                  setReceiptViewMode(receiptOrigin);
+                }}
+                onSaveSuccess={(voucherId, isPosted) => {
+                  if (isPosted) {
+                    setActivePrintReceiptId(voucherId);
+                  }
+                  setReceiptViewMode(receiptOrigin);
+                }}
+                onPreview={(previewPayload) => {
+                  setReceiptPreviewData(previewPayload);
+                }}
+              />
+            )}
+
+            {receiptViewMode === 'view' && selectedReceiptId && (
+              <ReceiptDetailsView
+                voucherId={selectedReceiptId}
+                company={company}
+                activeFy={activeFy}
+                onBack={() => {
+                  setReceiptViewMode(receiptOrigin);
+                }}
+                onPrint={(id) => {
+                  setActivePrintReceiptId(id);
+                }}
+                onDuplicate={(vch) => {
+                  (window as any)._preselectedReceiptPartyId = vch.party_id;
+                  setReceiptOrigin('register');
+                  setReceiptViewMode('create');
+                }}
+                onNavigateInvoice={() => {
+                  setActiveTab('sales');
+                  if (setSalesViewMode) setSalesViewMode('register');
+                }}
+              />
+            )}
+          </div>
+        )}
+
+        {/* 1.4 Payments Module (UI-043) — Payment Dashboard, Register, Record Payment & Details */}
+        {activeTab === 'payments' && (
+          <div key="payments" className="view-container-animated">
+            {paymentViewMode === 'dashboard' && (
+              <PaymentDashboardView
+                company={company}
+                activeFy={activeFy}
+                onRecordPayment={() => {
+                  setPaymentOrigin('dashboard');
+                  setPaymentViewMode('create');
+                }}
+                onViewRegister={(filter) => {
+                  setPaymentRegisterFilter(filter);
+                  setPaymentOrigin('dashboard');
+                  setPaymentViewMode('register');
+                }}
+                onSelectPayment={(id) => {
+                  setSelectedPaymentId(id);
+                  setPaymentOrigin('dashboard');
+                  setPaymentViewMode('view');
+                }}
+              />
+            )}
+
+            {paymentViewMode === 'register' && (
+              <PaymentRegisterView
+                company={company}
+                activeFy={activeFy}
+                initialFilter={paymentRegisterFilter}
+                onRecordPayment={() => {
+                  setPaymentOrigin('register');
+                  setPaymentViewMode('create');
+                }}
+                onSelectPayment={(id) => {
+                  setSelectedPaymentId(id);
+                  setPaymentOrigin('register');
+                  setPaymentViewMode('view');
+                }}
+                onPrintPayment={(id) => {
+                  setActivePrintPaymentId(id);
+                }}
+              />
+            )}
+
+            {paymentViewMode === 'create' && (
+              <RecordPaymentView
+                company={company}
+                activeFy={activeFy}
+                currentDate={currentDate}
+                preselectedPartyId={(window as any)._preselectedPaymentPartyId || null}
+                onBack={() => {
+                  setPaymentViewMode(paymentOrigin);
+                }}
+                onSaveSuccess={(voucherId, isPosted) => {
+                  if (isPosted) {
+                    setActivePrintPaymentId(voucherId);
+                  }
+                  setPaymentViewMode(paymentOrigin);
+                }}
+                onPreview={(previewPayload) => {
+                  setPaymentPreviewData(previewPayload);
+                }}
+                onPrint={(previewPayload) => {
+                  setPaymentPreviewData(previewPayload);
+                  setActivePrintPaymentId('preview');
+                }}
+              />
+            )}
+
+            {paymentViewMode === 'view' && selectedPaymentId && (
+              <PaymentDetailsView
+                voucherId={selectedPaymentId}
+                company={company}
+                activeFy={activeFy}
+                onBack={() => {
+                  setPaymentViewMode(paymentOrigin);
+                }}
+                onPrint={(id) => {
+                  setActivePrintPaymentId(id);
+                }}
+                onDuplicate={(vch) => {
+                  (window as any)._preselectedPaymentPartyId = vch.party_id;
+                  setPaymentOrigin('register');
+                  setPaymentViewMode('create');
+                }}
+                onNavigateInvoice={(invId) => {
+                  setActiveTab('purchase');
+                  if (setPurchaseViewMode) setPurchaseViewMode('register');
+                }}
+              />
+            )}
+          </div>
+        )}
+
+        {/* 1.5 Journal Module (UI-044) — Journal Dashboard, Creation, Register, Details */}
+        {activeTab === 'journal' && (
+          <div key="journal" className="view-container-animated">
+            {journalViewMode === 'dashboard' && (
+              <JournalDashboardView
+                company={company}
+                activeFy={activeFy}
+                onCreateJournal={() => {
+                  setJournalOrigin('dashboard');
+                  setDuplicateJournalData(null);
+                  setJournalViewMode('create');
+                }}
+                onViewRegister={(filter) => {
+                  setJournalRegisterFilter(filter);
+                  setJournalViewMode('register');
+                }}
+                onSelectJournal={(id) => {
+                  setSelectedJournalId(id);
+                  setJournalOrigin('dashboard');
+                  setJournalViewMode('view');
+                }}
+              />
+            )}
+
+            {journalViewMode === 'create' && (
+              <CreateJournalView
+                company={company}
+                activeFy={activeFy}
+                currentDate={currentDate}
+                duplicateVoucherData={duplicateJournalData || undefined}
+                onBack={() => {
+                  setDuplicateJournalData(null);
+                  setJournalViewMode(journalOrigin);
+                }}
+                onPostSuccess={(voucherId) => {
+                  setDuplicateJournalData(null);
+                  setSelectedJournalId(voucherId);
+                  setJournalOrigin('register');
+                  setJournalViewMode('view');
+                }}
+              />
+            )}
+
+            {journalViewMode === 'register' && (
+              <JournalRegisterView
+                company={company}
+                activeFy={activeFy}
+                initialFilter={journalRegisterFilter}
+                onCreateJournal={() => {
+                  setJournalOrigin('register');
+                  setDuplicateJournalData(null);
+                  setJournalViewMode('create');
+                }}
+                onSelectJournal={(id) => {
+                  setSelectedJournalId(id);
+                  setJournalOrigin('register');
+                  setJournalViewMode('view');
+                }}
+                onPrintJournal={(id) => {
+                  setActivePrintJournalId(id);
+                }}
+              />
+            )}
+
+            {journalViewMode === 'view' && selectedJournalId && (
+              <JournalDetailsView
+                voucherId={selectedJournalId}
+                company={company}
+                activeFy={activeFy}
+                onBack={() => {
+                  setJournalViewMode(journalOrigin);
+                }}
+                onPrint={(id) => {
+                  setActivePrintJournalId(id);
+                }}
+                onDuplicate={(vch) => {
+                  setDuplicateJournalData(vch);
+                  setJournalOrigin('register');
+                  setJournalViewMode('create');
+                }}
+              />
+            )}
+          </div>
+        )}
+
+        {/* 2. Voucher Entry View */}
+        {activeTab === 'vouchers' && (
+          <div key="vouchers" className="view-container-animated">
+            <VoucherEntryView
+              company={company}
+              activeFy={activeFy}
+              initialType={voucherInitialType}
+              currentDate={currentDate}
+              editVoucherId={editVoucherId}
+              onPostSuccess={(id) => {
+                setEditVoucherId(null);
+                handleVoucherPostSuccess(id);
+              }}
+              onNavigate={(tab, subTab) => {
+                setActiveTab(tab);
+                if (subTab) setReportSubTab(subTab);
+              }}
+            />
+          </div>
+        )}
+
+        {/* 2.1 Service Management Module (UI-048) */}
+        {activeTab === 'service_bill' && (
+          <ErrorBoundary fallbackTitle="Service Bills Module">
             <div key="service_bill" className="view-container-animated">
-              {serviceBillViewMode === 'dashboard' ? (
-                <ServiceBillsDashboardView
+              {serviceBillViewMode === 'dashboard' && (
+                <ServiceDashboardView
                   company={company}
                   activeFy={activeFy}
-                  onNewBill={() => setServiceBillViewMode('create')}
-                  onEditDraft={(vId) => {
-                    setEditVoucherId(vId);
-                    setServiceBillViewMode('create');
+                  onNewBill={() => {
+                    setServiceJobLinkForBill(null);
+                    setServiceOrigin('dashboard');
+                    setServiceBillViewMode('create_bill');
+                  }}
+                  onNewJob={() => {
+                    setEditServiceJobId(null);
+                    setServiceOrigin('dashboard');
+                    setServiceBillViewMode('create_job');
+                  }}
+                  onViewRegister={() => {
+                    setServiceOrigin('dashboard');
+                    setServiceBillViewMode('register');
+                  }}
+                  onSelectJob={(jobId) => {
+                    setSelectedServiceJobId(jobId);
+                    setServiceOrigin('dashboard');
+                    setServiceBillViewMode('details');
                   }}
                   onPrintBill={(vId) => setActivePrintVoucherId(vId)}
                 />
-              ) : (
+              )}
+
+              {serviceBillViewMode === 'register' && (
+                <ServiceRegisterView
+                  company={company}
+                  activeFy={activeFy}
+                  onNewBill={() => {
+                    setServiceJobLinkForBill(null);
+                    setServiceOrigin('register');
+                    setServiceBillViewMode('create_bill');
+                  }}
+                  onNewJob={() => {
+                    setEditServiceJobId(null);
+                    setServiceOrigin('register');
+                    setServiceBillViewMode('create_job');
+                  }}
+                  onSelectJob={(jobId) => {
+                    setSelectedServiceJobId(jobId);
+                    setServiceOrigin('register');
+                    setServiceBillViewMode('details');
+                  }}
+                  onPrintBill={(vId) => setActivePrintVoucherId(vId)}
+                />
+              )}
+
+              {serviceBillViewMode === 'details' && (
+                selectedServiceJobId ? (
+                  <ServiceJobDetailsView
+                    jobId={selectedServiceJobId}
+                    company={company}
+                    activeFy={activeFy}
+                    onBack={() => setServiceBillViewMode(serviceOrigin)}
+                    onEditJob={(jobId) => {
+                      setEditServiceJobId(jobId);
+                      setServiceBillViewMode('create_job');
+                    }}
+                    onCreateBillForJob={(j) => {
+                      setServiceJobLinkForBill(j.job_id);
+                      setServiceBillViewMode('create_bill');
+                    }}
+                    onPrintBill={(vId) => setActivePrintVoucherId(vId)}
+                  />
+                ) : (
+                  <ServiceRegisterView
+                    company={company}
+                    activeFy={activeFy}
+                    onNewBill={() => {
+                      setServiceJobLinkForBill(null);
+                      setServiceOrigin('register');
+                      setServiceBillViewMode('create_bill');
+                    }}
+                    onNewJob={() => {
+                      setEditServiceJobId(null);
+                      setServiceOrigin('register');
+                      setServiceBillViewMode('create_job');
+                    }}
+                    onSelectJob={(jobId) => {
+                      setSelectedServiceJobId(jobId);
+                      setServiceOrigin('register');
+                      setServiceBillViewMode('details');
+                    }}
+                    onPrintBill={(vId) => setActivePrintVoucherId(vId)}
+                  />
+                )
+              )}
+
+              {serviceBillViewMode === 'create_job' && (
+                <ServiceJobFormView
+                  company={company}
+                  activeFy={activeFy}
+                  editJobId={editServiceJobId}
+                  onBack={() => {
+                    setEditServiceJobId(null);
+                    setServiceBillViewMode(serviceOrigin);
+                  }}
+                  onSaveSuccess={(jobId) => {
+                    setEditServiceJobId(null);
+                    setSelectedServiceJobId(jobId);
+                    setServiceBillViewMode('details');
+                  }}
+                />
+              )}
+
+              {serviceBillViewMode === 'create_bill' && (
                 <ServiceBillCreationView
                   company={company}
                   activeFy={activeFy}
                   currentDate={currentDate}
                   editVoucherId={editVoucherId}
+                  linkJobId={serviceJobLinkForBill}
                   onBack={() => {
                     setEditVoucherId(null);
-                    setServiceBillViewMode('dashboard');
+                    setServiceJobLinkForBill(null);
+                    setServiceBillViewMode(serviceOrigin);
                   }}
                   onPostSuccess={(id) => {
                     setEditVoucherId(null);
+                    setServiceJobLinkForBill(null);
                     setActivePrintVoucherId(id);
-                    setServiceBillViewMode('dashboard');
+                    setServiceBillViewMode(serviceOrigin);
                   }}
                 />
               )}
             </div>
-          )}
+          </ErrorBoundary>
+        )}
 
-          {/* 2.2 Parties View (UI-004) */}
-          {activeTab === 'parties' && (
-            <div key="parties" className="view-container-animated">
-              <PartiesView
-                company={company}
-                onOpenNewVoucher={handleOpenNewVoucher}
-                onNavigateReports={(sub) => {
-                  setReportSubTab(sub);
-                  setActiveTab('reports');
-                }}
-              />
-            </div>
-          )}
+        {/* 2.2 Parties View (UI-004) */}
+        {activeTab === 'parties' && (
+          <div key="parties" className="view-container-animated">
+            <PartiesView
+              company={company}
+              onOpenNewVoucher={handleOpenNewVoucher}
+              onNavigateReports={(sub) => {
+                setReportSubTab(sub);
+                setActiveTab('reports');
+              }}
+            />
+          </div>
+        )}
 
-          {/* 2.3 Items View (UI-005) */}
-          {(activeTab === 'items' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'items')) && (
-            <div key="items" className="view-container-animated">
-              <ItemsView
-                company={company}
-                activeFy={activeFy}
-                onOpenNewVoucher={handleOpenNewVoucher}
-                onNavigateReports={(sub) => {
-                  setReportSubTab(sub);
-                  setActiveTab('reports');
-                }}
-              />
-            </div>
-          )}
+        {/* 2.3 Items View (UI-005) */}
+        {(activeTab === 'items' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'items')) && (
+          <div key="items" className="view-container-animated">
+            <ItemsView
+              company={company}
+              activeFy={activeFy}
+              onOpenNewVoucher={handleOpenNewVoucher}
+              onNavigateReports={(sub) => {
+                setReportSubTab(sub);
+                setActiveTab('reports');
+              }}
+            />
+          </div>
+        )}
 
-          {/* 2.4 Ledgers View (UI: Master Ledgers Management) */}
-          {(activeTab === 'ledgers' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'ledgers')) && (
-            <div key="ledgers" className="view-container-animated">
-              <LedgersView
-                company={company}
-                activeFy={activeFy}
-                onNavigateReports={(sub, ledgerId) => {
-                  setReportSubTab(sub);
-                  if (ledgerId) {
-                    (window as any)._preselectedLedgerId = ledgerId;
-                  }
-                  setActiveTab('reports');
-                }}
-              />
-            </div>
-          )}
+        {/* 2.4 Ledgers View (UI: Master Ledgers Management) */}
+        {(activeTab === 'ledgers' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'ledgers')) && (
+          <div key="ledgers" className="view-container-animated">
+            <LedgersView
+              company={company}
+              activeFy={activeFy}
+              onNavigateReports={(sub, ledgerId) => {
+                setReportSubTab(sub);
+                if (ledgerId) {
+                  (window as any)._preselectedLedgerId = ledgerId;
+                }
+                setActiveTab('reports');
+              }}
+            />
+          </div>
+        )}
 
-          {/* 2.5 Units View (UI: Master Units Management) */}
-          {(activeTab === 'units' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'units')) && (
-            <div key="units" className="view-container-animated">
-              <UnitsView company={company} />
-            </div>
-          )}
+        {/* 2.5 Units View (UI: Master Units Management) */}
+        {(activeTab === 'units' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'units')) && (
+          <div key="units" className="view-container-animated">
+            <UnitsView company={company} />
+          </div>
+        )}
 
-          {/* 2.6 Godowns View (UI: Master Godowns Management) */}
-          {(activeTab === 'godowns' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'godowns')) && (
-            <div key="godowns" className="view-container-animated">
-              <GodownsView company={company} />
-            </div>
-          )}
+        {/* 2.6 Godowns View (UI: Master Godowns Management) */}
+        {(activeTab === 'godowns' || (activeTab === 'masters' && (window as any)._currentMasterTab === 'godowns')) && (
+          <div key="godowns" className="view-container-animated">
+            <GodownsView company={company} />
+          </div>
+        )}
 
-          {/* 2.7 Tax Configuration View (UI: Tax Configuration) */}
-          {(activeTab === 'tax_configuration' || (activeTab === 'masters' && ((window as any)._currentMasterTab === 'tax_configuration' || (window as any)._currentMasterTab === 'tax'))) && (
-            <div key="tax_configuration" className="view-container-animated">
-              <TaxConfigurationView company={company} onCompanyUpdated={loadCompanyData} />
-            </div>
-          )}
+        {/* 2.7 Tax Configuration View (UI: Tax Configuration) */}
+        {(activeTab === 'tax_configuration' || (activeTab === 'masters' && ((window as any)._currentMasterTab === 'tax_configuration' || (window as any)._currentMasterTab === 'tax'))) && (
+          <div key="tax_configuration" className="view-container-animated">
+            <TaxConfigurationView company={company} onCompanyUpdated={loadCompanyData} />
+          </div>
+        )}
 
-          {/* 3. Masters View */}
-          {activeTab === 'masters' && (window as any)._currentMasterTab !== 'parties' && (window as any)._currentMasterTab !== 'items' && (window as any)._currentMasterTab !== 'ledgers' && (window as any)._currentMasterTab !== 'units' && (window as any)._currentMasterTab !== 'godowns' && (window as any)._currentMasterTab !== 'tax_configuration' && (window as any)._currentMasterTab !== 'tax' && (
-            <div key="masters" className="view-container-animated">
-              <MastersView company={company} onCompanyUpdated={loadCompanyData} />
-            </div>
-          )}
+        {/* 3. Masters View */}
+        {activeTab === 'masters' && (window as any)._currentMasterTab !== 'parties' && (window as any)._currentMasterTab !== 'items' && (window as any)._currentMasterTab !== 'ledgers' && (window as any)._currentMasterTab !== 'units' && (window as any)._currentMasterTab !== 'godowns' && (window as any)._currentMasterTab !== 'tax_configuration' && (window as any)._currentMasterTab !== 'tax' && (
+          <div key="masters" className="view-container-animated">
+            <MastersView company={company} onCompanyUpdated={loadCompanyData} />
+          </div>
+        )}
 
-          {/* Day Book Direct Route (UI-011) */}
-          {activeTab === 'daybook' && (
-            <div key="daybook" className="view-container-animated">
+        {/* Day Book Direct Route (UI-011) */}
+        {activeTab === 'daybook' && (
+          <div key="daybook" className="view-container-animated">
+            <DayBookView
+              company={company}
+              activeFy={activeFy}
+              onViewVoucher={(id) => setActivePrintVoucherId(id)}
+              onNavigateVouchers={(type) => {
+                const t = (type || '').toLowerCase();
+                if (t === 'sales') setActiveTab('sales');
+                else if (t === 'purchase') setActiveTab('purchase');
+                else if (t === 'receipt') setActiveTab('receipts');
+                else if (t === 'payment') setActiveTab('payments');
+                else if (t === 'journal') setActiveTab('journal');
+                else setActiveTab('vouchers');
+              }}
+            />
+          </div>
+        )}
+
+        {/* Trial Balance Direct Route (UI-012) */}
+        {activeTab === 'trial_balance' && (
+          <div key="trial_balance" className="view-container-animated">
+            <TrialBalanceView
+              company={company}
+              activeFy={activeFy}
+              onViewLedger={(ledgerId) => {
+                (window as any)._preselectedLedgerId = ledgerId;
+                setReportSubTab('ledger');
+                setActiveTab('reports');
+              }}
+              onNavigateReports={(sub) => {
+                setReportSubTab(sub);
+                setActiveTab('reports');
+              }}
+            />
+          </div>
+        )}
+
+        {/* Ledger Report Direct Route (UI-013) */}
+        {activeTab === 'ledger' && (
+          <div key="ledger" className="view-container-animated">
+            <LedgerReportView
+              company={company}
+              activeFy={activeFy}
+              onViewVoucher={(id) => setActivePrintVoucherId(id)}
+              onNavigateReports={(sub) => {
+                setReportSubTab(sub);
+                setActiveTab('reports');
+              }}
+            />
+          </div>
+        )}
+
+        {/* Profit & Loss Direct Route (UI-014) */}
+        {activeTab === 'pnl' && (
+          <div key="pnl" className="view-container-animated">
+            <ProfitAndLossView
+              company={company}
+              activeFy={activeFy}
+              onViewLedger={(ledgerId) => {
+                (window as any)._preselectedLedgerId = ledgerId;
+                setReportSubTab('ledger');
+                setActiveTab('reports');
+              }}
+              onNavigateReports={(sub) => {
+                setReportSubTab(sub);
+                setActiveTab('reports');
+              }}
+            />
+          </div>
+        )}
+
+        {/* Balance Sheet Direct Route (UI-015) */}
+        {activeTab === 'balance_sheet' && (
+          <div key="balance_sheet" className="view-container-animated">
+            <BalanceSheetView
+              company={company}
+              activeFy={activeFy}
+              onViewLedger={(ledgerId) => {
+                (window as any)._preselectedLedgerId = ledgerId;
+                setReportSubTab('ledger');
+                setActiveTab('reports');
+              }}
+              onNavigateReports={(sub) => {
+                setReportSubTab(sub);
+                setActiveTab('reports');
+              }}
+            />
+          </div>
+        )}
+
+        {/* GST Reports Direct Route (UI-016) */}
+        {activeTab === 'gst' && (
+          <div key="gst" className="view-container-animated">
+            <GSTReportsView
+              company={company}
+              activeFy={activeFy}
+              onViewVoucher={(id) => setActivePrintVoucherId(id)}
+              onNavigateReports={(sub) => {
+                setReportSubTab(sub);
+                setActiveTab('reports');
+              }}
+            />
+          </div>
+        )}
+
+        {/* Stock Summary Direct Route (UI-017) */}
+        {activeTab === 'stock_summary' && (
+          <div key="stock_summary" className="view-container-animated">
+            <StockSummaryView
+              company={company}
+              activeFy={activeFy}
+              onViewItem={(itemId) => {
+                (window as any)._preselectedItemId = itemId;
+                setActiveTab('items');
+              }}
+              onNavigateReports={(sub) => {
+                setReportSubTab(sub);
+                setActiveTab('reports');
+              }}
+            />
+          </div>
+        )}
+
+        {/* Outstanding Reports Direct Route (UI-018) */}
+        {activeTab === 'outstanding' && (
+          <div key="outstanding" className="view-container-animated">
+            <OutstandingReportsView
+              company={company}
+              activeFy={activeFy}
+              onNavigateReports={(sub) => {
+                setReportSubTab(sub);
+                setActiveTab('reports');
+              }}
+              onSelectPartyLedger={(partyName) => {
+                (window as any)._preselectedLedgerName = partyName;
+                setReportSubTab('ledger');
+                setActiveTab('reports');
+              }}
+            />
+          </div>
+        )}
+
+        {/* 4. Reports View */}
+        {activeTab === 'reports' && (
+          <div key="reports" className="view-container-animated">
+            {reportSubTab === 'daybook' ? (
               <DayBookView
                 company={company}
                 activeFy={activeFy}
@@ -1617,12 +1893,7 @@ export const App: React.FC = () => {
                   else setActiveTab('vouchers');
                 }}
               />
-            </div>
-          )}
-
-          {/* Trial Balance Direct Route (UI-012) */}
-          {activeTab === 'trial_balance' && (
-            <div key="trial_balance" className="view-container-animated">
+            ) : reportSubTab === 'trial_balance' ? (
               <TrialBalanceView
                 company={company}
                 activeFy={activeFy}
@@ -1636,12 +1907,7 @@ export const App: React.FC = () => {
                   setActiveTab('reports');
                 }}
               />
-            </div>
-          )}
-
-          {/* Ledger Report Direct Route (UI-013) */}
-          {activeTab === 'ledger' && (
-            <div key="ledger" className="view-container-animated">
+            ) : reportSubTab === 'ledger' ? (
               <LedgerReportView
                 company={company}
                 activeFy={activeFy}
@@ -1651,12 +1917,7 @@ export const App: React.FC = () => {
                   setActiveTab('reports');
                 }}
               />
-            </div>
-          )}
-
-          {/* Profit & Loss Direct Route (UI-014) */}
-          {activeTab === 'pnl' && (
-            <div key="pnl" className="view-container-animated">
+            ) : reportSubTab === 'pnl' ? (
               <ProfitAndLossView
                 company={company}
                 activeFy={activeFy}
@@ -1670,12 +1931,7 @@ export const App: React.FC = () => {
                   setActiveTab('reports');
                 }}
               />
-            </div>
-          )}
-
-          {/* Balance Sheet Direct Route (UI-015) */}
-          {activeTab === 'balance_sheet' && (
-            <div key="balance_sheet" className="view-container-animated">
+            ) : reportSubTab === 'balance_sheet' ? (
               <BalanceSheetView
                 company={company}
                 activeFy={activeFy}
@@ -1689,12 +1945,7 @@ export const App: React.FC = () => {
                   setActiveTab('reports');
                 }}
               />
-            </div>
-          )}
-
-          {/* GST Reports Direct Route (UI-016) */}
-          {activeTab === 'gst' && (
-            <div key="gst" className="view-container-animated">
+            ) : reportSubTab === 'gst' ? (
               <GSTReportsView
                 company={company}
                 activeFy={activeFy}
@@ -1704,12 +1955,7 @@ export const App: React.FC = () => {
                   setActiveTab('reports');
                 }}
               />
-            </div>
-          )}
-
-          {/* Stock Summary Direct Route (UI-017) */}
-          {activeTab === 'stock_summary' && (
-            <div key="stock_summary" className="view-container-animated">
+            ) : reportSubTab === 'stock_summary' ? (
               <StockSummaryView
                 company={company}
                 activeFy={activeFy}
@@ -1722,12 +1968,7 @@ export const App: React.FC = () => {
                   setActiveTab('reports');
                 }}
               />
-            </div>
-          )}
-
-          {/* Outstanding Reports Direct Route (UI-018) */}
-          {activeTab === 'outstanding' && (
-            <div key="outstanding" className="view-container-animated">
+            ) : reportSubTab === 'outstanding' ? (
               <OutstandingReportsView
                 company={company}
                 activeFy={activeFy}
@@ -1741,209 +1982,99 @@ export const App: React.FC = () => {
                   setActiveTab('reports');
                 }}
               />
-            </div>
-          )}
-
-          {/* 4. Reports View */}
-          {activeTab === 'reports' && (
-            <div key="reports" className="view-container-animated">
-              {reportSubTab === 'daybook' ? (
-                <DayBookView
-                  company={company}
-                  activeFy={activeFy}
-                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
-                  onNavigateVouchers={(type) => {
-                    const t = (type || '').toLowerCase();
-                    if (t === 'sales') setActiveTab('sales');
-                    else if (t === 'purchase') setActiveTab('purchase');
-                    else if (t === 'receipt') setActiveTab('receipts');
-                    else if (t === 'payment') setActiveTab('payments');
-                    else if (t === 'journal') setActiveTab('journal');
-                    else setActiveTab('vouchers');
-                  }}
-                />
-              ) : reportSubTab === 'trial_balance' ? (
-                <TrialBalanceView
-                  company={company}
-                  activeFy={activeFy}
-                  onViewLedger={(ledgerId) => {
-                    (window as any)._preselectedLedgerId = ledgerId;
-                    setReportSubTab('ledger');
-                    setActiveTab('reports');
-                  }}
-                  onNavigateReports={(sub) => {
-                    setReportSubTab(sub);
-                    setActiveTab('reports');
-                  }}
-                />
-              ) : reportSubTab === 'ledger' ? (
-                <LedgerReportView
-                  company={company}
-                  activeFy={activeFy}
-                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
-                  onNavigateReports={(sub) => {
-                    setReportSubTab(sub);
-                    setActiveTab('reports');
-                  }}
-                />
-              ) : reportSubTab === 'pnl' ? (
-                <ProfitAndLossView
-                  company={company}
-                  activeFy={activeFy}
-                  onViewLedger={(ledgerId) => {
-                    (window as any)._preselectedLedgerId = ledgerId;
-                    setReportSubTab('ledger');
-                    setActiveTab('reports');
-                  }}
-                  onNavigateReports={(sub) => {
-                    setReportSubTab(sub);
-                    setActiveTab('reports');
-                  }}
-                />
-              ) : reportSubTab === 'balance_sheet' ? (
-                <BalanceSheetView
-                  company={company}
-                  activeFy={activeFy}
-                  onViewLedger={(ledgerId) => {
-                    (window as any)._preselectedLedgerId = ledgerId;
-                    setReportSubTab('ledger');
-                    setActiveTab('reports');
-                  }}
-                  onNavigateReports={(sub) => {
-                    setReportSubTab(sub);
-                    setActiveTab('reports');
-                  }}
-                />
-              ) : reportSubTab === 'gst' ? (
-                <GSTReportsView
-                  company={company}
-                  activeFy={activeFy}
-                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
-                  onNavigateReports={(sub) => {
-                    setReportSubTab(sub);
-                    setActiveTab('reports');
-                  }}
-                />
-              ) : reportSubTab === 'stock_summary' ? (
-                <StockSummaryView
-                  company={company}
-                  activeFy={activeFy}
-                  onViewItem={(itemId) => {
-                    (window as any)._preselectedItemId = itemId;
-                    setActiveTab('items');
-                  }}
-                  onNavigateReports={(sub) => {
-                    setReportSubTab(sub);
-                    setActiveTab('reports');
-                  }}
-                />
-              ) : reportSubTab === 'outstanding' ? (
-                <OutstandingReportsView
-                  company={company}
-                  activeFy={activeFy}
-                  onNavigateReports={(sub) => {
-                    setReportSubTab(sub);
-                    setActiveTab('reports');
-                  }}
-                  onSelectPartyLedger={(partyName) => {
-                    (window as any)._preselectedLedgerName = partyName;
-                    setReportSubTab('ledger');
-                    setActiveTab('reports');
-                  }}
-                />
-              ) : reportSubTab === 'sales_register' ? (
-                <SalesRegisterView
-                  company={company}
-                  activeFy={activeFy}
-                  onCreateInvoice={() => {
-                    setActiveTab('sales');
-                    setSalesEditVoucherId(null);
-                    setSalesViewMode('create');
-                  }}
-                  onViewInvoice={(id) => {
-                    setSelectedInvoiceViewId(id);
-                    setActiveTab('sales');
-                    setSalesViewMode('view_invoice');
-                  }}
-                  onEditInvoice={(id) => {
-                    setSalesEditVoucherId(id);
-                    setActiveTab('sales');
-                    setSalesViewMode('create');
-                  }}
-                  onPrintInvoice={(id) => setActivePrintVoucherId(id)}
-                  onNavigateTab={(tab, sub) => {
-                    setActiveTab(tab);
-                    if (sub) setReportSubTab(sub);
-                  }}
-                />
-              ) : reportSubTab === 'purchase_register' ? (
-                <PurchaseView
-                  company={company}
-                  activeFy={activeFy}
-                  onCreateInvoice={() => {
-                    setActiveTab('purchase');
-                    setPurchaseViewMode('create');
-                  }}
-                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
-                  onEditVoucher={(id) => {
-                    setEditVoucherId(id);
-                    setActiveTab('vouchers');
-                  }}
-                  onNavigateTab={(tab, sub) => {
-                    setActiveTab(tab);
-                    if (sub) setReportSubTab(sub);
-                  }}
-                />
-              ) : (
-                <ReportsView
-                  companyId={company?.company_id || ''}
-                  activeSubTab={reportSubTab}
-                  setActiveSubTab={setReportSubTab}
-                  onViewVoucher={(id) => setActivePrintVoucherId(id)}
-                  onEditVoucher={(id) => {
-                    setEditVoucherId(id);
-                    setActiveTab('vouchers');
-                  }}
-                />
-              )}
-            </div>
-          )}
-
-          {/* 5. System: Utilities (Backup & Audit) */}
-          {activeTab === 'utilities' && (
-            <div key="utilities" className="view-container-animated">
-              <UtilitiesView />
-            </div>
-          )}
-
-          {/* 6. System: Company Settings */}
-          {activeTab === 'settings' && (
-            <div key="settings" className="view-container-animated">
-              <SettingsView 
-                company={company} 
-                onCompanyUpdated={loadCompanyData} 
-                onNavigateToTab={(tab) => setActiveTab(tab)}
+            ) : reportSubTab === 'sales_register' ? (
+              <SalesRegisterView
+                company={company}
                 activeFy={activeFy}
-                onSelectFy={handleSelectFy}
-                onCompanyDeleted={async () => {
-                  try {
-                    const list = await api.getBusinesses();
-                    setBusinesses(list);
-                    if (list.length > 0) {
-                      authStorage.setActiveCompanyId(list[0].company_id);
-                      await loadCompanyData();
-                    } else {
-                      authStorage.setActiveCompanyId('');
-                      setCompany(null);
-                    }
-                    setActiveTab('dashboard');
-                  } catch (e) {
-                    window.location.reload();
-                  }
+                onCreateInvoice={() => {
+                  setActiveTab('sales');
+                  setSalesEditVoucherId(null);
+                  setSalesViewMode('create');
+                }}
+                onViewInvoice={(id) => {
+                  setSelectedInvoiceViewId(id);
+                  setActiveTab('sales');
+                  setSalesViewMode('view_invoice');
+                }}
+                onEditInvoice={(id) => {
+                  setSalesEditVoucherId(id);
+                  setActiveTab('sales');
+                  setSalesViewMode('create');
+                }}
+                onPrintInvoice={(id) => setActivePrintVoucherId(id)}
+                onNavigateTab={(tab, sub) => {
+                  setActiveTab(tab);
+                  if (sub) setReportSubTab(sub);
                 }}
               />
-            </div>
-          )}
+            ) : reportSubTab === 'purchase_register' ? (
+              <PurchaseView
+                company={company}
+                activeFy={activeFy}
+                onCreateInvoice={() => {
+                  setActiveTab('purchase');
+                  setPurchaseViewMode('create');
+                }}
+                onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                onEditVoucher={(id) => {
+                  setEditVoucherId(id);
+                  setActiveTab('vouchers');
+                }}
+                onNavigateTab={(tab, sub) => {
+                  setActiveTab(tab);
+                  if (sub) setReportSubTab(sub);
+                }}
+              />
+            ) : (
+              <ReportsView
+                companyId={company?.company_id || ''}
+                activeSubTab={reportSubTab}
+                setActiveSubTab={setReportSubTab}
+                onViewVoucher={(id) => setActivePrintVoucherId(id)}
+                onEditVoucher={(id) => {
+                  setEditVoucherId(id);
+                  setActiveTab('vouchers');
+                }}
+              />
+            )}
+          </div>
+        )}
+
+        {/* 5. System: Utilities (Backup & Audit) */}
+        {activeTab === 'utilities' && (
+          <div key="utilities" className="view-container-animated">
+            <UtilitiesView />
+          </div>
+        )}
+
+        {/* 6. System: Company Settings */}
+        {activeTab === 'settings' && (
+          <div key="settings" className="view-container-animated">
+            <SettingsView
+              company={company}
+              onCompanyUpdated={loadCompanyData}
+              onNavigateToTab={(tab) => setActiveTab(tab)}
+              activeFy={activeFy}
+              onSelectFy={handleSelectFy}
+              onCompanyDeleted={async () => {
+                try {
+                  const list = await api.getBusinesses();
+                  setBusinesses(list);
+                  if (list.length > 0) {
+                    authStorage.setActiveCompanyId(list[0].company_id);
+                    await loadCompanyData();
+                  } else {
+                    authStorage.setActiveCompanyId('');
+                    setCompany(null);
+                  }
+                  setActiveTab('dashboard');
+                } catch (e) {
+                  window.location.reload();
+                }
+              }}
+            />
+          </div>
+        )}
       </AppShell>
 
       {/* Printable Invoice Modal */}

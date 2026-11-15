@@ -111,18 +111,16 @@ export const ServiceBillView: React.FC<ServiceBillViewProps> = ({
   // ── 2. Customer Details ──
   const [parties, setParties] = useState<any[]>([]);
   const [selectedPartyId, setSelectedPartyId] = useState<string>('');
-  const [customerName, setCustomerName] = useState<string>('Karthi');
-  const [customerPhone, setCustomerPhone] = useState<string>('+91 98765 43210');
-  const [billingAddress, setBillingAddress] = useState<string>(
-    '123, Gandhi Nagar,\nPudukkottai - 622001\nTamil Nadu, India'
-  );
+  const [customerName, setCustomerName] = useState<string>('');
+  const [customerPhone, setCustomerPhone] = useState<string>('');
+  const [billingAddress, setBillingAddress] = useState<string>('');
   const [showNewCustomerModal, setShowNewCustomerModal] = useState<boolean>(false);
   const [newCustomerForm, setNewCustomerForm] = useState({
     name: '',
     phone: '',
     address: '',
-    city: company?.city || 'Pudukkottai',
-    state: company?.state || 'Tamil Nadu',
+    city: company?.city || '',
+    state: company?.state || '',
     gstin: ''
   });
 
@@ -130,20 +128,6 @@ export const ServiceBillView: React.FC<ServiceBillViewProps> = ({
   const [services, setServices] = useState<ServiceItem[]>([
     {
       id: 'srv_1',
-      title: 'Windows 11 Installation',
-      description: 'OS installation with drivers',
-      qty: 1,
-      rate: 500
-    },
-    {
-      id: 'srv_2',
-      title: 'Essential Software Setup',
-      description: 'Chrome, MS Office, PDF, etc.',
-      qty: 1,
-      rate: 200
-    },
-    {
-      id: 'srv_3',
       title: '',
       description: '',
       qty: 1,
@@ -154,11 +138,9 @@ export const ServiceBillView: React.FC<ServiceBillViewProps> = ({
   // ── 4. Tax, Summary & Payment ──
   const [gstPercent, setGstPercent] = useState<number>(18);
   const [paymentMode, setPaymentMode] = useState<string>('Cash');
-  const [amountReceived, setAmountReceived] = useState<number>(826);
+  const [amountReceived, setAmountReceived] = useState<number>(0);
   const [hasManuallyEditedReceived, setHasManuallyEditedReceived] = useState<boolean>(false);
-  const [remarks, setRemarks] = useState<string>(
-    'Installed Windows 11 with all necessary drivers and basic software.'
-  );
+  const [remarks, setRemarks] = useState<string>('');
 
   // ── 5. Status & Print Modal ──
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -176,13 +158,6 @@ export const ServiceBillView: React.FC<ServiceBillViewProps> = ({
     try {
       const data = await api.getParties('CUSTOMER');
       setParties(data || []);
-      // If customer 'Karthi' exists in database, select it
-      const match = (data || []).find((p: any) =>
-        p.party_name.toLowerCase() === 'karthi'
-      );
-      if (match) {
-        setSelectedPartyId(match.party_id);
-      }
     } catch (err) {
       console.error('Failed to load parties:', err);
     }

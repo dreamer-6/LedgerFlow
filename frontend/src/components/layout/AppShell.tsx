@@ -27,6 +27,8 @@ export interface AppShellProps {
   setPaymentViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   journalViewMode?: 'dashboard' | 'create' | 'register' | 'view';
   setJournalViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
+  serviceBillViewMode?: 'dashboard' | 'register' | 'details' | 'create_job' | 'create_bill';
+  setServiceBillViewMode?: (mode: 'dashboard' | 'register' | 'details' | 'create_job' | 'create_bill') => void;
   currentDate?: string;
   onOpenBusinessSwitcher: () => void;
   onOpenFyModal: () => void;
@@ -60,6 +62,8 @@ export const AppShell: React.FC<AppShellProps> = ({
   setPaymentViewMode,
   journalViewMode,
   setJournalViewMode,
+  serviceBillViewMode,
+  setServiceBillViewMode,
   currentDate,
   onOpenBusinessSwitcher,
   onOpenFyModal,
@@ -109,6 +113,8 @@ export const AppShell: React.FC<AppShellProps> = ({
         setPaymentViewMode={setPaymentViewMode}
         journalViewMode={journalViewMode}
         setJournalViewMode={setJournalViewMode}
+        serviceBillViewMode={serviceBillViewMode}
+        setServiceBillViewMode={setServiceBillViewMode}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         isCollapsed={sidebarCollapsed}

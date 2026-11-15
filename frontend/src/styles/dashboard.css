@@ -1121,6 +1121,392 @@
   transition: width 0.3s ease;
 }
 
+/* ─── Sales & Purchase Overview Redesign (UI-048) ─── */
+.lf-spline-overview-card {
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E2E8F0);
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+[data-theme="dark"] .lf-spline-overview-card {
+  background: var(--color-surface, #1E293B);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.lf-spline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.lf-spline-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lf-spline-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 100, 31, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FF641F;
+}
+
+[data-theme="dark"] .lf-spline-icon-box {
+  background: rgba(255, 100, 31, 0.15);
+  color: #FF641F;
+}
+
+.lf-spline-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-text, #0F172A);
+  line-height: 1.2;
+}
+
+.lf-spline-subtitle {
+  font-size: 12.5px;
+  color: var(--color-text-muted, #64748B);
+  margin-top: 2px;
+}
+
+.lf-spline-time-pills {
+  display: flex;
+  align-items: center;
+  background: #F1F5F9;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+[data-theme="dark"] .lf-spline-time-pills {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.lf-spline-time-btn {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted, #64748B);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.lf-spline-time-btn:hover {
+  color: var(--color-text, #0F172A);
+}
+
+.lf-spline-time-btn.active {
+  background: #FF641F;
+  color: #FFFFFF;
+  box-shadow: 0 1px 4px rgba(255, 100, 31, 0.35);
+}
+
+[data-theme="dark"] .lf-spline-time-btn.active {
+  background: #FF641F;
+  color: #FFFFFF;
+  box-shadow: 0 1px 4px rgba(255, 100, 31, 0.45);
+}
+
+/* Metric Cards */
+.lf-spline-metric-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.lf-spline-metric-card {
+  background: var(--color-background, #F8FAFC);
+  border: 1px solid var(--color-border, #E2E8F0);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+[data-theme="dark"] .lf-spline-metric-card {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+.lf-spline-card-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #FFFFFF;
+  border: 1px solid var(--color-border, #E2E8F0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #334155;
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .lf-spline-card-icon-box {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #CBD5E1;
+}
+
+.lf-spline-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.lf-spline-card-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted, #64748B);
+  margin-bottom: 2px;
+}
+
+.lf-spline-card-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lf-spline-card-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text, #0F172A);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.lf-spline-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  line-height: 1;
+}
+
+.lf-spline-badge.positive {
+  background: #DCFCE7;
+  color: #16A34A;
+}
+
+.lf-spline-badge.negative {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+[data-theme="dark"] .lf-spline-badge.positive {
+  background: rgba(22, 163, 74, 0.2);
+  color: #4ADE80;
+}
+
+[data-theme="dark"] .lf-spline-badge.negative {
+  background: rgba(220, 38, 38, 0.2);
+  color: #F87171;
+}
+
+/* Chart Canvas Area */
+.lf-spline-canvas-area {
+  position: relative;
+  display: flex;
+  height: 250px;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.lf-spline-y-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 48px;
+  padding-bottom: 24px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--color-text-muted, #94A3B8);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding-right: 8px;
+  user-select: none;
+}
+
+.lf-spline-plot-wrapper {
+  position: relative;
+  flex: 1;
+  height: 100%;
+}
+
+.lf-spline-svg {
+  width: 100%;
+  height: calc(100% - 24px);
+  overflow: visible;
+}
+
+.lf-spline-x-labels {
+  display: flex;
+  justify-content: space-between;
+  height: 24px;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--color-text-muted, #64748B);
+  user-select: none;
+}
+
+/* Floating Tooltip */
+.lf-spline-tooltip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  margin-top: -14px;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E2E8F0);
+  border-radius: 8px;
+  padding: 10px 14px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  pointer-events: none;
+  z-index: 20;
+  min-width: 160px;
+}
+
+[data-theme="dark"] .lf-spline-tooltip {
+  background: #1E293B;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.lf-spline-tooltip-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text, #0F172A);
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--color-border, #E2E8F0);
+}
+
+[data-theme="dark"] .lf-spline-tooltip-title {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.lf-spline-tooltip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 11.5px;
+  margin-top: 4px;
+}
+
+.lf-spline-tooltip-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted, #64748B);
+}
+
+.lf-spline-tooltip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.lf-spline-tooltip-val {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text, #0F172A);
+}
+
+/* Bottom Summary Bar */
+.lf-spline-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border, #E2E8F0);
+  margin-top: 4px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+[data-theme="dark"] .lf-spline-bottom-bar {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.lf-spline-legend {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.lf-spline-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--color-text, #334155);
+}
+
+[data-theme="dark"] .lf-spline-legend-item {
+  color: #E2E8F0;
+}
+
+.lf-spline-legend-circle {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.lf-spline-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  background: var(--color-background, #F8FAFC);
+  border: 1px solid var(--color-border, #E2E8F0);
+  border-radius: 8px;
+  padding: 6px 14px;
+  gap: 20px;
+}
+
+[data-theme="dark"] .lf-spline-summary-pill {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.lf-spline-summary-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lf-spline-summary-stat-label {
+  font-size: 12px;
+  color: var(--color-text-muted, #64748B);
+  font-weight: 500;
+}
+
+.lf-spline-summary-stat-val {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--color-text, #0F172A);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ─── Sales & Purchase Overview KPI Ribbon (Phase 5) ─── */
 .lf-overview-kpi-ribbon {
   display: grid;

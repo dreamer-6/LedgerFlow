@@ -43,6 +43,8 @@ interface EnrichedDayBookEntry {
   creditPaise: number;
   runningBalancePaise: number;
   status: string;
+  referenceNumber?: string | null;
+  linkedVoucherNumber?: string | null;
 }
 
 function formatINR(paise: number): string {
@@ -97,6 +99,7 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
   const [toDate, setToDate] = useState<string>(defaultDates.to);
 
   // Filters
+  const [filterCategory, setFilterCategory] = useState<'ALL' | 'INVOICES' | 'SETTLEMENTS' | 'JOURNALS'>('ALL');
   const [voucherTypeFilter, setVoucherTypeFilter] = useState<string>('ALL');
   const [selectedPartyId, setSelectedPartyId] = useState<string>('ALL');
   const [selectedLedgerId, setSelectedLedgerId] = useState<string>('ALL');
@@ -192,11 +195,9 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
       const amount = Number(entry.totalAmountPaise) || 0;
 
       // In double-entry Day Book perspective:
-      // Inflow / Receipt & Sales creations represent Debit inflow to cash/receivables
-      // Outflow / Payment & Purchase creations represent Credit outflow from cash/payables
-      const isDebit = type === 'SALES' || type === 'RECEIPT';
-      const debitPaise = isDebit ? amount : 0;
-      const creditPaise = !isDebit ? amount : 0;
+      // Prefer authoritative debit & credit from ReportEngine (derived from ledger_entries)
+      const debitPaise = entry.debitPaise !== undefined ? Number(entry.debitPaise) : (type === 'SALES' || type === 'RECEIPT' ? amount : 0);
+      const creditPaise = entry.creditPaise !== undefined ? Number(entry.creditPaise) : (type === 'PURCHASE' || type === 'PAYMENT' ? amount : 0);
 
       currentBalance += debitPaise - creditPaise;
 
@@ -218,7 +219,9 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
         debitPaise,
         creditPaise,
         runningBalancePaise: currentBalance,
-        status: entry.status || 'POSTED'
+        status: entry.status || 'POSTED',
+        referenceNumber: entry.referenceNumber || null,
+        linkedVoucherNumber: entry.linkedVoucherNumber || null
       } as EnrichedDayBookEntry;
     });
   }, [rawEntries, sortDirection]);
@@ -226,6 +229,18 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
   // Filter entries
   const filteredEntries = useMemo(() => {
     return enrichedEntries.filter((item) => {
+      // Category Filter (All / Invoices Only / Settlements / Journals)
+      if (filterCategory === 'INVOICES') {
+        const t = item.voucherType.toUpperCase();
+        if (t !== 'SALES' && t !== 'PURCHASE' && t !== 'SALES_RETURN' && t !== 'PURCHASE_RETURN') return false;
+      } else if (filterCategory === 'SETTLEMENTS') {
+        const t = item.voucherType.toUpperCase();
+        if (t !== 'RECEIPT' && t !== 'PAYMENT' && t !== 'CONTRA') return false;
+      } else if (filterCategory === 'JOURNALS') {
+        const t = item.voucherType.toUpperCase();
+        if (t !== 'JOURNAL') return false;
+      }
+
       // Voucher Type Filter
       if (voucherTypeFilter !== 'ALL') {
         if (item.voucherType.toUpperCase() !== voucherTypeFilter.toUpperCase()) {
@@ -765,6 +780,41 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
         </div>
       </div>
 
+      {/* ── Category Filter Pills ── */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+        {[
+          { key: 'ALL', label: 'All Vouchers' },
+          { key: 'INVOICES', label: 'Invoices Only (Sales & Purchase)' },
+          { key: 'SETTLEMENTS', label: 'Settlements & Cash/Bank' },
+          { key: 'JOURNALS', label: 'Journal & Adjustments' }
+        ].map((tab) => {
+          const isActive = filterCategory === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => {
+                setFilterCategory(tab.key as any);
+                setCurrentPage(1);
+              }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: isActive ? '1px solid var(--color-primary, #ff641f)' : '1px solid var(--color-border)',
+                backgroundColor: isActive ? 'rgba(255, 100, 31, 0.1)' : 'var(--color-surface-card)',
+                color: isActive ? 'var(--color-primary, #ff641f)' : 'var(--color-text-secondary)',
+                fontSize: '12.5px',
+                fontWeight: isActive ? 600 : 400,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* ── Filter Bar ── */}
       <div
         style={{
@@ -1059,7 +1109,44 @@ export const DayBookView: React.FC<DayBookViewProps> = ({
                       {getVoucherTypeBadge(row.voucherType)}
                     </td>
                     <td style={{ padding: '12px 14px', color: 'var(--color-text)', fontWeight: 500 }}>
-                      {row.particulars}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <span>{row.particulars}</span>
+                        {row.linkedVoucherNumber && (
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                              color: '#3b82f6',
+                              width: 'fit-content',
+                              fontWeight: 600
+                            }}
+                          >
+                            🔗 Settlement for {row.linkedVoucherNumber}
+                          </span>
+                        )}
+                        {!row.linkedVoucherNumber && row.referenceNumber && row.referenceNumber !== row.voucherNumber && (
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: 'rgba(100, 116, 139, 0.1)',
+                              color: 'var(--color-text-secondary)',
+                              width: 'fit-content'
+                            }}
+                          >
+                            Ref: {row.referenceNumber}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ padding: '12px 14px', color: 'var(--color-text-secondary)' }}>
                       {row.ledgerName}

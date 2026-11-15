@@ -26,7 +26,8 @@ import {
   PanelLeftOpen,
   RotateCcw,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Wrench
 } from 'lucide-react';
 
 export interface SidebarProps {
@@ -50,6 +51,8 @@ export interface SidebarProps {
   setPaymentViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
   journalViewMode?: 'dashboard' | 'create' | 'register' | 'view';
   setJournalViewMode?: (mode: 'dashboard' | 'create' | 'register' | 'view') => void;
+  serviceBillViewMode?: 'dashboard' | 'register' | 'details' | 'create_job' | 'create_bill';
+  setServiceBillViewMode?: (mode: 'dashboard' | 'register' | 'details' | 'create_job' | 'create_bill') => void;
   isOpen?: boolean;
   onClose?: () => void;
   isCollapsed?: boolean;
@@ -75,6 +78,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setPaymentViewMode,
   journalViewMode = 'dashboard',
   setJournalViewMode,
+  serviceBillViewMode = 'dashboard',
+  setServiceBillViewMode,
   isOpen = false,
   onClose,
   isCollapsed = false,
@@ -88,6 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (activeTab === 'receipts') return 'receipts';
     if (activeTab === 'payments') return 'payments';
     if (activeTab === 'journal') return 'journal';
+    if (activeTab === 'service_bill') return 'service_bill';
     return null;
   });
   const prevTabRef = React.useRef(activeTab);
@@ -106,12 +112,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setExpandedGroup('payments');
     } else if (activeTab === 'journal') {
       setExpandedGroup('journal');
+    } else if (activeTab === 'service_bill') {
+      setExpandedGroup('service_bill');
     } else {
       // Navigating to another top-level section closes the previously expanded group
       setExpandedGroup(null);
     }
     prevTabRef.current = activeTab;
-  }, [activeTab, salesViewMode, purchaseViewMode, quotationViewMode, receiptViewMode, paymentViewMode, journalViewMode]);
+  }, [activeTab, salesViewMode, purchaseViewMode, quotationViewMode, receiptViewMode, paymentViewMode, journalViewMode, serviceBillViewMode]);
 
   const toggleGroup = (group: string) => {
     setExpandedGroup(prev => (prev === group ? null : group));
@@ -138,6 +146,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setExpandedGroup('payments');
     } else if (tab === 'journal') {
       setExpandedGroup('journal');
+    } else if (tab === 'service_bill') {
+      setExpandedGroup('service_bill');
     } else {
       setExpandedGroup(null);
     }
@@ -755,7 +765,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    userSelect: 'none'
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
@@ -828,13 +839,124 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 )}
               </>
             )}
-            {renderItem(
-              'service_bill',
-              'Service Bills',
-              <ReceiptText size={16} />,
-              activeTab === 'service_bill',
-              () => handleNav('service_bill'),
-              'Alt+W'
+            {isCollapsed ? (
+              renderItem(
+                'service_bill',
+                'Service',
+                <Wrench size={20} />,
+                activeTab === 'service_bill',
+                () => {
+                  setActiveTab('service_bill');
+                  if (setServiceBillViewMode) setServiceBillViewMode('dashboard');
+                  if (onClose) onClose();
+                },
+                'Alt+W'
+              )
+            ) : (
+              <>
+                <div
+                  onClick={() => {
+                    setActiveTab('service_bill');
+                    if (setServiceBillViewMode) setServiceBillViewMode('dashboard');
+                    setExpandedGroup('service_bill');
+                    if (onClose) onClose();
+                  }}
+                  className={`nav-item ${activeTab === 'service_bill' ? 'active' : ''}`}
+                  title="Service (Alt+W)"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                    <span className="nav-icon"><Wrench size={16} /></span>
+                    <span style={{ flex: 1, lineHeight: 1.3, fontWeight: activeTab === 'service_bill' ? 600 : 500 }}>Service</span>
+                  </div>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleGroup('service_bill');
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '2px',
+                      color: 'var(--text-muted, #94A3B8)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {expandedGroup === 'service_bill' ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </div>
+                </div>
+
+                {/* Collapsible Submenu */}
+                {expandedGroup === 'service_bill' && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '2px',
+                      marginTop: '2px',
+                      marginBottom: '4px',
+                      paddingLeft: '24px'
+                    }}
+                  >
+                    <div
+                      onClick={() => {
+                        setActiveTab('service_bill');
+                        if (setServiceBillViewMode) setServiceBillViewMode('create_bill');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'service_bill' && serviceBillViewMode === 'create_bill' ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'service_bill' && serviceBillViewMode === 'create_bill' ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Create Service Bill</span>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setActiveTab('service_bill');
+                        if (setServiceBillViewMode) setServiceBillViewMode('create_job');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'service_bill' && serviceBillViewMode === 'create_job' ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'service_bill' && serviceBillViewMode === 'create_job' ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>New Service Job</span>
+                    </div>
+
+                    <div
+                      onClick={() => {
+                        setActiveTab('service_bill');
+                        if (setServiceBillViewMode) setServiceBillViewMode('register');
+                        if (onClose) onClose();
+                      }}
+                      className={`nav-item ${activeTab === 'service_bill' && (serviceBillViewMode === 'register' || serviceBillViewMode === 'details') ? 'active' : ''}`}
+                      style={{
+                        fontSize: '12.5px',
+                        height: '32px',
+                        padding: '0 10px',
+                        fontWeight: activeTab === 'service_bill' && (serviceBillViewMode === 'register' || serviceBillViewMode === 'details') ? 600 : 400
+                      }}
+                    >
+                      <span style={{ flex: 1 }}>Service Register</span>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             {isCollapsed ? (
               renderItem(

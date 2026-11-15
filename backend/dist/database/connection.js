@@ -328,6 +328,73 @@ function getDatabase(customPath) {
         db.exec('CREATE INDEX IF NOT EXISTS idx_vouchers_comp_date_status ON vouchers(company_id, voucher_date, status);');
     }
     catch { }
+    try {
+        db.exec(`
+      CREATE TABLE IF NOT EXISTS service_jobs (
+        job_id TEXT PRIMARY KEY,
+        company_id TEXT NOT NULL REFERENCES companies(company_id),
+        fy_id TEXT NOT NULL,
+        job_number TEXT NOT NULL,
+        job_date DATE NOT NULL,
+        customer_id TEXT REFERENCES parties(party_id),
+        customer_name TEXT NOT NULL,
+        customer_phone TEXT,
+        customer_email TEXT,
+        customer_address TEXT,
+        device_type TEXT NOT NULL,
+        brand TEXT,
+        model TEXT,
+        serial_number TEXT,
+        accessories TEXT,
+        problem_reported TEXT NOT NULL,
+        diagnosis TEXT,
+        work_performed TEXT,
+        service_type TEXT NOT NULL DEFAULT 'INTERNAL_REPAIR',
+        status TEXT NOT NULL DEFAULT 'RECEIVED',
+        physical_location TEXT NOT NULL DEFAULT 'SHOP',
+        technician_name TEXT,
+        estimated_cost_paise INTEGER DEFAULT 0,
+        advance_paid_paise INTEGER DEFAULT 0,
+        priority TEXT DEFAULT 'NORMAL',
+        warranty_status TEXT DEFAULT 'OUT_OF_WARRANTY',
+        dealer_id TEXT REFERENCES parties(party_id),
+        dealer_name TEXT,
+        courier_name TEXT,
+        docket_number TEXT,
+        dispatch_date DATE,
+        expected_return_date DATE,
+        dealer_received_date DATE,
+        dealer_action TEXT,
+        replacement_serial_number TEXT,
+        dealer_return_date DATE,
+        dealer_docket_number TEXT,
+        service_bill_id TEXT REFERENCES vouchers(voucher_id),
+        service_bill_number TEXT,
+        created_by TEXT REFERENCES users(user_id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(company_id, fy_id, job_number)
+      );
+
+      CREATE TABLE IF NOT EXISTS service_job_events (
+        event_id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL REFERENCES service_jobs(job_id) ON DELETE CASCADE,
+        event_type TEXT NOT NULL,
+        from_status TEXT,
+        to_status TEXT,
+        location TEXT,
+        notes TEXT,
+        created_by TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_service_jobs_company ON service_jobs(company_id, fy_id);
+      CREATE INDEX IF NOT EXISTS idx_service_jobs_status ON service_jobs(company_id, status);
+      CREATE INDEX IF NOT EXISTS idx_service_jobs_customer ON service_jobs(company_id, customer_id);
+      CREATE INDEX IF NOT EXISTS idx_service_job_events_job ON service_job_events(job_id);
+    `);
+    }
+    catch { }
     if (!customPath) {
         dbInstance = db;
     }

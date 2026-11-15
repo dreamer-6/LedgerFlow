@@ -9,6 +9,10 @@ export interface DayBookEntry {
   partyName?: string;
   particulars: string;
   totalAmountPaise: number;
+  debitPaise?: number;
+  creditPaise?: number;
+  referenceNumber?: string;
+  linkedVoucherNumber?: string;
   status: string;
 }
 
@@ -41,7 +45,7 @@ export class ReportEngine {
     const rows = db.prepare(`
       SELECT 
         v.voucher_id, v.voucher_number, v.voucher_date, v.voucher_type,
-        v.narration, v.total_amount_paise, v.status,
+        v.narration, v.total_amount_paise, v.status, v.reference_number,
         p.party_name,
         (
           SELECT GROUP_CONCAT(l.ledger_name, ' / ')
@@ -53,7 +57,24 @@ export class ReportEngine {
             ORDER BY le.debit_paise DESC, le.credit_paise DESC
             LIMIT 2
           ) l
-        ) AS ledger_particulars
+        ) AS ledger_particulars,
+        COALESCE((
+          SELECT SUM(le.debit_paise)
+          FROM ledger_entries le
+          WHERE le.voucher_id = v.voucher_id
+        ), 0) AS total_debit_paise,
+        COALESCE((
+          SELECT SUM(le.credit_paise)
+          FROM ledger_entries le
+          WHERE le.voucher_id = v.voucher_id
+        ), 0) AS total_credit_paise,
+        (
+          SELECT ref_v.voucher_number
+          FROM bill_allocations ba
+          JOIN vouchers ref_v ON ba.reference_voucher_id = ref_v.voucher_id
+          WHERE ba.voucher_id = v.voucher_id
+          LIMIT 1
+        ) AS linked_voucher_number
       FROM vouchers v
       LEFT JOIN parties p ON v.party_id = p.party_id
       WHERE v.company_id = ? AND v.voucher_date >= ? AND v.voucher_date <= ? AND v.status = 'POSTED'
@@ -65,9 +86,13 @@ export class ReportEngine {
       voucherNumber: r.voucher_number,
       voucherDate: r.voucher_date,
       voucherType: r.voucher_type,
+      referenceNumber: r.reference_number || undefined,
+      linkedVoucherNumber: r.linked_voucher_number || undefined,
       partyName: r.party_name || undefined,
       particulars: r.party_name || r.ledger_particulars || r.narration || r.voucher_type,
       totalAmountPaise: Number(r.total_amount_paise),
+      debitPaise: Number(r.total_debit_paise),
+      creditPaise: Number(r.total_credit_paise),
       status: r.status
     }));
   }
