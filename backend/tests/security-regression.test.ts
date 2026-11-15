@@ -643,8 +643,8 @@ async function runTestSuite() {
       assert.strictEqual(check.status, 'POSTED');
     });
 
-    await test('5.2: PUT edit on posted voucher preserves original as CANCELLED and links replacement', async () => {
-      const res = await fetch(`${baseUrl}/vouchers/${postedVchIdA}`, {
+    await test('5.2: PUT edit on posted voucher in amend mode (?mode=amend) preserves original as CANCELLED and links replacement', async () => {
+      const res = await fetch(`${baseUrl}/vouchers/${postedVchIdA}?mode=amend`, {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${tokenAdminA}`,
@@ -673,6 +673,37 @@ async function runTestSuite() {
       const replacement = testDb.prepare('SELECT reference_number, created_by FROM vouchers WHERE voucher_id = ?').get(newVchId) as any;
       assert.match(replacement.reference_number, /AMEND-/);
       assert.strictEqual(replacement.created_by, 'usr_admin_a');
+    });
+
+    await test('5.3: Standard PUT edit on posted voucher updates in-place preserving identical voucher ID and number without cancelled duplicates', async () => {
+      // Fetch the replacement voucher created in 5.2 (which is POSTED)
+      const replVch = testDb.prepare("SELECT voucher_id, voucher_number, total_amount_paise FROM vouchers WHERE company_id = 'comp_alpha' AND status = 'POSTED' ORDER BY created_at DESC LIMIT 1").get() as any;
+      assert.ok(replVch, 'POSTED voucher must exist');
+
+      const res = await fetch(`${baseUrl}/vouchers/${replVch.voucher_id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${tokenAdminA}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fyId: 'comp_alpha_fy_2026_27',
+          voucherType: 'SALES',
+          voucherNumber: replVch.voucher_number,
+          voucherDate: '2026-05-12',
+          partyId: 'party_cust_a',
+          lines: [{ itemId: 'item_alpha_01', quantity: 3, ratePaise: 150000, godownId: 'godown_alpha_main' }]
+        })
+      });
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.voucherId, replVch.voucher_id, 'Voucher ID must be preserved in-place');
+      assert.strictEqual(json.voucherNumber, replVch.voucher_number, 'Voucher number must be preserved in-place');
+      assert.strictEqual(json.status, 'POSTED');
+
+      // Assert no new CANCELLED voucher was created by this edit
+      const cancelledCount = testDb.prepare("SELECT COUNT(*) as c FROM vouchers WHERE company_id = 'comp_alpha' AND status = 'CANCELLED'").get() as any;
+      assert.strictEqual(cancelledCount.c, 1, 'Only the previous amend 5.2 voucher is cancelled — zero extra cancelled rows');
     });
 
     // ========================================================================

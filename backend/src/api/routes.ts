@@ -1676,25 +1676,38 @@ export function createApiRouter(db: DatabaseSync): Router {
       }
 
       if (vch.status === 'POSTED') {
-        // 006-A: Atomic voucher amendment inside single transaction
         const payload = {
           ...req.body,
           companyId,
           fyId,
-          createdBy: req.user!.userId,
-          referenceNumber: req.body.referenceNumber || `AMEND-${vch.voucher_number}`
+          createdBy: req.user!.userId
         };
-        if (payload.voucherNumber && payload.voucherNumber.trim() === vch.voucher_number) {
-          payload.voucherNumber = undefined;
+
+        // If client explicitly requests amendment mode via ?mode=amend, allow legacy amendVoucher.
+        // Otherwise, update voucher in-place preserving the exact same voucher number and ID without duplicate cancelled rows.
+        if (req.query.mode === 'amend') {
+          if (payload.voucherNumber && payload.voucherNumber.trim() === vch.voucher_number) {
+            payload.voucherNumber = undefined;
+          }
+          const result = PostingEngine.amendVoucher(db, voucherId, {
+            ...payload,
+            referenceNumber: req.body.referenceNumber || `AMEND-${vch.voucher_number}`
+          });
+          return res.status(200).json({
+            voucherId: result.replacementVoucherId,
+            voucherNumber: result.replacementVoucherNumber,
+            totalAmountPaise: result.totalAmountPaise,
+            status: result.status,
+            amendedVoucherId: voucherId
+          });
         }
 
-        const result = PostingEngine.amendVoucher(db, voucherId, payload);
+        const result = PostingEngine.updatePostedVoucher(db, voucherId, payload);
         return res.status(200).json({
-          voucherId: result.replacementVoucherId,
-          voucherNumber: result.replacementVoucherNumber,
+          voucherId: result.voucherId,
+          voucherNumber: result.voucherNumber,
           totalAmountPaise: result.totalAmountPaise,
-          status: result.status,
-          amendedVoucherId: voucherId
+          status: result.status
         });
       }
 

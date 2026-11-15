@@ -2784,4 +2784,241 @@ export class PostingEngine {
       throw err;
     }
   }
+
+  /**
+   * UI-049 / ERP Standard: In-Place Update for Posted Vouchers
+   * Updates an existing POSTED voucher directly in-place without generating a new sequence number
+   * or leaving a CANCELLED duplicate record behind.
+   * Preserves exact voucher_id, voucher_number, audit history, and recalculates double-entry and inventory atomically.
+   */
+  public static updatePostedVoucher(
+    db: DatabaseSync,
+    voucherId: string,
+    input: CreateVoucherInput
+  ): {
+    voucherId: string;
+    voucherNumber: string;
+    totalAmountPaise: number;
+    status: 'POSTED';
+  } {
+    db.exec('BEGIN IMMEDIATE;');
+    try {
+      // 1. Fetch & validate existing voucher
+      const vch = db.prepare(`
+        SELECT v.*, fy.status as fy_status, fy.start_date, fy.end_date
+        FROM vouchers v
+        JOIN financial_years fy ON v.fy_id = fy.fy_id
+        WHERE v.voucher_id = ?
+      `).get(voucherId) as any;
+
+      if (!vch) {
+        throw new Error(`Voucher with ID '${voucherId}' not found.`);
+      }
+
+      if (vch.company_id !== input.companyId) {
+        throw new Error(`Security violation: Voucher '${voucherId}' does not belong to company '${input.companyId}'.`);
+      }
+
+      if (vch.status !== 'POSTED') {
+        throw new Error(`Cannot update voucher '${vch.voucher_number}': current status is ${vch.status}. Only POSTED vouchers can be updated in-place.`);
+      }
+
+      if (vch.fy_status !== 'OPEN') {
+        throw new Error(`Cannot update posted voucher: Financial Year status is ${vch.fy_status}. Updating prohibited.`);
+      }
+
+      const voucherDate = input.voucherDate || vch.voucher_date;
+      if (voucherDate < vch.start_date || voucherDate > vch.end_date) {
+        throw new Error(`Voucher date ${voucherDate} is outside the active Financial Year (${vch.start_date} to ${vch.end_date}).`);
+      }
+
+      // 2. Resolve voucher number (keep original voucher_number by default)
+      let targetVoucherNumber = vch.voucher_number;
+      const explicitVNum = input.voucherNumber?.trim();
+      if (explicitVNum && !explicitVNum.startsWith('DFT-') && explicitVNum !== vch.voucher_number) {
+        const existing = db.prepare(
+          "SELECT 1 FROM vouchers WHERE company_id = ? AND fy_id = ? AND voucher_type = ? AND voucher_number = ? AND voucher_id != ?"
+        ).get(input.companyId, vch.fy_id, vch.voucher_type, explicitVNum, voucherId);
+
+        const inAudit = db.prepare(`
+          SELECT 1 FROM audit_logs
+          WHERE company_id = ? AND action = 'VOUCHER_PERMANENT_PURGE'
+            AND json_extract(details, '$.voucher_number') = ?
+            AND json_extract(details, '$.voucher_type') = ?
+            AND (json_extract(details, '$.release_number') IS NULL OR json_extract(details, '$.release_number') = 0 OR json_extract(details, '$.release_number') = false)
+        `).get(input.companyId, explicitVNum, vch.voucher_type);
+
+        if (existing || inAudit) {
+          throw new Error(`Voucher number '${explicitVNum}' already exists for this company, financial year, and voucher type.`);
+        }
+        targetVoucherNumber = explicitVNum;
+      }
+
+      // 3. Safeguard: Prevent changing party if payments/receipts are already allocated against this voucher
+      if (input.partyId && input.partyId !== vch.party_id) {
+        const linkedPayments = db.prepare(`
+          SELECT ba.amount_paise, v.voucher_number
+          FROM bill_allocations ba
+          JOIN vouchers v ON ba.voucher_id = v.voucher_id
+          WHERE ba.reference_voucher_id = ? AND ba.allocation_type = 'AGAINST_REF' AND v.status = 'POSTED'
+        `).all(voucherId) as Array<{ amount_paise: number; voucher_number: string }>;
+
+        if (linkedPayments.length > 0) {
+          throw new Error(
+            `Cannot change customer/party on voucher '${vch.voucher_number}': payments (${linkedPayments.map(p => p.voucher_number).join(', ')}) are already allocated against it. Unlink or reverse payments first.`
+          );
+        }
+      }
+
+      // 4. Revert serial numbers affected by the existing voucher
+      if (vch.voucher_type === 'SALES' || vch.voucher_type === 'PURCHASE_RETURN') {
+        db.prepare(`
+          UPDATE stock_item_serials
+          SET status = 'AVAILABLE',
+              sales_voucher_id = NULL,
+              sales_voucher_line_id = NULL,
+              customer_id = NULL,
+              sales_date = NULL,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE company_id = ? AND sales_voucher_id = ?
+        `).run(vch.company_id, voucherId);
+
+        const soldSerials = db.prepare(`
+          SELECT item_id, serial_number
+          FROM voucher_lines
+          WHERE voucher_id = ? AND item_id IS NOT NULL AND serial_number IS NOT NULL
+        `).all(voucherId) as Array<{ item_id: string; serial_number: string }>;
+
+        for (const s of soldSerials) {
+          const serialsArr = s.serial_number.split(',').map((sn: string) => sn.trim()).filter(Boolean);
+          for (const sn of serialsArr) {
+            db.prepare(`
+              UPDATE stock_item_serials
+              SET status = 'AVAILABLE',
+                  sales_voucher_id = NULL,
+                  sales_voucher_line_id = NULL,
+                  customer_id = NULL,
+                  sales_date = NULL,
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE company_id = ? AND item_id = ? AND serial_number = ? AND (status = 'SOLD' OR status = 'RETURNED')
+            `).run(vch.company_id, s.item_id, sn);
+          }
+        }
+      } else if (vch.voucher_type === 'SALES_RETURN') {
+        const returnedSerials = db.prepare(`
+          SELECT item_id, serial_number
+          FROM voucher_lines
+          WHERE voucher_id = ? AND item_id IS NOT NULL AND serial_number IS NOT NULL
+        `).all(voucherId) as Array<{ item_id: string; serial_number: string }>;
+
+        for (const s of returnedSerials) {
+          const serialsArr = s.serial_number.split(',').map((sn: string) => sn.trim()).filter(Boolean);
+          for (const sn of serialsArr) {
+            db.prepare(`
+              UPDATE stock_item_serials
+              SET status = 'SOLD',
+                  updated_at = CURRENT_TIMESTAMP
+              WHERE company_id = ? AND item_id = ? AND serial_number = ? AND status = 'AVAILABLE'
+            `).run(vch.company_id, s.item_id, sn);
+          }
+        }
+      } else if (vch.voucher_type === 'PURCHASE') {
+        const soldUnit = db.prepare(`
+          SELECT serial_number FROM stock_item_serials
+          WHERE company_id = ? AND purchase_voucher_id = ? AND status = 'SOLD'
+          LIMIT 1
+        `).get(vch.company_id, voucherId) as { serial_number: string } | undefined;
+
+        if (soldUnit) {
+          const newSerialsStr = input.lines.map(l => l.serialNumber || '').join(',');
+          if (!newSerialsStr.includes(soldUnit.serial_number)) {
+            throw new Error(
+              `Cannot edit purchase voucher '${vch.voucher_number}': Serial '${soldUnit.serial_number}' has already been sold to a customer and cannot be removed from this purchase.`
+            );
+          }
+        }
+      }
+
+      // 5. Delete downstream voucher lines and accounting entries
+      db.prepare('DELETE FROM ledger_entries WHERE voucher_id = ?').run(voucherId);
+      db.prepare('DELETE FROM stock_entries WHERE voucher_id = ?').run(voucherId);
+      db.prepare('DELETE FROM tax_entries WHERE voucher_id = ?').run(voucherId);
+      db.prepare('DELETE FROM bill_allocations WHERE voucher_id = ?').run(voucherId);
+      db.prepare('DELETE FROM voucher_lines WHERE voucher_id = ?').run(voucherId);
+
+      // 6. Post updated voucher in-place (re-using voucherId and targetVoucherNumber)
+      const postPayload: CreateVoucherInput = {
+        ...input,
+        voucherType: vch.voucher_type,
+        voucherNumber: targetVoucherNumber,
+        status: 'POSTED',
+        fyId: vch.fy_id
+      };
+
+      const result = this._postVoucherInternal(db, postPayload, {
+        skipTransaction: true,
+        voucherId
+      });
+
+      // 7. Invariant check for net stock balances
+      if (input.allowNegativeStock !== true) {
+        const affectedPairs = db.prepare(`
+          SELECT DISTINCT item_id, godown_id FROM stock_entries
+          WHERE voucher_id = ?
+        `).all(voucherId) as Array<{ item_id: string; godown_id: string }>;
+
+        for (const pair of affectedPairs) {
+          const balRow = db.prepare(`
+            SELECT 
+              COALESCE(SUM(CASE WHEN movement_type = 'IN' THEN quantity ELSE 0 END), 0) -
+              COALESCE(SUM(CASE WHEN movement_type = 'OUT' THEN quantity ELSE 0 END), 0) AS balance_qty
+            FROM stock_entries
+            WHERE item_id = ? AND godown_id = ?
+          `).get(pair.item_id, pair.godown_id) as { balance_qty: number } | undefined;
+
+          let finalBal = Number(balRow?.balance_qty || 0);
+          const hasIn = db.prepare("SELECT 1 FROM stock_entries WHERE item_id = ? AND movement_type = 'IN' LIMIT 1").get(pair.item_id);
+          if (!hasIn) {
+            const itemRow = db.prepare('SELECT opening_qty FROM stock_items WHERE item_id = ?').get(pair.item_id) as any;
+            if (itemRow && Number(itemRow.opening_qty) > 0) {
+              finalBal += Number(itemRow.opening_qty);
+            }
+          }
+
+          if (finalBal < 0) {
+            throw new Error(`Updating voucher '${targetVoucherNumber}' resulted in negative stock balance (${finalBal}) for item '${pair.item_id}' in godown '${pair.godown_id}'. Dependent transactions have consumed this stock.`);
+          }
+        }
+      }
+
+      // 8. Audit log
+      db.prepare(`
+        INSERT INTO audit_logs (log_id, company_id, user_id, action, entity_name, entity_id, details)
+        VALUES (?, ?, ?, 'UPDATE_POSTED_VOUCHER_IN_PLACE', 'VOUCHER', ?, ?)
+      `).run(
+        'aud_' + crypto.randomUUID().replace(/-/g, '').substring(0, 16),
+        input.companyId,
+        input.createdBy || 'system',
+        voucherId,
+        JSON.stringify({
+          voucherNumber: targetVoucherNumber,
+          totalAmountPaise: result.totalAmountPaise,
+          linesCount: input.lines.length,
+          status: 'POSTED'
+        })
+      );
+
+      db.exec('COMMIT;');
+
+      return {
+        voucherId,
+        voucherNumber: targetVoucherNumber,
+        totalAmountPaise: result.totalAmountPaise,
+        status: 'POSTED'
+      };
+    } catch (err: any) {
+      try { db.exec('ROLLBACK;'); } catch (_) { }
+      throw err;
+    }
+  }
 }
